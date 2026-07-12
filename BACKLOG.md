@@ -22,7 +22,7 @@ Idempotency: Re-running commands should not create or modify data files.
 
 ### PR02. Shared Configuration, HTTP, And Contract Primitives
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/funder/pull/3.
 
 Depends on: PR01.
 

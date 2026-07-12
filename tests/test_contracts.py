@@ -1,0 +1,58 @@
+from datetime import UTC, datetime
+
+import pytest
+
+from funder.contracts import CanonicalUniverseRow, FetchError, FetchRun, SearchCandidate
+
+
+def test_search_candidate_requires_timezone_aware_found_at() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        SearchCandidate(
+            search_run_id="run",
+            query="UCITS ETF",
+            source_endpoint="search",
+            code="CSPX",
+            exchange="XETRA",
+            instrument_type="ETF",
+            country="Germany",
+            currency="EUR",
+            isin="IE00B5BMR087",
+            name="iShares Core S&P 500 UCITS ETF",
+            normalized_name="ishares core s&p 500 ucits etf",
+            found_at=datetime(2026, 7, 12),
+        )
+
+
+def test_canonical_universe_row_rejects_empty_isin() -> None:
+    with pytest.raises(ValueError, match="isin"):
+        CanonicalUniverseRow(
+            search_run_id="run",
+            isin="",
+            code="CSPX",
+            exchange="XETRA",
+            instrument_type="ETF",
+            country="Germany",
+            currency="EUR",
+            name="iShares Core S&P 500 UCITS ETF",
+            normalized_name="ishares core s&p 500 ucits etf",
+            selection_reason="preferred_xetra",
+            selected_for_fetch=True,
+        )
+
+
+def test_fetch_run_and_error_contracts_accept_valid_records() -> None:
+    run = FetchRun(
+        run_id="fetch-1",
+        universe_search_run_id="search-1",
+        started_at=datetime.now(UTC),
+    )
+    error = FetchError(
+        run_id=run.run_id,
+        code="CSPX",
+        exchange="XETRA",
+        endpoint="eod",
+        error_type="HTTPError",
+        message="not found",
+    )
+
+    assert error.run_id == "fetch-1"

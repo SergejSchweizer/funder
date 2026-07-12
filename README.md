@@ -121,16 +121,56 @@ Subject to constraints that will be made explicit before implementation, such as
 - `DECISIONS.md` records durable technical decisions.
 - `AGENTS.md` stores generated project-history risk context.
 
-## Developer Quality Gates
+## Quality Gates
 
-Install dependencies and run the local quality gate with:
+Funder uses exactly two quality gate layers.
+
+### PR Gate
+
+Run this before every commit, push, or pull request update:
+
+```bash
+uv run funder-quality pr
+```
+
+The PR gate runs:
+
+```text
+ruff check
+ruff format --check
+mypy
+pytest
+Conventional Commit validation for branch commits
+```
+
+The local pre-commit hook runs this same PR gate.
+
+### Main Gate
+
+Run this immediately before merging to `main`:
+
+```bash
+uv run funder-quality main
+```
+
+The main gate runs the PR gate and then requires a clean tracked working tree.
+
+Both layers require Conventional Commit subjects for branch commits, using:
+
+```text
+type(optional-scope): subject
+```
+
+Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
+
+The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted.
+
+GitHub protects `main` with pull-request review, conversation resolution, linear history, and disabled force pushes/deletions. Because `.github/` is intentionally not tracked, GitHub does not require a workflow status check.
+
+Install dependencies with:
 
 ```bash
 uv sync --dev
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src tests
-uv run pytest
 ```
 
 Install the pre-commit hook with:

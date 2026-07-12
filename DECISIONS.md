@@ -106,6 +106,8 @@ Update trigger: Revisit if the project adopts additional checks such as coverage
 
 Date: 2026-07-12
 
+Status: Superseded by D010.
+
 Context: The repository should not track a `.github` workflow directory, while local checks still need to remain repeatable.
 
 Decision: Keep Ruff, Mypy, Pytest, and pre-commit as the baseline local quality gate, but do not track GitHub Actions workflow files under `.github`.
@@ -113,6 +115,18 @@ Decision: Keep Ruff, Mypy, Pytest, and pre-commit as the baseline local quality 
 Consequences: Branch protection must not require a GitHub Actions `quality` status check unless a workflow is reintroduced. Contributors should run `uv run pre-commit run --all-files` locally before opening or merging changes.
 
 Update trigger: Revisit if repository-hosted CI is reintroduced or another external quality gate replaces local-only checks.
+
+## D010. Use Two Quality Gate Layers
+
+Date: 2026-07-12
+
+Context: The project needs a simple quality policy that works locally and with GitHub branch protection while `.github/` remains untracked.
+
+Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run funder-quality pr` and the pre-commit hook. The main gate runs the PR gate plus clean tracked working-tree checks through `uv run funder-quality main`. GitHub implements the main merge layer through branch protection: pull-request review, conversation resolution, linear history, and disabled force pushes/deletions, without requiring workflow status checks.
+
+Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. If `.github/` workflows are reintroduced, this decision must be updated before adding a third gate or required status check.
+
+Update trigger: Revisit if hosted CI is reintroduced, required status checks return, or the project needs release-only gates.
 
 ## Update Rules
 

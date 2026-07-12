@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 funder = "funder.cli:main"
+funder-quality = "funder.quality:main"
 
 [dependency-groups]
 dev = [
