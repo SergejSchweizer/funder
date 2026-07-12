@@ -20,11 +20,11 @@ Risk review rules:
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
-- A PR that has run and passed the full local quality gates counts as approved for merge.
-- The full local quality gates are `uv run founder-quality pr` and `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
-- GitHub Actions must run the same full quality gates in the required `quality` check.
-- Branch protection should require the `quality` check and should not require a separate approving review when the full quality gates have passed.
-- Same-repository PRs with a passing `quality` workflow may be squash-merged automatically and have their branch deleted.
+- A PR that has run and passed `main-quality` counts as approved for merge.
+- `pr-quality` is the branch and PR feedback gate. It runs `uv run founder-quality pr`.
+- `main-quality` is the required merge gate. It runs `uv run founder-quality pr` plus `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
+- GitHub branch protection should require `main-quality` and should not require a separate approving review when `main-quality` has passed.
+- Same-repository PRs with a passing `main-quality` workflow may be squash-merged automatically and have their branch deleted.
 
 ## R001. Exchange API reliability can silently reduce historical completeness
 

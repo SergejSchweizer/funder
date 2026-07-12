@@ -122,9 +122,9 @@ Date: 2026-07-12
 
 Context: The project needs a simple quality policy that works locally and with GitHub branch protection while `.github/` remains untracked.
 
-Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run founder-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run founder-quality main`. GitHub implements the main merge layer through branch protection: required `quality` workflow status, conversation resolution, linear history, and disabled force pushes/deletions. Passing the full GitHub `quality` workflow is the approval signal for same-repository PRs.
+Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run founder-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run founder-quality main`. GitHub mirrors these as `pr-quality` and `main-quality`. Branch protection requires the `main-quality` workflow status, conversation resolution, linear history, and disabled force pushes/deletions. Passing `main-quality` is the approval signal for same-repository PRs.
 
-Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. Main merges fail when test coverage is below 95%. Same-repository PRs can be squash-merged automatically after the required `quality` workflow passes.
+Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. Main merges fail when test coverage is below 95%. Same-repository PRs can be squash-merged automatically after the required `main-quality` workflow passes.
 
 Update trigger: Revisit if the workflow name changes, hosted CI is replaced, or the project needs release-only gates.
 

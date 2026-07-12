@@ -2,7 +2,7 @@ name: auto-merge
 
 on:
   workflow_run:
-    workflows: [quality]
+    workflows: [main-quality]
     types: [completed]
 
 permissions:

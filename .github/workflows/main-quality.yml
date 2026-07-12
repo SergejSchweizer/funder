@@ -1,4 +1,4 @@
-name: quality
+name: main-quality
 
 on:
   pull_request:
@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: quality
+  main-quality:
+    name: main-quality
     runs-on: ubuntu-latest
 
     steps:
@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run PR quality gate
+      - name: Run PR quality gate scope
         run: uv run founder-quality pr
 
       - name: Enforce main coverage threshold

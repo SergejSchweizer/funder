@@ -39,6 +39,15 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - Documentation snapshots must state their review date or be regenerated from source data.
 - Table serialization is isolated behind `founder.table_io` so a future Parquet engine can replace the current dependency-free row writer without changing module boundaries.
 
+## Quality Gate Mechanism
+
+Founder uses two named GitHub quality scopes:
+
+- **`pr-quality`** runs on pull requests and non-main branch pushes. It executes `uv run founder-quality pr`, which runs `ruff check .`, `ruff format --check .`, `mypy src tests`, `pytest`, and Conventional Commit validation for branch commits.
+- **`main-quality`** runs on pull requests and pushes to `main`. It executes the full `pr-quality` scope and then enforces `pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
+
+Branch protection for `main` requires `main-quality`. A same-repository PR with a passing `main-quality` check counts as approved for merge and may be squash-merged automatically by the `auto-merge` workflow. Branch protection still keeps conversation resolution, linear history, disabled force pushes, and disabled branch deletion.
+
 ## Update Rules
 
 Update this file whenever a change alters one of these items:
