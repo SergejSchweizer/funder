@@ -15,7 +15,7 @@ Last reviewed: 2026-07-12
 - [D008. Use Local And GitHub Quality Gates](#d008-use-local-and-github-quality-gates)
 - [D009. Keep Quality Gates Local And Out Of `.github`](#d009-keep-quality-gates-local-and-out-of-github)
 - [D010. Use Two Quality Gate Layers](#d010-use-two-quality-gate-layers)
-- [D011. Keep Local Lake Serialization Dependency-Free For The Baseline](#d011-keep-local-lake-serialization-dependency-free-for-the-baseline)
+- [D011. Write Physical Parquet Lake Tables](#d011-write-physical-parquet-lake-tables)
 - [D012. Keep Optimization Constraints And Trade Exports Separate](#d012-keep-optimization-constraints-and-trade-exports-separate)
 - [Update Rules](#update-rules)
 
@@ -103,7 +103,7 @@ Date: 2026-07-12
 
 Context: The project needs filtered name/ISIN discovery first, then full EODHD data loading for the approved canonical universe.
 
-Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, fundamentals, coverage, and analytics data into the lake.
+Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, coverage, and analytics data into the lake.
 
 Consequences: The module boundary must be enforced by schema validation and tests. Search must not fetch full histories, and Fetch must not perform fuzzy discovery. All PRs that alter the contract must update architecture, decisions, risks, and backlog entries together.
 
@@ -149,17 +149,17 @@ Consequences: PRs should run the local PR gate before push, branch commits must 
 
 Update trigger: Revisit if the workflow name changes, hosted CI is replaced, or the project needs release-only gates.
 
-## D011. Keep Local Lake Serialization Dependency-Free For The Baseline
+## D011. Write Physical Parquet Lake Tables
 
 Date: 2026-07-12
 
-Context: The backlog needs Bronze, Silver, Gold, and Meta contracts immediately, while the current package has no runtime dependencies and no Parquet engine installed.
+Context: The lake artifacts use `.parquet` table contracts and should open in standard Parquet readers.
 
-Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. The current writer emits newline-delimited JSON rows at the table contract paths used by the lake helpers.
+Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. `.parquet` paths are written as physical Apache Parquet files through pyarrow; `.json` and review CSV artifacts keep their native formats.
 
-Consequences: Search, Fetch, coverage, fundamentals, Gold inputs, and dry runs can be tested locally without new dependencies or credentials. If true Parquet output becomes required, replace `founder.table_io` behind the same contracts and update `docs/lake_contracts.md`.
+Consequences: Search, Fetch, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
 
-Update trigger: Revisit before publishing lake artifacts to consumers that require physical Parquet files.
+Update trigger: Revisit if the project changes Parquet engine, compression, partitioning, or schema evolution policy.
 
 ## D012. Keep Optimization Constraints And Trade Exports Separate
 

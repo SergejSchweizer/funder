@@ -5,19 +5,26 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from founder.config import load_eodhd_config
 from founder.fetch import (
-    fetch_fundamentals_to_silver,
+    ADDITIONAL_EODHD_DATASETS,
+    build_gap_fetch_plan,
+    eodhd_quote_fetcher,
+    eodhd_raw_data_fetcher,
     fetch_quotes_to_bronze,
+    fetch_raw_eodhd_datasets_to_bronze,
     normalize_quote_rows,
+    read_silver_quotes,
     write_fetch_manifests,
     write_fetch_plan,
     write_silver_quotes,
 )
+from founder.http import EodhdClient
 from founder.logging import get_logger, setup_logging
 from founder.paths import LakePaths
 from founder.pipeline import run_dry_run
@@ -28,8 +35,9 @@ from founder.search import (
     write_canonical_universe,
     write_search_run,
 )
+from founder.table_io import write_rows
 
-DEFAULT_ROOT = Path("data/search-fetch")
+DEFAULT_ROOT = Path("lake")
 DEFAULT_SEARCH_INPUT = Path("docs/eodhd_ucits_etf_matches.csv")
 LOGGER = get_logger(__name__)
 
@@ -49,6 +57,13 @@ def _generated_run_id(prefix: str, value: str | None = None, run_date: date | No
 
 def _parse_date(value: str) -> date:
     return date.fromisoformat(value)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be at least 1")
+    return parsed
 
 
 def _read_candidate_payload(path: Path) -> list[dict[str, Any]]:
@@ -132,16 +147,24 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument(
         "--start-date",
         type=_parse_date,
-        help="Fetch start date YYYY-MM-DD. Defaults to 30 days ago.",
+        help="Optional fetch start date YYYY-MM-DD. Omitted by default for full history.",
     )
-    fetch.add_argument(
-        "--end-date", type=_parse_date, help="Fetch end date YYYY-MM-DD. Defaults to today."
-    )
+    fetch.add_argument("--end-date", type=_parse_date, help="Optional fetch end date YYYY-MM-DD.")
     fetch.add_argument("--run-date", type=_parse_date, help="Archive run date YYYY-MM-DD.")
     fetch.add_argument(
         "--mock",
         action="store_true",
-        help="Write mocked quote/fundamentals outputs after planning.",
+        help="Write mocked quote outputs after planning.",
+    )
+    fetch_selector = fetch.add_mutually_exclusive_group()
+    fetch_selector.add_argument(
+        "--limit",
+        type=_positive_int,
+        help="Limit Fetch to the first N approved canonical ISINs.",
+    )
+    fetch_selector.add_argument(
+        "--isin",
+        help="Limit Fetch to one approved canonical ISIN.",
     )
     dry_run = subparsers.add_parser("dry-run", help="Run the deterministic mocked pipeline.")
     dry_run.add_argument(
@@ -150,15 +173,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=argparse.SUPPRESS,
         help="Write verbose DEBUG logs.",
     )
-    dry_run.add_argument(
-        "--root", default="data/dry-run", help="Lake root for generated artifacts."
-    )
+    dry_run.add_argument("--root", default="lake", help="Lake root for generated artifacts.")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the Founder command-line interface."""
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if args.command is None:
         print("founder")
         return
@@ -201,52 +223,127 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "fetch":
         paths = LakePaths(root=Path(args.root))
         run_date = args.run_date or date.today()
-        end_date = args.end_date or run_date
-        start_date = args.start_date or (end_date - timedelta(days=30))
+        end_date = args.end_date
+        start_date = args.start_date
+        gap_aware = start_date is None and not args.mock
+        if gap_aware:
+            end_date = end_date or run_date
+        if args.mock:
+            end_date = end_date or run_date
+            start_date = start_date or (end_date - timedelta(days=30))
         run_id = args.run_id or _generated_run_id("fetch", run_date=run_date)
         canonical_path = resolve_current_universe(paths)
         LOGGER.info("running fetch run_id=%s canonical_path=%s", run_id, canonical_path)
-        plan = write_fetch_plan(
+        listing_plan = write_fetch_plan(
             paths,
             canonical_path,
             run_id=run_id,
             start_date=start_date,
             end_date=end_date,
+            limit=args.limit,
+            isin=args.isin,
+            gap_aware=False,
         )
+        quote_plan = listing_plan
+        if gap_aware:
+            quote_plan = build_gap_fetch_plan(
+                listing_plan,
+                read_silver_quotes(paths),
+                end_date=end_date,
+            )
+            write_rows(paths.fetch_plan(run_id), quote_plan)
         summary = {
-            "end_date": end_date.isoformat(),
-            "fetch_plan_rows": len(plan),
+            "end_date": end_date.isoformat() if end_date is not None else None,
+            "fetch_plan_rows": len(quote_plan),
+            "gap_aware": gap_aware,
             "run_id": run_id,
-            "start_date": start_date.isoformat(),
+            "start_date": start_date.isoformat() if start_date is not None else None,
         }
         if args.mock:
-            fetch_quotes_to_bronze(
+            if end_date is None:
+                raise RuntimeError("mock fetch requires start and end dates")
+
+            def mock_quotes_for_item(item: Mapping[str, Any]) -> list[dict[str, Any]]:
+                item_start = (
+                    _parse_date(str(item.get("start_date", "")))
+                    if item.get("start_date")
+                    else start_date
+                )
+                item_end = (
+                    _parse_date(str(item.get("end_date", ""))) if item.get("end_date") else end_date
+                )
+                if item_start is None:
+                    raise RuntimeError("mock fetch requires start and end dates")
+                return _mock_quote_rows(dict(item), item_start, item_end)
+
+            _, quote_errors = fetch_quotes_to_bronze(
                 paths,
-                plan,
+                quote_plan,
                 run_date=run_date,
-                fetcher=lambda item: _mock_quote_rows(dict(item), start_date, end_date),
+                fetcher=mock_quotes_for_item,
             )
-            raw_by_symbol = {
-                str(item["symbol"]): _mock_quote_rows(dict(item), start_date, end_date)
-                for item in plan
-            }
+            raw_by_symbol: dict[str, list[dict[str, Any]]] = {}
+            for item in quote_plan:
+                raw_by_symbol.setdefault(str(item["symbol"]), []).extend(mock_quotes_for_item(item))
             quotes = normalize_quote_rows(
-                plan,
+                quote_plan,
                 raw_by_symbol,
                 fetched_at=datetime.combine(run_date, datetime.min.time(), tzinfo=UTC),
-                currency_by_isin={str(item["isin"]): "" for item in plan},
+                currency_by_isin={str(item["isin"]): "" for item in quote_plan},
             )
             write_silver_quotes(paths, quotes)
-            fetch_fundamentals_to_silver(
+            coverage = write_fetch_manifests(
                 paths,
-                plan,
-                run_date=run_date,
-                fetcher=lambda item: {"General": {"Name": item["code"], "CurrencyCode": ""}},
+                run_id=run_id,
+                quote_rows=read_silver_quotes(paths),
+                plan=listing_plan,
+                as_of=end_date,
             )
-            coverage = write_fetch_manifests(paths, run_id=run_id, quote_rows=quotes)
             summary["coverage_rows"] = len(coverage)
             summary["quote_rows"] = len(quotes)
-        LOGGER.info("fetch complete run_id=%s plan_rows=%s", run_id, len(plan))
+        else:
+            live_raw_by_symbol: dict[str, list[dict[str, Any]]] = {}
+            client = EodhdClient(load_eodhd_config())
+            quote_fetcher = eodhd_quote_fetcher(client)
+
+            def fetch_and_capture(item: Mapping[str, Any]) -> list[dict[str, Any]]:
+                quotes = [dict(row) for row in quote_fetcher(item)]
+                live_raw_by_symbol.setdefault(str(item["symbol"]), []).extend(quotes)
+                return quotes
+
+            _, quote_errors = fetch_quotes_to_bronze(
+                paths,
+                quote_plan,
+                run_date=run_date,
+                fetcher=fetch_and_capture,
+            )
+            quotes = normalize_quote_rows(
+                quote_plan,
+                live_raw_by_symbol,
+                fetched_at=datetime.combine(run_date, datetime.min.time(), tzinfo=UTC),
+            )
+            write_silver_quotes(paths, quotes)
+            raw_successes, raw_errors = fetch_raw_eodhd_datasets_to_bronze(
+                paths,
+                listing_plan,
+                run_date=run_date,
+                fetchers={
+                    dataset: eodhd_raw_data_fetcher(client, endpoint)
+                    for dataset, endpoint in ADDITIONAL_EODHD_DATASETS
+                },
+            )
+            coverage = write_fetch_manifests(
+                paths,
+                run_id=run_id,
+                quote_rows=read_silver_quotes(paths),
+                plan=listing_plan,
+                as_of=end_date,
+            )
+            summary["coverage_rows"] = len(coverage)
+            summary["error_rows"] = len(quote_errors) + len(raw_errors)
+            summary["quote_rows"] = len(quotes)
+            summary["raw_data_payloads"] = len(raw_successes)
+        LOGGER.info("fetch complete run_id=%s plan_rows=%s", run_id, len(quote_plan))
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "dry-run":
