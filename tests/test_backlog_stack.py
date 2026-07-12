@@ -37,8 +37,16 @@ def test_lake_schemas_and_paths_cover_backlog_tables(tmp_path) -> None:  # type:
     assert paths.fetch_plan("fetch-1").as_posix().endswith("data") is False
     assert paths.search_summary("search-1").name == "search_summary.json"
     assert paths.review_csv("search-1").name == "canonical_universe_review.csv"
-    assert paths.silver_quotes_year(2026).as_posix().endswith("year=2026/quotes.parquet")
-    assert paths.gold_covariance("2026-07-12").as_posix().endswith("covariance.parquet")
+    assert (
+        paths.silver_quote_file("XETRA", "IE1")
+        .as_posix()
+        .endswith("silver/quotes/XETRA/IE1.parquet")
+    )
+    assert (
+        paths.gold_covariance("XETRA", "IE1")
+        .as_posix()
+        .endswith("gold/covariance/XETRA/IE1.parquet")
+    )
 
     with pytest.raises(ValueError, match="unknown schema"):
         required_fields("unknown")
@@ -227,7 +235,8 @@ def test_fetch_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-un
     write_silver_quotes(paths, quotes)
     coverage = write_fetch_manifests(paths, run_id="fetch-1", quote_rows=quotes)
 
-    assert read_rows(paths.silver_quotes_year(2026)) == quotes
+    assert read_rows(paths.silver_quote_file("XETRA", "IE1")) == quotes[:2]
+    assert read_rows(paths.silver_quote_file("AS", "IE2")) == quotes[2:]
     assert build_coverage(quotes, run_id="fetch-1")[0]["missing_periods"] == 1
     assert read_rows(paths.coverage()) == coverage
 
@@ -305,30 +314,53 @@ def test_gap_fetch_plan_backfills_holes_before_tail_windows() -> None:
         ("tail", "2026-07-15", "2026-07-17"),
     ]
     assert [(row["window_reason"], row["start_date"], row["end_date"]) for row in gap_plan] == [
-        ("historical_gap", "2026-07-13", "2026-07-13"),
-        ("tail", "2026-07-15", "2026-07-17"),
+        ("gap_backfill", "2026-07-13", "2026-07-17"),
     ]
 
 
 def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     quotes = [
-        {"isin": "IE1", "date": "2026-07-10", "adjusted_close": 100},
-        {"isin": "IE1", "date": "2026-07-11", "adjusted_close": 110},
-        {"isin": "IE2", "date": "2026-07-10", "adjusted_close": 50},
-        {"isin": "IE2", "date": "2026-07-11", "adjusted_close": 55},
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-10",
+            "adjusted_close": 100,
+        },
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-11",
+            "adjusted_close": 110,
+        },
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-10",
+            "adjusted_close": 50,
+        },
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-11",
+            "adjusted_close": 55,
+        },
     ]
 
     returns = build_returns(quotes)
     correlations, covariances = build_correlation_and_covariance(returns)
-    written_returns, written_correlations, written_covariances = write_gold_inputs(
-        paths, quotes, as_of="2026-07-12"
-    )
+    written_returns, written_correlations, written_covariances = write_gold_inputs(paths, quotes)
 
     assert returns[0]["return"] == pytest.approx(0.1)
     assert correlations == written_correlations
     assert covariances == written_covariances
-    assert read_rows(paths.gold_returns("2026-07-12")) == written_returns
+    assert read_rows(paths.gold_returns("XETRA", "IE1")) == written_returns[:1]
+    assert read_rows(paths.gold_correlation("XETRA", "IE1")) == written_correlations[:2]
+    assert read_rows(paths.gold_covariance("XETRA", "IE1")) == written_covariances[:2]
 
 
 def test_dry_run_pipeline_is_repeatable(tmp_path) -> None:  # type: ignore[no-untyped-def]

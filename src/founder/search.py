@@ -196,7 +196,7 @@ def approve_universe(
 ) -> JsonRow:
     """Mark a canonical universe as the active Fetch input.
 
-    Approval writes `current_universe.json` in Silver metadata with the selected Search run
+    Approval writes `current_universe.json` in lake metadata with the selected Search run
     id and canonical-universe path. Fetch can resolve this pointer without
     knowing how Search produced the universe.
     """
@@ -211,7 +211,7 @@ def approve_universe(
 
 
 def resolve_current_universe(paths: LakePaths) -> Path:
-    """Return the approved canonical-universe path from Silver metadata."""
+    """Return the approved canonical-universe path from lake metadata."""
     payload = read_json(paths.current_universe())
     canonical_path = Path(str(payload["canonical_universe_path"]))
     if not canonical_path.exists():

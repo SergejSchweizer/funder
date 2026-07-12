@@ -109,7 +109,7 @@ def run_dry_run(root: Path) -> JsonRow:
     quotes = normalize_quote_rows(plan, raw_by_symbol, fetched_at=now, currency_by_isin=currencies)
     write_silver_quotes(paths, quotes)
     coverage = write_fetch_manifests(paths, run_id=run_id, quote_rows=quotes)
-    returns, correlations, covariances = write_gold_inputs(paths, quotes, as_of="2026-07-12")
+    returns, correlations, covariances = write_gold_inputs(paths, quotes)
     summary: JsonRow = {
         "search_run_id": search_run_id,
         "fetch_run_id": run_id,
