@@ -96,7 +96,7 @@ def run_dry_run(root: Path) -> JsonRow:
         found_at=now,
     )
     canonical = write_canonical_universe(paths, search_run_id)
-    pointer = approve_universe(paths, search_run_id)
+    pointer = approve_universe(paths, search_run_id, approved_at=now)
     plan = build_fetch_plan(
         canonical,
         run_id=run_id,
@@ -132,5 +132,5 @@ def run_dry_run(root: Path) -> JsonRow:
         "correlation_rows": len(correlations),
         "covariance_rows": len(covariances),
     }
-    write_json(paths.meta / "dry_run_summary.json", summary)
+    write_json(paths.dry_run_summary(), summary)
     return summary

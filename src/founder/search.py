@@ -191,17 +191,19 @@ def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonR
     return canonical
 
 
-def approve_universe(paths: LakePaths, search_run_id: str) -> JsonRow:
+def approve_universe(
+    paths: LakePaths, search_run_id: str, *, approved_at: datetime | None = None
+) -> JsonRow:
     """Mark a canonical universe as the active Fetch input.
 
-    Approval writes `current_universe.json` in Meta with the selected Search run
+    Approval writes `current_universe.json` in Silver metadata with the selected Search run
     id and canonical-universe path. Fetch can resolve this pointer without
     knowing how Search produced the universe.
     """
     pointer = {
         "search_run_id": search_run_id,
         "canonical_universe_path": str(paths.canonical_universe(search_run_id)),
-        "approved_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "approved_at": (approved_at or datetime.now(UTC)).replace(microsecond=0).isoformat(),
     }
     write_json(paths.current_universe(), pointer)
     LOGGER.info("universe approved search_run_id=%s", search_run_id)
@@ -209,6 +211,9 @@ def approve_universe(paths: LakePaths, search_run_id: str) -> JsonRow:
 
 
 def resolve_current_universe(paths: LakePaths) -> Path:
-    """Return the approved canonical-universe path from Meta."""
+    """Return the approved canonical-universe path from Silver metadata."""
     payload = read_json(paths.current_universe())
-    return Path(str(payload["canonical_universe_path"]))
+    canonical_path = Path(str(payload["canonical_universe_path"]))
+    if not canonical_path.exists():
+        raise FileNotFoundError(f"approved canonical universe does not exist: {canonical_path}")
+    return canonical_path

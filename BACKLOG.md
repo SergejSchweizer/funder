@@ -49,7 +49,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR02.
 
-Scope: Define the simple medallion lake layout: `data/bronze`, `data/silver`, `data/gold`, and `data/meta`; add schema docs for search outputs, canonical universe, quotes, fundamentals, coverage, and fetch manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
+Scope: Define the simple medallion lake layout: `lake/bronze`, `lake/silver`, and `lake/gold`; add schema docs for search outputs, canonical universe, quotes, fundamentals, coverage, and fetch manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
 
 Acceptance: Tests verify all lake paths and schemas; docs describe which module writes or reads each table.
 
@@ -61,7 +61,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR03.
 
-Scope: Implement `founder search` to call EODHD search and exchange-symbol endpoints for configured name filters such as `UCITS ETF`; write raw/near-raw search responses under `data/bronze/eodhd/search/run_date=YYYY-MM-DD/`; normalize candidate rows into `data/silver/search/search_run_id=.../candidates.parquet`.
+Scope: Implement `founder search` to call EODHD search and exchange-symbol endpoints for configured name filters such as `UCITS ETF`; write raw/near-raw search responses under `lake/bronze/eodhd/search/run_date=YYYY-MM-DD/`; normalize candidate rows into `lake/silver/search/search_run_id=.../candidates.parquet`.
 
 Acceptance: Integration-safe tests use recorded or mocked EODHD responses; output includes names, ISINs, code, exchange, type, country, currency, source endpoint, and run id.
 
@@ -85,7 +85,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR05.
 
-Scope: Add human-readable CSV export for review, update `data/meta/current_universe.json` to point at an approved canonical universe, and document the approval workflow.
+Scope: Add human-readable CSV export for review, update `lake/silver/metadata/current_universe.json` to point at an approved canonical universe, and document the approval workflow.
 
 Acceptance: Fetch can resolve the active universe path from metadata; docs explain how to approve a new search result without editing code.
 
@@ -99,7 +99,7 @@ Depends on: PR06.
 
 Scope: Implement `founder fetch plan` to read `canonical_universe.parquet`, validate required fields, reject duplicate or empty ISINs, derive EODHD symbols, and produce a fetch plan with per-listing start/end dates.
 
-Acceptance: Tests cover valid canonical input, duplicate ISIN rejection, empty code/exchange rejection, and incremental date planning.
+Acceptance: Tests cover valid canonical input, duplicate ISIN rejection, empty code/exchange rejection, and gap-aware date planning.
 
 Idempotency: Planning reads existing metadata and produces stable plans without calling EODHD or writing quote data.
 
@@ -109,7 +109,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR07.
 
-Scope: Implement quote fetching for planned canonical listings; write raw EOD quote responses under `data/bronze/eodhd/quotes/run_date=YYYY-MM-DD/`; capture per-symbol successes, failures, retry status, and API call metadata.
+Scope: Implement quote fetching for planned canonical listings; write raw EOD quote responses under `lake/bronze/quotes/{exchange}/{year}/{ISIN}.parquet`; capture per-symbol successes, failures, retry status, and API call metadata.
 
 Acceptance: Tests use mocked EODHD responses; failures are recorded without stopping the whole batch unless configured; token never appears in logs or files.
 
@@ -121,7 +121,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR08.
 
-Scope: Normalize Bronze quote responses into `data/silver/quotes/year=YYYY/quotes.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and fetched time.
+Scope: Normalize Bronze quote responses into `lake/silver/quotes/year=YYYY/quotes.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and fetched time.
 
 Acceptance: Tests verify schema, date parsing, numeric types, duplicate prevention by `(isin, exchange, code, date)`, and year partitioning.
 
@@ -145,9 +145,9 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR10.
 
-Scope: Add `data/meta/fetch_runs.parquet`, `coverage.parquet`, and `errors.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next incremental fetch start with a small overlap window.
+Scope: Add `lake/silver/metadata/fetch_runs.parquet` and `lake/silver/coverage/coverage.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next gap-aware fetch start with a small overlap window. Fetch failures are written to log files instead of lake Parquet tables.
 
-Acceptance: Tests cover first full fetch, monthly incremental fetch, overlap deduplication, partial failures, and coverage report generation.
+Acceptance: Tests cover first full fetch, gap-aware refresh fetches, overlap deduplication, partial failures, and coverage report generation.
 
 Idempotency: A failed run can be resumed; successful reruns update manifests without duplicating quotes.
 
@@ -157,7 +157,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR11.
 
-Scope: Build initial `data/gold/returns`, `data/gold/correlation`, and `data/gold/covariance` outputs from Silver adjusted-close quotes for the active canonical universe.
+Scope: Build initial `lake/gold/returns`, `lake/gold/correlation`, and `lake/gold/covariance` outputs from Silver adjusted-close quotes for the active canonical universe.
 
 Acceptance: Tests cover adjusted-close return calculation, date alignment, missing-data thresholds, correlation/covariance output schemas, and deterministic results for sample data.
 

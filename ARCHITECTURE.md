@@ -77,15 +77,15 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 
 `founder.contracts` owns typed cross-module data contracts. It defines validated dataclasses for Search candidates, canonical universe rows, fetch runs, and fetch errors when code needs stronger structure than plain row dictionaries.
 
-`founder.paths` owns lake artifact locations. It keeps Bronze, Silver, Gold, and Meta path construction deterministic so modules do not hard-code filesystem layouts.
+`founder.paths` owns lake artifact locations. It keeps Bronze, Silver, and Gold path construction deterministic so modules do not hard-code filesystem layouts.
 
 `founder.schemas` owns required table fields. It gives Search, Fetch, coverage, and tests one place to check the shape of table contracts before data moves between layers.
 
-`founder.table_io` owns current table serialization. It reads and writes JSON objects, newline-delimited row tables, and review CSVs behind helper functions so a future Parquet engine can replace the implementation without changing module boundaries.
+`founder.table_io` owns current table serialization. It reads and writes JSON objects, physical Parquet row tables, and review CSVs behind helper functions so storage details stay out of module logic.
 
 `founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Fetch.
 
-`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote and fundamentals payloads, normalizes quote rows, records non-secret errors, and writes coverage manifests.
+`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, fundamentals, dividends, and splits payloads, normalizes quote rows, logs non-secret errors, and writes coverage manifests.
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
@@ -120,7 +120,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 ## Module Boundary
 
 - **Search module**: owns filtered EODHD discovery, candidate normalization, one-row-per-ISIN canonical selection, XETRA preference, review artifacts, and the active universe pointer.
-- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, identifier mapping, fundamentals, lake writes, coverage, and error manifests.
+- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, identifier mapping, fundamentals, lake writes, coverage, and fetch error logging.
 - **Universe review module**: owns missing-ISIN, currency-exposure, and survivorship-bias review summaries before optimization consumes a universe.
 - **Portfolio module**: owns explicit optimization constraints and deterministic baseline weight validation.
 - **Trading module**: owns Flatex CSV order preparation from approved target weights and latest prices.
@@ -128,10 +128,10 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 
 ## Simple Lake Layout
 
-- **Bronze**: raw or near-raw EODHD search, quote, mapping, and fundamentals payloads.
+- **Bronze**: raw or near-raw EODHD search, quote, fundamentals, dividends, splits, and mapping payloads.
 - **Silver**: normalized candidates, canonical universe, quotes partitioned by year, selected fundamentals, coverage-ready tables.
 - **Gold**: portfolio-ready returns, correlation, covariance, risk inputs, and later portfolio weights.
-- **Meta**: active universe pointer, fetch runs, coverage, errors, and dataset version metadata.
+- **Silver metadata**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under the Silver layer.
 
 ## Boundaries
 
@@ -142,7 +142,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - Optimization code should consume validated quote history and explicit constraints, not raw API responses.
 - Trade-preparation code should consume approved weights, prices, and canonical listing metadata; it must not decide the optimization objective.
 - Documentation snapshots must state their review date or be regenerated from source data.
-- Table serialization is isolated behind `founder.table_io` so a future Parquet engine can replace the current dependency-free row writer without changing module boundaries.
+- Table serialization is isolated behind `founder.table_io` so modules write physical Parquet tables without embedding storage-engine details.
 
 ## Validation Boundary
 

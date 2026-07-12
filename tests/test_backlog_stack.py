@@ -7,9 +7,12 @@ import pytest
 from founder.fetch import (
     build_coverage,
     build_fetch_plan,
+    build_gap_fetch_plan,
+    build_quote_gap_rows,
     fetch_fundamentals_to_silver,
     fetch_quotes_to_bronze,
     normalize_quote_rows,
+    read_silver_quotes,
     write_fetch_manifests,
     write_silver_quotes,
 )
@@ -100,6 +103,33 @@ def test_search_writes_candidates_selects_canonical_and_approves_universe(tmp_pa
     assert resolve_current_universe(paths).as_posix() == pointer["canonical_universe_path"]
 
 
+def test_resolve_current_universe_fails_for_stale_pointer(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    write_search_run(
+        [
+            {
+                "Code": "XET1",
+                "Exchange": "XETRA",
+                "Type": "ETF",
+                "Country": "DE",
+                "Currency": "EUR",
+                "Isin": "IE1",
+                "Name": "Fund A",
+            }
+        ],
+        paths=paths,
+        search_run_id="search-1",
+        run_date=date(2026, 7, 12),
+        found_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    write_canonical_universe(paths, "search-1")
+    approve_universe(paths, "search-1")
+    paths.canonical_universe("search-1").unlink()
+
+    with pytest.raises(FileNotFoundError, match="approved canonical universe does not exist"):
+        resolve_current_universe(paths)
+
+
 def test_search_ucits_etf_dataset_finds_expected_fund_counts(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     dataset = Path("docs/eodhd_ucits_etf_matches.csv")
@@ -180,6 +210,7 @@ def test_fetch_plan_quotes_fundamentals_and_coverage(tmp_path) -> None:  # type:
     )
     assert successes[0]["rows"] == 1
     assert errors[0]["message"] == "offline"
+    assert read_rows(paths.bronze_quote_file("XETRA", 2026, "IE1"))[0]["symbol"] == "AAA.XETRA"
 
     raw_by_symbol = {
         "AAA.XETRA": [
@@ -207,6 +238,139 @@ def test_fetch_plan_quotes_fundamentals_and_coverage(tmp_path) -> None:  # type:
     assert profiles[0]["name"] == "AAA"
     assert build_coverage(quotes, run_id="fetch-1")[0]["missing_periods"] == 1
     assert read_rows(paths.coverage()) == coverage
+
+
+def test_fundamentals_failures_are_logged_without_stopping_fetch(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    paths = LakePaths(root=tmp_path / "lake")
+    plan = build_fetch_plan(
+        [
+            {
+                "search_run_id": "search-1",
+                "isin": "IE1",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "instrument_type": "ETF",
+                "country": "DE",
+                "currency": "EUR",
+                "name": "A",
+                "normalized_name": "a",
+                "selection_reason": "highest_liquidity",
+                "selected_for_fetch": True,
+            },
+            {
+                "search_run_id": "search-1",
+                "isin": "IE2",
+                "code": "BBB",
+                "exchange": "XETRA",
+                "instrument_type": "ETF",
+                "country": "DE",
+                "currency": "EUR",
+                "name": "B",
+                "normalized_name": "b",
+                "selection_reason": "highest_liquidity",
+                "selected_for_fetch": True,
+            },
+        ],
+        run_id="fetch-1",
+        start_date=None,
+        end_date=date(2026, 7, 12),
+    )
+
+    profiles = fetch_fundamentals_to_silver(
+        paths,
+        plan,
+        run_date=date(2026, 7, 12),
+        fetcher=lambda item: (
+            (_ for _ in ()).throw(RuntimeError("fundamentals unavailable"))
+            if item["code"] == "BBB"
+            else {"General": {"Name": "A", "CurrencyCode": "EUR"}}
+        ),
+    )
+
+    assert [profile["code"] for profile in profiles] == ["AAA"]
+    assert (
+        "fundamentals fetch failed symbol=BBB.XETRA error=fundamentals unavailable" in caplog.text
+    )
+
+
+def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    plan = build_fetch_plan(
+        [
+            {
+                "search_run_id": "search-1",
+                "isin": "IE1",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "instrument_type": "ETF",
+                "country": "DE",
+                "currency": "EUR",
+                "name": "A",
+                "normalized_name": "a",
+                "selection_reason": "preferred_exchange",
+                "selected_for_fetch": True,
+            }
+        ],
+        run_id="fetch-2",
+        start_date=None,
+        end_date=date(2026, 7, 13),
+    )
+    first_quotes = normalize_quote_rows(
+        plan,
+        {"AAA.XETRA": [{"date": "2026-07-01", "close": 100, "adjusted_close": 100}]},
+        fetched_at=datetime(2026, 7, 12, tzinfo=UTC),
+    )
+    gap_plan = build_gap_fetch_plan(plan, first_quotes, end_date=date(2026, 7, 13))
+
+    assert [(row["window_reason"], row["start_date"], row["end_date"]) for row in gap_plan] == [
+        ("tail", "2026-07-02", "2026-07-13")
+    ]
+
+    delta_quotes = normalize_quote_rows(
+        gap_plan,
+        {"AAA.XETRA": [{"date": "2026-07-13", "close": 101, "adjusted_close": 101}]},
+        fetched_at=datetime(2026, 7, 13, tzinfo=UTC),
+    )
+    write_silver_quotes(paths, first_quotes)
+    write_silver_quotes(paths, delta_quotes)
+
+    accumulated = read_silver_quotes(paths)
+    assert [row["date"] for row in accumulated] == ["2026-07-01", "2026-07-13"]
+    coverage = write_fetch_manifests(paths, run_id="fetch-2", quote_rows=accumulated)
+    assert coverage[0]["first_quote_date"] == "2026-07-01"
+    assert coverage[0]["last_quote_date"] == "2026-07-13"
+
+
+def test_gap_fetch_plan_backfills_holes_before_tail_windows() -> None:
+    plan = [
+        {
+            "run_id": "fetch-2",
+            "isin": "IE1",
+            "code": "AAA",
+            "exchange": "XETRA",
+            "symbol": "AAA.XETRA",
+            "start_date": "",
+            "end_date": "2026-07-17",
+        }
+    ]
+    quotes = [
+        {"isin": "IE1", "code": "AAA", "exchange": "XETRA", "date": "2026-07-10"},
+        {"isin": "IE1", "code": "AAA", "exchange": "XETRA", "date": "2026-07-14"},
+    ]
+
+    gaps = build_quote_gap_rows(plan, quotes, run_id="fetch-2", as_of=date(2026, 7, 17))
+    gap_plan = build_gap_fetch_plan(plan, quotes, end_date=date(2026, 7, 17))
+
+    assert [(row["gap_type"], row["gap_start"], row["gap_end"]) for row in gaps] == [
+        ("historical_gap", "2026-07-13", "2026-07-13"),
+        ("tail", "2026-07-15", "2026-07-17"),
+    ]
+    assert [(row["window_reason"], row["start_date"], row["end_date"]) for row in gap_plan] == [
+        ("historical_gap", "2026-07-13", "2026-07-13"),
+        ("tail", "2026-07-15", "2026-07-17"),
+    ]
 
 
 def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-untyped-def]

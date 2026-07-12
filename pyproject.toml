@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Minimum-risk ETF portfolio tooling using EODHD EOD data."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pyarrow>=25.0.0",
+]
 
 [project.scripts]
 founder = "founder.cli:main"

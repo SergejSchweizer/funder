@@ -49,6 +49,7 @@
 .venv/
 .logs/
 data/
+lake/
 *.duckdb
 *.duckdb.wal
 .mypy_cache/
