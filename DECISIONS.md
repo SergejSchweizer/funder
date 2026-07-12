@@ -64,6 +64,18 @@ Consequences: Fetch planning should target `docs/eodhd_ucits_etf_canonical_isins
 
 Update trigger: Revisit if the preferred exchange changes, a primary-listing signal becomes available, or optimization needs multiple currency/listing variants of the same ISIN.
 
+## D006. Use EODHD For Data And Flatex For Trading
+
+Date: 2026-07-12
+
+Context: Funder needs a clear separation between market data sourcing and trade execution assumptions.
+
+Decision: Use the EODHD subscription as the main source for EOD Historical Data and Flatex as the intended trading exchange/broker venue for ETF trades.
+
+Consequences: Data ingestion should be designed around EODHD symbols, exchanges, and API limits. Portfolio output should include enough listing, currency, and exchange metadata to support later Flatex trade preparation.
+
+Update trigger: Revisit if the market data subscription changes, Flatex is replaced, or execution constraints require a different canonical listing selection rule.
+
 ## Update Rules
 
 Add or update a decision when:

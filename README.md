@@ -4,11 +4,13 @@ Last reviewed: 2026-07-12
 
 Funder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
 
-The first supported data source is EODHD EOD Historical Data. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
+The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
 
 ## Current Facts
 
 - The local Python environment uses Python 3.14.5 in `.venv/`.
+- The main market data source is the EODHD subscription for EOD Historical Data.
+- The intended trading venue/broker is Flatex.
 - EODHD Search API supports lookup by ticker, company/fund name, or ISIN through `/api/search/{query_string}`.
 - EODHD Search API can filter by asset type with `type=etf` or `type=fund`, but each search response is capped at 500 results.
 - A complete broad lookup for names containing `UCITS ETF` requires enumerating EODHD exchange symbol lists and filtering locally.
