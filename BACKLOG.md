@@ -34,7 +34,7 @@ Idempotency: Repeated client calls with the same mocked responses produce the sa
 
 ### PR03. Simple Bronze/Silver/Gold Lake Layout Contract
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR02.
 
@@ -46,7 +46,7 @@ Idempotency: Path/schema helpers are pure and deterministic.
 
 ### PR04. Search Module: EODHD Query And Raw Candidate Capture
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR03.
 
@@ -58,7 +58,7 @@ Idempotency: Re-running the same search run id overwrites or validates the same 
 
 ### PR05. Search Module: Canonical ISIN Selection Contract
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR04.
 
@@ -70,7 +70,7 @@ Idempotency: Same candidate input always produces byte-for-byte equivalent canon
 
 ### PR06. Search Module: Review Artifacts And Active Universe Pointer
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR05.
 
@@ -82,7 +82,7 @@ Idempotency: Re-approving the same search run leaves the active pointer unchange
 
 ### PR07. Fetch Module: Input Contract Validation And Planning
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR06.
 
@@ -94,7 +94,7 @@ Idempotency: Planning reads existing metadata and produces stable plans without 
 
 ### PR08. Fetch Module: EOD Quote Download To Bronze
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR07.
 
@@ -106,7 +106,7 @@ Idempotency: Re-running the same run id does not duplicate quote records and can
 
 ### PR09. Fetch Module: Normalize Quotes To Silver
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR08.
 
@@ -118,7 +118,7 @@ Idempotency: Re-normalizing the same Bronze run is safe and produces no duplicat
 
 ### PR10. Fetch Module: Fundamentals And Identifier Mapping Capture
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR09.
 
@@ -130,7 +130,7 @@ Idempotency: Re-fetching the same run id records one latest payload per listing/
 
 ### PR11. Fetch Module: Coverage, Errors, And Monthly Refresh Behavior
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR10.
 
@@ -142,7 +142,7 @@ Idempotency: A failed run can be resumed; successful reruns update manifests wit
 
 ### PR12. Gold Inputs: Returns, Correlation, And Covariance Baseline
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR11.
 
@@ -154,7 +154,7 @@ Idempotency: Rebuilding the same `as_of` date replaces or validates the same Gol
 
 ### PR13. Finalization: End-To-End Dry Run, Docs, And Release Checklist
 
-Git status: merged. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR12.
 
