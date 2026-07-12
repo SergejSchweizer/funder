@@ -17,6 +17,9 @@
 # Local quality tooling.
 !.pre-commit-config.yaml
 !.python-version
+!.github/
+!.github/workflows/
+!.github/workflows/**
 
 # Public examples are allowed; local secrets stay ignored.
 !.env.example
@@ -43,7 +46,6 @@
 .env
 .env.*
 !.env.example
-.github/
 .venv/
 data/
 *.duckdb

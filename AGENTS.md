@@ -22,7 +22,9 @@ Risk review rules:
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
 - A PR that has run and passed the full local quality gates counts as approved for merge.
 - The full local quality gates are `uv run founder-quality pr` and `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
-- Branch protection should not require a separate approving review when those full quality gates have passed.
+- GitHub Actions must run the same full quality gates in the required `quality` check.
+- Branch protection should require the `quality` check and should not require a separate approving review when the full quality gates have passed.
+- Same-repository PRs with a passing `quality` workflow may be squash-merged automatically and have their branch deleted.
 
 ## R001. Exchange API reliability can silently reduce historical completeness
 

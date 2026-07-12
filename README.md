@@ -195,7 +195,7 @@ Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refact
 
 The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted.
 
-GitHub protects `main` with pull-request review, conversation resolution, linear history, and disabled force pushes/deletions. Because `.github/` is intentionally not tracked, GitHub does not require a workflow status check.
+GitHub protects `main` with the required `quality` status check, conversation resolution, linear history, and disabled force pushes/deletions. Same-repository PRs may be squash-merged automatically after the `quality` workflow passes.
 
 Install dependencies with:
 
