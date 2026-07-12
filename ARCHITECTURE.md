@@ -12,8 +12,9 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
 - **Gold**: Portfolio-ready return, covariance, risk, and optimized-weight datasets derived from validated Silver inputs.
-- **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and coverage.
+- **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and at least 95% test coverage before main merges.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
+- **Dry run**: `founder dry-run` executes the mocked pipeline from Search through Gold inputs without credentials.
 
 ## Module Boundary
 
@@ -36,6 +37,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.
 - Optimization code should consume validated quote history and explicit constraints, not raw API responses.
 - Documentation snapshots must state their review date or be regenerated from source data.
+- Table serialization is isolated behind `founder.table_io` so a future Parquet engine can replace the current dependency-free row writer without changing module boundaries.
 
 ## Update Rules
 

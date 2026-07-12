@@ -4,9 +4,13 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from funder.quality import (
+import pytest
+
+from founder.quality import (
+    build_parser,
     commands_for_layer,
     is_conventional_commit_subject,
+    main,
     run_commands,
     run_quality_gate,
     validate_commit_message_file,
@@ -26,7 +30,13 @@ def test_pr_gate_has_simple_checks() -> None:
 def test_main_gate_extends_pr_gate_with_clean_tree_checks() -> None:
     commands = commands_for_layer("main")
 
-    assert commands[:4] == commands_for_layer("pr")
+    assert commands[:3] == commands_for_layer("pr")[:3]
+    assert commands[3] == (
+        "pytest",
+        "--cov=founder",
+        "--cov-report=term-missing",
+        "--cov-fail-under=95",
+    )
     assert commands[-3:] == (
         ("git", "diff", "--quiet"),
         ("git", "diff", "--cached", "--quiet"),
@@ -104,3 +114,22 @@ def test_validate_commit_message_file(tmp_path: Path) -> None:
 
     message_file.write_text("Add config\n", encoding="utf-8")
     assert validate_commit_message_file(str(message_file)) == 1
+
+
+def test_build_parser_describes_founder_quality_gates() -> None:
+    parser = build_parser()
+
+    assert parser.description is not None
+    assert "Founder quality gates" in parser.description
+
+
+def test_main_validates_commit_message_file(tmp_path: Path) -> None:
+    message_file = tmp_path / "COMMIT_EDITMSG"
+    message_file.write_text("feat: add config\n", encoding="utf-8")
+
+    assert main(["--commit-msg-file", str(message_file)]) == 0
+
+
+def test_main_requires_layer_without_commit_message_file() -> None:
+    with pytest.raises(SystemExit):
+        main([])

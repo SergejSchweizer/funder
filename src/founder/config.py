@@ -1,4 +1,4 @@
-"""Configuration loading for Funder."""
+"""Configuration loading for Founder."""
 
 from __future__ import annotations
 
@@ -36,6 +36,8 @@ class EodhdConfig:
     base_url: str = "https://eodhd.com/api"
     timeout_seconds: float = 30.0
     max_retries: int = 2
+    min_request_interval_seconds: float = 0.25
+    retry_backoff_seconds: float = 0.5
 
     def __post_init__(self) -> None:
         if not self.api_token:
@@ -44,6 +46,20 @@ class EodhdConfig:
             raise ValueError("timeout_seconds must be positive")
         if self.max_retries < 0:
             raise ValueError("max_retries cannot be negative")
+        if self.min_request_interval_seconds < 0:
+            raise ValueError("min_request_interval_seconds cannot be negative")
+        if self.retry_backoff_seconds < 0:
+            raise ValueError("retry_backoff_seconds cannot be negative")
+
+
+def _float_setting(source: Mapping[str, str], key: str, default: float) -> float:
+    value = source.get(key)
+    return default if value is None or value.strip() == "" else float(value)
+
+
+def _int_setting(source: Mapping[str, str], key: str, default: int) -> int:
+    value = source.get(key)
+    return default if value is None or value.strip() == "" else int(value)
 
 
 def load_eodhd_config(
@@ -58,4 +74,15 @@ def load_eodhd_config(
         source = {**file_values, **source}
 
     token = source.get("EODHD_API_TOKEN", "")
-    return EodhdConfig(api_token=token)
+    return EodhdConfig(
+        api_token=token,
+        base_url=source.get("EODHD_BASE_URL", EodhdConfig.base_url),
+        timeout_seconds=_float_setting(source, "EODHD_TIMEOUT_SECONDS", 30.0),
+        max_retries=_int_setting(source, "EODHD_MAX_RETRIES", 2),
+        min_request_interval_seconds=_float_setting(
+            source,
+            "EODHD_MIN_REQUEST_INTERVAL_SECONDS",
+            0.25,
+        ),
+        retry_backoff_seconds=_float_setting(source, "EODHD_RETRY_BACKOFF_SECONDS", 0.5),
+    )

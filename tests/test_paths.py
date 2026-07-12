@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from funder.paths import LakePaths
+from founder.paths import LakePaths
 
 
 def test_lake_paths_are_deterministic() -> None:
@@ -16,3 +16,7 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.canonical_universe("search-1") == Path(
         "lake/silver/search/search_run_id=search-1/canonical_universe.parquet"
     )
+    assert paths.candidates("search-1") == Path(
+        "lake/silver/search/search_run_id=search-1/candidates.parquet"
+    )
+    assert paths.current_universe() == Path("lake/meta/current_universe.json")

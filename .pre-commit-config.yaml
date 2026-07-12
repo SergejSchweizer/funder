@@ -1,14 +1,14 @@
 repos:
   - repo: local
     hooks:
-      - id: funder-quality-pr
-        name: funder quality pr
-        entry: uv run funder-quality pr
+      - id: founder-quality-pr
+        name: founder quality pr
+        entry: uv run founder-quality pr
         language: system
         pass_filenames: false
         stages: [pre-commit]
-      - id: funder-conventional-commit
-        name: funder conventional commit
-        entry: uv run funder-quality --commit-msg-file
+      - id: founder-conventional-commit
+        name: founder conventional commit
+        entry: uv run founder-quality --commit-msg-file
         language: system
         stages: [commit-msg]

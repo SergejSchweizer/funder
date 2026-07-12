@@ -1,4 +1,4 @@
-"""Two-layer local quality gates for Funder."""
+"""Two-layer local quality gates for Founder."""
 
 from __future__ import annotations
 
@@ -23,10 +23,18 @@ PR_GATE_COMMANDS: tuple[Command, ...] = (
     ("pytest",),
 )
 
+MAIN_COVERAGE_COMMAND: Command = (
+    "pytest",
+    "--cov=founder",
+    "--cov-report=term-missing",
+    "--cov-fail-under=95",
+)
+
 CONVENTIONAL_COMMIT_TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test"
 
 MAIN_GATE_COMMANDS: tuple[Command, ...] = (
-    *PR_GATE_COMMANDS,
+    *PR_GATE_COMMANDS[:-1],
+    MAIN_COVERAGE_COMMAND,
     ("git", "diff", "--quiet"),
     ("git", "diff", "--cached", "--quiet"),
     ("git", "status", "--short", "--untracked-files=all"),
@@ -130,7 +138,7 @@ def run_quality_gate(layer: str, *, runner: Runner = subprocess.run) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run Funder quality gates.")
+    parser = argparse.ArgumentParser(description="Run Founder quality gates.")
     parser.add_argument(
         "layer",
         choices=("pr", "main"),

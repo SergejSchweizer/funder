@@ -8,9 +8,9 @@ This file tracks active operational, data correctness, and architecture risks. K
 
 Status: Active
 
-Signal: Deribit route errors, retry behavior, and long-running trade backfills appear repeatedly in project history.
+Signal: External API route errors, retry behavior, rate limits, and long-running trade backfills appear repeatedly in project history.
 
-Mitigation: Keep debug logs, checkpoint keys, deterministic windows, and completeness reports aligned before changing fetch execution.
+Mitigation: Keep debug logs, checkpoint keys, deterministic windows, request pacing, `Retry-After` aware retries, and completeness reports aligned before changing fetch execution.
 
 ## R002. Dataset Naming Drift Can Break Bronze, Silver, and Gold Joins
 
@@ -34,7 +34,7 @@ Status: Active
 
 Signal: Quality-gate commits show type coverage and test coverage are active project risks.
 
-Mitigation: Run focused tests first, then full pytest, Ruff, and type checks before merging behavior or boundary changes.
+Mitigation: Run focused tests first, then Ruff, type checks, and pytest with at least 95% coverage before main merges.
 
 ## R005. Documentation Snapshots Can Become Stale Relative to the Lake
 
@@ -50,7 +50,7 @@ Status: Active
 
 Signal: EODHD Search API is capped at 500 results, while exchange symbol-list enumeration found 8,165 instruments with `UCITS ETF` in the name across ETF and fund types.
 
-Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate to one canonical listing per ISIN, prefer XETRA when available, and validate outputs before quote ingestion.
+Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate to one canonical listing per ISIN, prefer XETRA when available, validate outputs before quote ingestion, and keep the deterministic dry run green.
 
 ## R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs
 
@@ -58,7 +58,7 @@ Status: Active
 
 Signal: The project goal depends on covariance estimates from thousands of ETF EOD quote histories.
 
-Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, and optimization constraints before publishing portfolio weights.
+Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, and optimization constraints before publishing portfolio weights.
 
 ## R008. Search And Fetch Contract Drift Can Corrupt The Lake
 

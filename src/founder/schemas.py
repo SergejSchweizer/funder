@@ -1,0 +1,78 @@
+"""Lake table schema contracts."""
+
+from __future__ import annotations
+
+SCHEMAS: dict[str, tuple[str, ...]] = {
+    "search_candidates": (
+        "search_run_id",
+        "query",
+        "source_endpoint",
+        "code",
+        "exchange",
+        "instrument_type",
+        "country",
+        "currency",
+        "isin",
+        "name",
+        "normalized_name",
+        "found_at",
+    ),
+    "canonical_universe": (
+        "search_run_id",
+        "isin",
+        "code",
+        "exchange",
+        "instrument_type",
+        "country",
+        "currency",
+        "name",
+        "normalized_name",
+        "selection_reason",
+        "selected_for_fetch",
+    ),
+    "fetch_plan": ("run_id", "isin", "code", "exchange", "symbol", "start_date", "end_date"),
+    "quotes": (
+        "run_id",
+        "isin",
+        "code",
+        "exchange",
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "adjusted_close",
+        "volume",
+        "currency",
+        "fetched_at",
+    ),
+    "fundamentals_profile": ("run_id", "isin", "code", "exchange", "name", "currency"),
+    "coverage": (
+        "run_id",
+        "isin",
+        "code",
+        "exchange",
+        "first_quote_date",
+        "last_quote_date",
+        "observed_rows",
+        "missing_periods",
+        "next_fetch_start",
+    ),
+    "errors": ("run_id", "code", "exchange", "endpoint", "error_type", "message"),
+    "returns": ("isin", "date", "return"),
+    "correlation": ("left_isin", "right_isin", "correlation"),
+    "covariance": ("left_isin", "right_isin", "covariance"),
+}
+
+
+def required_fields(table_name: str) -> tuple[str, ...]:
+    try:
+        return SCHEMAS[table_name]
+    except KeyError as error:
+        raise ValueError(f"unknown schema: {table_name}") from error
+
+
+def validate_fields(table_name: str, row: dict[str, object]) -> None:
+    missing = [field for field in required_fields(table_name) if field not in row]
+    if missing:
+        raise ValueError(f"{table_name} row missing fields: {', '.join(missing)}")

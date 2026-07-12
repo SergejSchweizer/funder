@@ -36,7 +36,7 @@ Context: The project goal is to analyze end-of-day quotes for multiple thousands
 
 Decision: Use EODHD EOD Historical Data as the first data source for ETF discovery and quote ingestion. Use exchange symbol-list enumeration for broad universe discovery because the Search API is capped at 500 results.
 
-Consequences: Discovery code must handle multiple exchanges, duplicate listings, ETF and fund type filters, and token-free outputs. Quote ingestion must validate coverage before optimization consumes the data.
+Consequences: Discovery code must handle multiple exchanges, duplicate listings, ETF and fund type filters, and token-free outputs. Quote ingestion must validate coverage before optimization consumes the data. EODHD calls must use the shared client so request pacing, retry backoff, and `Retry-After` handling are applied consistently.
 
 Update trigger: Revisit if another provider becomes primary, EODHD endpoint behavior changes, or the universe definition moves away from ETF/fund instruments.
 
@@ -68,7 +68,7 @@ Update trigger: Revisit if the preferred exchange changes, a primary-listing sig
 
 Date: 2026-07-12
 
-Context: Funder needs a clear separation between market data sourcing and trade execution assumptions.
+Context: Founder needs a clear separation between market data sourcing and trade execution assumptions.
 
 Decision: Use the EODHD subscription as the main source for EOD Historical Data and Flatex as the intended trading exchange/broker venue for ETF trades.
 
@@ -122,11 +122,23 @@ Date: 2026-07-12
 
 Context: The project needs a simple quality policy that works locally and with GitHub branch protection while `.github/` remains untracked.
 
-Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run funder-quality pr` and the pre-commit hook. The main gate runs the PR gate plus clean tracked working-tree checks through `uv run funder-quality main`. GitHub implements the main merge layer through branch protection: pull-request review, conversation resolution, linear history, and disabled force pushes/deletions, without requiring workflow status checks.
+Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run founder-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run founder-quality main`. GitHub implements the main merge layer through branch protection: pull-request review, conversation resolution, linear history, and disabled force pushes/deletions, without requiring workflow status checks.
 
-Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. If `.github/` workflows are reintroduced, this decision must be updated before adding a third gate or required status check.
+Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. Main merges fail when test coverage is below 95%. If `.github/` workflows are reintroduced, this decision must be updated before adding a third gate or required status check.
 
 Update trigger: Revisit if hosted CI is reintroduced, required status checks return, or the project needs release-only gates.
+
+## D011. Keep Local Lake Serialization Dependency-Free For The Baseline
+
+Date: 2026-07-12
+
+Context: The backlog needs Bronze, Silver, Gold, and Meta contracts immediately, while the current package has no runtime dependencies and no Parquet engine installed.
+
+Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. The current writer emits newline-delimited JSON rows at the table contract paths used by the lake helpers.
+
+Consequences: Search, Fetch, coverage, fundamentals, Gold inputs, and dry runs can be tested locally without new dependencies or credentials. If true Parquet output becomes required, replace `founder.table_io` behind the same contracts and update `docs/lake_contracts.md`.
+
+Update trigger: Revisit before publishing lake artifacts to consumers that require physical Parquet files.
 
 ## Update Rules
 

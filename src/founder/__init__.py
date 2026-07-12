@@ -1,4 +1,4 @@
-"""Funder package."""
+"""Founder package."""
 
 __all__ = ["__version__"]
 
