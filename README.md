@@ -17,6 +17,8 @@ The first supported data source is EODHD EOD Historical Data. Local API credenti
 - The result set contains 8,063 rows with type `ETF` and 102 rows with type `FUND`.
 - The largest match counts were on `XETRA`, `LSE`, `F`, `SW`, `PA`, `AS`, and `EUFUND`.
 - The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
+- Portfolio fetches should use one canonical listing per ISIN: prefer `XETRA` when that ISIN is listed there, otherwise select a fallback exchange deterministically.
+- The canonical no-duplicate-ISIN dataset is stored at `docs/eodhd_ucits_etf_canonical_isins.csv`.
 
 ## ETF Discovery Statistics
 
@@ -30,6 +32,9 @@ The `UCITS ETF` discovery set contains EODHD listings, not yet deduplicated port
 - Rows with ISIN: 6,660.
 - Rows missing ISIN: 1,505.
 - Unique non-empty ISINs: 3,104.
+- Canonical no-duplicate-ISIN universe: 3,104 rows.
+- Canonical selections from `XETRA`: 1,759.
+- Canonical fallback selections from other exchanges: 1,345.
 
 Top exchanges by listing count:
 
@@ -68,15 +73,27 @@ Top currencies by listing count:
 | GBP | 594 |
 | CHF | 428 |
 
+Top canonical exchanges after one-row-per-ISIN selection:
+
+| Exchange | Canonical ISINs |
+| --- | ---: |
+| XETRA | 1,759 |
+| LSE | 626 |
+| SW | 292 |
+| PA | 230 |
+| F | 114 |
+| AS | 66 |
+
 ## Intended Workflow
 
 1. Discover ETF and fund instruments from EODHD without committing credentials.
-2. Fetch end-of-day quotes for the selected universe.
-3. Normalize quotes into a reproducible local dataset.
-4. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
-5. Estimate return and risk inputs from validated quote history.
-6. Build minimum-risk portfolio weights under explicit constraints.
-7. Report weights, assumptions, coverage gaps, and validation results.
+2. Deduplicate the universe to one canonical listing per ISIN, preferring `XETRA` when available.
+3. Fetch end-of-day quotes for the selected canonical universe.
+4. Normalize quotes into a reproducible local dataset.
+5. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
+6. Estimate return and risk inputs from validated quote history.
+7. Build minimum-risk portfolio weights under explicit constraints.
+8. Report weights, assumptions, coverage gaps, and validation results.
 
 ## Portfolio Objective
 

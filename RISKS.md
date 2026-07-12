@@ -50,7 +50,7 @@ Status: Active
 
 Signal: EODHD Search API is capped at 500 results, while exchange symbol-list enumeration found 8,165 instruments with `UCITS ETF` in the name across ETF and fund types.
 
-Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate by symbol/exchange/ISIN/name, and validate outputs before quote ingestion.
+Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate to one canonical listing per ISIN, prefer XETRA when available, and validate outputs before quote ingestion.
 
 ## R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs
 

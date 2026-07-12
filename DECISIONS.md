@@ -52,6 +52,18 @@ Consequences: The implementation needs clean return series, covariance estimatio
 
 Update trigger: Revisit if the objective changes to risk parity, target return, maximum Sharpe ratio, drawdown minimization, or multi-objective optimization.
 
+## D005. Deduplicate ETF Universe By ISIN And Prefer XETRA
+
+Date: 2026-07-12
+
+Context: The `UCITS ETF` discovery set contains duplicate listings across exchanges. Portfolio construction should not overweight the same fund because one ISIN appears on multiple venues.
+
+Decision: Use one canonical listing per non-empty ISIN for quote fetching and optimization. Prefer the `XETRA` listing when the ISIN is available on XETRA; otherwise select a fallback exchange deterministically from the remaining listings.
+
+Consequences: Fetch planning should target `docs/eodhd_ucits_etf_canonical_isins.csv`, not the raw listing discovery file. Rows without ISIN require a separate review before they can enter the optimization universe.
+
+Update trigger: Revisit if the preferred exchange changes, a primary-listing signal becomes available, or optimization needs multiple currency/listing variants of the same ISIN.
+
 ## Update Rules
 
 Add or update a decision when:

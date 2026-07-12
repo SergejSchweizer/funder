@@ -14,6 +14,13 @@ Risk review rules:
 - Prefer concrete mitigations that map to tests, logs, contracts, or docs.
 - Keep stale risks only if the mitigation still needs active attention.
 
+# Project Workflow Rules
+
+- Every PR-sized item recorded in `BACKLOG.md` must include a Git status and a PR link.
+- Use `Git status: not started` and `PR: TBD` until work begins.
+- Replace `PR: TBD` with the pull request URL once the PR exists.
+- Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
+
 ## R001. Exchange API reliability can silently reduce historical completeness
 
 Status: Active
