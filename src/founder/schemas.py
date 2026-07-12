@@ -70,9 +70,25 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "missing_dates",
     ),
     "errors": ("run_id", "code", "exchange", "endpoint", "error_type", "message"),
-    "returns": ("isin", "date", "return"),
-    "correlation": ("left_isin", "right_isin", "correlation"),
-    "covariance": ("left_isin", "right_isin", "covariance"),
+    "returns": ("isin", "exchange", "code", "date", "return"),
+    "correlation": (
+        "left_isin",
+        "left_exchange",
+        "left_code",
+        "right_isin",
+        "right_exchange",
+        "right_code",
+        "correlation",
+    ),
+    "covariance": (
+        "left_isin",
+        "left_exchange",
+        "left_code",
+        "right_isin",
+        "right_exchange",
+        "right_code",
+        "covariance",
+    ),
 }
 
 

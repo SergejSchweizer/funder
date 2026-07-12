@@ -156,7 +156,7 @@ Search and Fetch have separate CLI calls. First run Search with the string to fi
 uv run founder search "UCITS ETF"
 ```
 
-Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning and the additional raw EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Then run Fetch from the approved universe pointer. By default this fetches live EODHD quotes with gap-aware planning, writes Silver quote files, builds Gold return/correlation/covariance inputs, and archives the additional raw EODHD listing datasets currently supported by Founder. For first-time ISINs, quote fetching requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
 uv run founder fetch
@@ -168,11 +168,11 @@ After a full-history run has written local quotes, later live fetches check for 
 uv run founder fetch
 ```
 
-Gap-aware Fetch reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
+Gap-aware Fetch reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. The resulting windows are used for quotes, dividends, and splits. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
 
-The gap-aware approach currently applies to quote history. Other ISIN data types are handled by their own storage contract. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own coverage and gap table before being added to automatic gap planning.
+The gap-aware approach currently discovers windows from quote history, then applies those windows to all supported EODHD time-series datasets. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own strategy, coverage fields, and gap table before being added to automatic gap planning.
 
-Use `--mock` for a local no-token run that writes deterministic quote and coverage artifacts:
+Use `--mock` for a local no-token run that writes deterministic quote, Silver, Gold, and coverage artifacts:
 
 ```bash
 uv run founder fetch --mock

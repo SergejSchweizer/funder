@@ -3,15 +3,17 @@
 The Fetch module starts at Search's approved `canonical_universe` contract. It
 validates that contract, derives EODHD symbols, records raw or near-raw Bronze
 quote and other EODHD data, normalizes quote rows for Silver, and
-logs non-secret errors, and writes Silver metadata manifests that show coverage. It
+logs non-secret errors, and writes metadata manifests that show coverage. It
 does not perform fuzzy instrument discovery.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from founder.http import EodhdClient
@@ -21,12 +23,35 @@ from founder.schemas import required_fields
 from founder.table_io import JsonRow, read_rows, write_csv, write_rows
 
 QuoteFetcher = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]]]
-RawDataFetcher = Callable[[Mapping[str, Any]], Any]
+RawDataFetcher = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]]]
+BronzePathFactory = Callable[[LakePaths, str, int, str], Path]
 LOGGER = get_logger(__name__)
 
-ADDITIONAL_EODHD_DATASETS: tuple[tuple[str, str], ...] = (
-    ("dividends", "div"),
-    ("splits", "splits"),
+
+@dataclass(frozen=True)
+class EodhdDatasetStrategy:
+    """Dataset-specific behavior for the shared EODHD Bronze fetch pipeline."""
+
+    name: str
+    endpoint: str
+    bronze_path: BronzePathFactory
+
+
+def _quote_bronze_path(paths: LakePaths, exchange: str, year: int, isin: str) -> Path:
+    return paths.bronze_quote_file(exchange, year, isin)
+
+
+def _dataset_bronze_path(dataset: str) -> BronzePathFactory:
+    def path(paths: LakePaths, exchange: str, year: int, isin: str) -> Path:
+        return paths.bronze_dataset_file(dataset, exchange, year, isin)
+
+    return path
+
+
+QUOTE_DATASET = EodhdDatasetStrategy("quotes", "eod", _quote_bronze_path)
+ADDITIONAL_EODHD_DATASETS: tuple[EodhdDatasetStrategy, ...] = (
+    EodhdDatasetStrategy("dividends", "div", _dataset_bronze_path("dividends")),
+    EodhdDatasetStrategy("splits", "splits", _dataset_bronze_path("splits")),
 )
 
 
@@ -157,16 +182,17 @@ def build_gap_fetch_plan(
             row["window_reason"] = "full_history"
             gap_plan.append(row)
             continue
-        for window in windows:
-            window_end = min(date.fromisoformat(str(window["gap_end"])), end_date)
-            gap_plan.append(
-                {
-                    **row,
-                    "start_date": str(window["gap_start"]),
-                    "end_date": window_end.isoformat(),
-                    "window_reason": str(window["gap_type"]),
-                }
-            )
+        first_gap_start = min(date.fromisoformat(str(window["gap_start"])) for window in windows)
+        gap_plan.append(
+            {
+                **row,
+                "start_date": first_gap_start.isoformat(),
+                "end_date": end_date.isoformat(),
+                "window_reason": "tail"
+                if {str(window["gap_type"]) for window in windows} == {"tail"}
+                else "gap_backfill",
+            }
+        )
     LOGGER.info("gap fetch plan built input_rows=%s gap_rows=%s", len(plan), len(gap_plan))
     return gap_plan
 
@@ -347,55 +373,102 @@ def fetch_quotes_to_bronze(
     easy to test with recorded or mocked responses. Per-symbol failures are
     logged and returned as non-secret error rows without stopping the remaining batch.
     """
+    return fetch_eodhd_dataset_to_bronze(
+        paths,
+        QUOTE_DATASET,
+        plan,
+        run_date=run_date,
+        fetcher=fetcher,
+    )
+
+
+def fetch_eodhd_dataset_to_bronze(
+    paths: LakePaths,
+    strategy: EodhdDatasetStrategy,
+    plan: Sequence[Mapping[str, Any]],
+    *,
+    run_date: date,
+    fetcher: QuoteFetcher,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    """Fetch one EODHD dataset into Bronze using its dataset strategy."""
     successes: list[JsonRow] = []
     errors: list[JsonRow] = []
     for item in plan:
+        started_at = monotonic()
         try:
-            quotes = list(fetcher(item))
+            fetched_rows = list(fetcher(item))
+            elapsed_seconds = monotonic() - started_at
             rows_by_year: dict[int, list[JsonRow]] = {}
-            for quote in quotes:
-                quote_date = str(quote["date"])
-                rows_by_year.setdefault(int(quote_date[:4]), []).append(
-                    {
-                        **dict(quote),
-                        "run_id": str(item["run_id"]),
-                        "isin": str(item["isin"]),
-                        "code": str(item["code"]),
-                        "exchange": str(item["exchange"]),
-                        "symbol": str(item["symbol"]),
-                        "run_date": run_date.isoformat(),
-                    }
-                )
+            for row in _dataset_rows(strategy, item, fetched_rows, run_date=run_date):
+                row_date = str(row["date"])
+                rows_by_year.setdefault(int(row_date[:4]), []).append(row)
             for year, rows in rows_by_year.items():
-                quote_path = paths.bronze_quote_file(str(item["exchange"]), year, str(item["isin"]))
+                bronze_path = strategy.bronze_path(
+                    paths,
+                    str(item["exchange"]),
+                    year,
+                    str(item["isin"]),
+                )
                 write_rows(
-                    quote_path,
+                    bronze_path,
                     _merge_rows(
-                        read_rows(quote_path),
+                        read_rows(bronze_path),
                         rows,
                         key_fields=("isin", "exchange", "code", "date"),
                     ),
                 )
-            successes.append({**dict(item), "rows": len(quotes)})
-            LOGGER.debug("quote payload written symbol=%s rows=%s", item["symbol"], len(quotes))
+            successes.append(
+                {
+                    **dict(item),
+                    "data_type": strategy.name,
+                    "elapsed_seconds": elapsed_seconds,
+                    "rows": len(fetched_rows),
+                }
+            )
+            LOGGER.debug(
+                "EODHD rows written symbol=%s dataset=%s rows=%s elapsed_seconds=%.3f",
+                item["symbol"],
+                strategy.name,
+                len(fetched_rows),
+                elapsed_seconds,
+            )
         except Exception as error:  # noqa: BLE001 - record and continue batch failures.
+            elapsed_seconds = monotonic() - started_at
             errors.append(
                 {
                     "run_id": str(item["run_id"]),
                     "code": str(item["code"]),
+                    "elapsed_seconds": elapsed_seconds,
                     "exchange": str(item["exchange"]),
-                    "endpoint": "eod",
+                    "endpoint": strategy.endpoint,
                     "error_type": type(error).__name__,
                     "message": str(error),
                 }
             )
-            LOGGER.warning("quote fetch failed symbol=%s error=%s", item["symbol"], error)
-    LOGGER.info("bronze quote fetch complete successes=%s errors=%s", len(successes), len(errors))
+            LOGGER.warning(
+                "EODHD fetch failed symbol=%s dataset=%s elapsed_seconds=%.3f error=%s",
+                item["symbol"],
+                strategy.name,
+                elapsed_seconds,
+                error,
+            )
+    LOGGER.info(
+        "bronze EODHD fetch complete dataset=%s successes=%s errors=%s",
+        strategy.name,
+        len(successes),
+        len(errors),
+    )
     return successes, errors
 
 
 def eodhd_quote_fetcher(client: EodhdClient) -> QuoteFetcher:
     """Wrap `EodhdClient` as a `QuoteFetcher` for planned EOD requests."""
+
+    return eodhd_dataset_fetcher(client, QUOTE_DATASET)
+
+
+def eodhd_dataset_fetcher(client: EodhdClient, strategy: EodhdDatasetStrategy) -> QuoteFetcher:
+    """Wrap `EodhdClient` for one strategy-driven EODHD dataset."""
 
     def fetch(item: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
         params: dict[str, str] = {"fmt": "json"}
@@ -405,9 +478,9 @@ def eodhd_quote_fetcher(client: EodhdClient) -> QuoteFetcher:
             params["from"] = start_date
         if end_date:
             params["to"] = end_date
-        payload = client.get_json(f"/eod/{item['symbol']}", params)
+        payload = client.get_json(f"/{strategy.endpoint}/{item['symbol']}", params)
         if not isinstance(payload, list):
-            raise ValueError("expected EODHD quote list")
+            raise ValueError(f"expected EODHD {strategy.name} list")
         return [row for row in payload if isinstance(row, dict)]
 
     return fetch
@@ -415,18 +488,11 @@ def eodhd_quote_fetcher(client: EodhdClient) -> QuoteFetcher:
 
 def eodhd_raw_data_fetcher(client: EodhdClient, endpoint: str) -> RawDataFetcher:
     """Wrap `EodhdClient` for raw per-symbol EODHD datasets."""
-
-    def fetch(item: Mapping[str, Any]) -> Any:
-        params: dict[str, str] = {"fmt": "json"}
-        start_date = str(item.get("start_date", ""))
-        end_date = str(item.get("end_date", ""))
-        if start_date:
-            params["from"] = start_date
-        if end_date:
-            params["to"] = end_date
-        return client.get_json(f"/{endpoint}/{item['symbol']}", params)
-
-    return fetch
+    strategy = next(
+        (item for item in ADDITIONAL_EODHD_DATASETS if item.endpoint == endpoint),
+        EodhdDatasetStrategy(endpoint, endpoint, _dataset_bronze_path(endpoint)),
+    )
+    return eodhd_dataset_fetcher(client, strategy)
 
 
 def fetch_raw_eodhd_datasets_to_bronze(
@@ -436,59 +502,21 @@ def fetch_raw_eodhd_datasets_to_bronze(
     run_date: date,
     fetchers: Mapping[str, RawDataFetcher],
 ) -> tuple[list[JsonRow], list[JsonRow]]:
-    """Archive raw per-symbol EODHD datasets that are not normalized yet."""
+    """Archive planned raw per-symbol EODHD datasets that are not normalized yet."""
     successes: list[JsonRow] = []
     errors: list[JsonRow] = []
-    for item in _unique_plan_listings(plan):
-        raw_item = {**dict(item), "start_date": "", "end_date": run_date.isoformat()}
-        for dataset, fetcher in fetchers.items():
-            try:
-                payload = fetcher(raw_item)
-                rows = _raw_dataset_rows(dataset, raw_item, payload, run_date=run_date)
-                rows_by_year: dict[int, list[JsonRow]] = {}
-                for row in rows:
-                    rows_by_year.setdefault(int(str(row["date"])[:4]), []).append(row)
-                if not rows_by_year:
-                    rows_by_year[run_date.year] = []
-                for year, year_rows in rows_by_year.items():
-                    dataset_path = paths.bronze_dataset_file(
-                        dataset,
-                        str(raw_item["exchange"]),
-                        year,
-                        str(raw_item["isin"]),
-                    )
-                    write_rows(
-                        dataset_path,
-                        _merge_rows(
-                            read_rows(dataset_path),
-                            year_rows,
-                            key_fields=("isin", "exchange", "code", "date"),
-                        ),
-                    )
-                successes.append({**dict(raw_item), "data_type": dataset, "rows": len(rows)})
-                LOGGER.debug(
-                    "raw EODHD rows written symbol=%s dataset=%s rows=%s",
-                    item["symbol"],
-                    dataset,
-                    len(rows),
-                )
-            except Exception as error:  # noqa: BLE001 - record and continue batch failures.
-                errors.append(
-                    {
-                        "run_id": str(item["run_id"]),
-                        "code": str(item["code"]),
-                        "exchange": str(item["exchange"]),
-                        "endpoint": dataset,
-                        "error_type": type(error).__name__,
-                        "message": str(error),
-                    }
-                )
-                LOGGER.warning(
-                    "raw EODHD fetch failed symbol=%s dataset=%s error=%s",
-                    item["symbol"],
-                    dataset,
-                    error,
-                )
+    strategies_by_name = {strategy.name: strategy for strategy in ADDITIONAL_EODHD_DATASETS}
+    for dataset, fetcher in fetchers.items():
+        strategy = strategies_by_name[dataset]
+        dataset_successes, dataset_errors = fetch_eodhd_dataset_to_bronze(
+            paths,
+            strategy,
+            plan,
+            run_date=run_date,
+            fetcher=fetcher,
+        )
+        successes.extend(dataset_successes)
+        errors.extend(dataset_errors)
     LOGGER.info(
         "raw EODHD datasets fetched successes=%s errors=%s",
         len(successes),
@@ -497,22 +525,20 @@ def fetch_raw_eodhd_datasets_to_bronze(
     return successes, errors
 
 
-def _raw_dataset_rows(
-    dataset: str,
+def _dataset_rows(
+    strategy: EodhdDatasetStrategy,
     item: Mapping[str, Any],
-    payload: Any,
+    payload: Sequence[Mapping[str, Any]],
     *,
     run_date: date,
 ) -> list[JsonRow]:
-    if not isinstance(payload, list):
-        raise ValueError(f"expected EODHD {dataset} list")
     rows: list[JsonRow] = []
     for raw_row in payload:
         if not isinstance(raw_row, Mapping):
-            raise ValueError(f"expected EODHD {dataset} row object")
+            raise ValueError(f"expected EODHD {strategy.name} row object")
         row = dict(raw_row)
         if "date" not in row:
-            raise ValueError(f"expected EODHD {dataset} row date")
+            raise ValueError(f"expected EODHD {strategy.name} row date")
         rows.append(
             {
                 **row,
@@ -525,22 +551,6 @@ def _raw_dataset_rows(
             }
         )
     return rows
-
-
-def _unique_plan_listings(plan: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    listings: list[Mapping[str, Any]] = []
-    seen: set[tuple[str, str, str, str]] = set()
-    for item in plan:
-        key = (
-            str(item["isin"]),
-            str(item["code"]),
-            str(item["exchange"]),
-            str(item["symbol"]),
-        )
-        if key not in seen:
-            seen.add(key)
-            listings.append(item)
-    return listings
 
 
 def normalize_quote_rows(
@@ -588,25 +598,30 @@ def normalize_quote_rows(
 
 
 def write_silver_quotes(paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]]) -> None:
-    """Write normalized quote rows partitioned by quote year."""
-    by_year: dict[int, list[Mapping[str, Any]]] = {}
+    """Write normalized quote rows to one Silver file per exchange and ISIN."""
+    by_listing: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     for row in quote_rows:
-        by_year.setdefault(int(str(row["date"])[:4]), []).append(row)
-    for year, rows in by_year.items():
-        quote_path = paths.silver_quotes_year(year)
+        by_listing.setdefault((str(row["exchange"]), str(row["isin"])), []).append(row)
+    for (exchange, isin), rows in by_listing.items():
+        quote_path = paths.silver_quote_file(exchange, isin)
         merged_rows = _merge_rows(
             read_rows(quote_path),
             rows,
             key_fields=("isin", "exchange", "code", "date"),
         )
         write_rows(quote_path, merged_rows)
-        LOGGER.info("silver quote rows written year=%s rows=%s", year, len(merged_rows))
+        LOGGER.info(
+            "silver quote rows written exchange=%s isin=%s rows=%s",
+            exchange,
+            isin,
+            len(merged_rows),
+        )
 
 
 def read_silver_quotes(paths: LakePaths) -> list[JsonRow]:
-    """Read all accumulated Silver quote partitions."""
+    """Read all accumulated Silver quote files."""
     rows: list[JsonRow] = []
-    for path in sorted((paths.silver / "quotes").glob("year=*/quotes.parquet")):
+    for path in sorted((paths.silver / "quotes").glob("*/*.parquet")):
         rows.extend(read_rows(path))
     return rows
 

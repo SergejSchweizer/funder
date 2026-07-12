@@ -85,7 +85,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR05.
 
-Scope: Add human-readable CSV export for review, update `lake/silver/metadata/current_universe.json` to point at an approved canonical universe, and document the approval workflow.
+Scope: Add human-readable CSV export for review, update `lake/silver/universe/current_universe.json` to point at an approved canonical universe, and document the approval workflow.
 
 Acceptance: Fetch can resolve the active universe path from metadata; docs explain how to approve a new search result without editing code.
 
@@ -121,9 +121,9 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR08.
 
-Scope: Normalize Bronze quote responses into `lake/silver/quotes/year=YYYY/quotes.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and fetched time.
+Scope: Normalize Bronze quote responses into `lake/silver/quotes/{exchange}/{ISIN}.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and fetched time.
 
-Acceptance: Tests verify schema, date parsing, numeric types, duplicate prevention by `(isin, exchange, code, date)`, and year partitioning.
+Acceptance: Tests verify schema, date parsing, numeric types, duplicate prevention by `(isin, exchange, code, date)`, and per-ISIN Silver quote files.
 
 Idempotency: Re-normalizing the same Bronze run is safe and produces no duplicate Silver quote rows.
 
@@ -145,7 +145,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR10.
 
-Scope: Add `lake/silver/metadata/fetch_runs.parquet` and `lake/silver/coverage/coverage.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next gap-aware fetch start with a small overlap window. Fetch failures are written to log files instead of lake Parquet tables.
+Scope: Add `lake/silver/runs/fetch_runs.parquet` and `lake/silver/coverage/coverage.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next gap-aware fetch start with a small overlap window. Fetch failures are written to log files instead of lake Parquet tables.
 
 Acceptance: Tests cover first full fetch, gap-aware refresh fetches, overlap deduplication, partial failures, and coverage report generation.
 
@@ -157,11 +157,11 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR11.
 
-Scope: Build initial `lake/gold/returns`, `lake/gold/correlation`, and `lake/gold/covariance` outputs from Silver adjusted-close quotes for the active canonical universe.
+Scope: Build initial `lake/gold/returns/{exchange}/{ISIN}.parquet`, `lake/gold/correlation/{exchange}/{ISIN}.parquet`, and `lake/gold/covariance/{exchange}/{ISIN}.parquet` outputs from Silver adjusted-close quotes for the active canonical universe.
 
 Acceptance: Tests cover adjusted-close return calculation, date alignment, missing-data thresholds, correlation/covariance output schemas, and deterministic results for sample data.
 
-Idempotency: Rebuilding the same `as_of` date replaces or validates the same Gold outputs without accumulating stale files.
+Idempotency: Rebuilding Gold inputs replaces or validates the same per-ISIN outputs without accumulating stale files.
 
 ### PR13. Finalization: End-To-End Dry Run, Docs, And Release Checklist
 

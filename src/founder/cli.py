@@ -24,6 +24,7 @@ from founder.fetch import (
     write_fetch_plan,
     write_silver_quotes,
 )
+from founder.gold import write_gold_inputs
 from founder.http import EodhdClient
 from founder.logging import get_logger, setup_logging
 from founder.paths import LakePaths
@@ -292,14 +293,19 @@ def main(argv: Sequence[str] | None = None) -> None:
                 currency_by_isin={str(item["isin"]): "" for item in quote_plan},
             )
             write_silver_quotes(paths, quotes)
+            silver_quotes = read_silver_quotes(paths)
+            returns, correlations, covariances = write_gold_inputs(paths, silver_quotes)
             coverage = write_fetch_manifests(
                 paths,
                 run_id=run_id,
-                quote_rows=read_silver_quotes(paths),
+                quote_rows=silver_quotes,
                 plan=listing_plan,
                 as_of=end_date,
             )
             summary["coverage_rows"] = len(coverage)
+            summary["correlation_rows"] = len(correlations)
+            summary["covariance_rows"] = len(covariances)
+            summary["return_rows"] = len(returns)
             summary["quote_rows"] = len(quotes)
         else:
             live_raw_by_symbol: dict[str, list[dict[str, Any]]] = {}
@@ -323,26 +329,31 @@ def main(argv: Sequence[str] | None = None) -> None:
                 fetched_at=datetime.combine(run_date, datetime.min.time(), tzinfo=UTC),
             )
             write_silver_quotes(paths, quotes)
+            silver_quotes = read_silver_quotes(paths)
+            returns, correlations, covariances = write_gold_inputs(paths, silver_quotes)
             raw_successes, raw_errors = fetch_raw_eodhd_datasets_to_bronze(
                 paths,
-                listing_plan,
+                quote_plan,
                 run_date=run_date,
                 fetchers={
-                    dataset: eodhd_raw_data_fetcher(client, endpoint)
-                    for dataset, endpoint in ADDITIONAL_EODHD_DATASETS
+                    strategy.name: eodhd_raw_data_fetcher(client, strategy.endpoint)
+                    for strategy in ADDITIONAL_EODHD_DATASETS
                 },
             )
             coverage = write_fetch_manifests(
                 paths,
                 run_id=run_id,
-                quote_rows=read_silver_quotes(paths),
+                quote_rows=silver_quotes,
                 plan=listing_plan,
                 as_of=end_date,
             )
             summary["coverage_rows"] = len(coverage)
+            summary["correlation_rows"] = len(correlations)
+            summary["covariance_rows"] = len(covariances)
             summary["error_rows"] = len(quote_errors) + len(raw_errors)
             summary["quote_rows"] = len(quotes)
             summary["raw_data_payloads"] = len(raw_successes)
+            summary["return_rows"] = len(returns)
         LOGGER.info("fetch complete run_id=%s plan_rows=%s", run_id, len(quote_plan))
         print(json.dumps(summary, sort_keys=True))
         return

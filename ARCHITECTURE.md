@@ -129,9 +129,9 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 ## Simple Lake Layout
 
 - **Bronze**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
-- **Silver**: normalized candidates, canonical universe, quotes partitioned by year, and coverage-ready tables.
+- **Silver**: normalized candidates, canonical universe, one quote file per exchange and ISIN, and coverage-ready tables.
 - **Gold**: portfolio-ready returns, correlation, covariance, risk inputs, and later portfolio weights.
-- **Silver metadata**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under the Silver layer.
+- **Silver operational datasets**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under focused Silver directories.
 
 ## Boundaries
 

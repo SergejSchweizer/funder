@@ -26,7 +26,7 @@ class LakePaths:
 
     @property
     def metadata(self) -> Path:
-        return self.silver / "metadata"
+        return self.silver
 
     def bronze_search_run(self, run_date: str) -> Path:
         return self.bronze / "eodhd" / "search" / f"run_date={run_date}"
@@ -47,7 +47,7 @@ class LakePaths:
         return self.silver_search_run(search_run_id) / "canonical_universe_review.csv"
 
     def fetch_plan(self, run_id: str) -> Path:
-        return self.metadata / "fetch_plans" / f"{run_id}.parquet"
+        return self.silver / "plans" / "fetch_plans" / f"{run_id}.parquet"
 
     def bronze_quote_file(self, exchange: str, year: int, isin: str) -> Path:
         return self.bronze / "quotes" / exchange / str(year) / f"{isin}.parquet"
@@ -55,11 +55,11 @@ class LakePaths:
     def bronze_dataset_file(self, dataset: str, exchange: str, year: int, isin: str) -> Path:
         return self.bronze / dataset / exchange / str(year) / f"{isin}.parquet"
 
-    def silver_quotes_year(self, year: int) -> Path:
-        return self.silver / "quotes" / f"year={year}" / "quotes.parquet"
+    def silver_quote_file(self, exchange: str, isin: str) -> Path:
+        return self.silver / "quotes" / exchange / f"{isin}.parquet"
 
     def fetch_runs(self) -> Path:
-        return self.metadata / "fetch_runs.parquet"
+        return self.silver / "runs" / "fetch_runs.parquet"
 
     def coverage(self) -> Path:
         return self.silver / "coverage" / "coverage.parquet"
@@ -68,16 +68,16 @@ class LakePaths:
         return self.silver / "coverage" / "quote_gaps.parquet"
 
     def dry_run_summary(self) -> Path:
-        return self.metadata / "dry_run_summary.json"
+        return self.silver / "runs" / "dry_run_summary.json"
 
-    def gold_returns(self, as_of: str) -> Path:
-        return self.gold / "returns" / f"as_of={as_of}" / "returns.parquet"
+    def gold_returns(self, exchange: str, isin: str) -> Path:
+        return self.gold / "returns" / exchange / f"{isin}.parquet"
 
-    def gold_correlation(self, as_of: str) -> Path:
-        return self.gold / "correlation" / f"as_of={as_of}" / "correlation.parquet"
+    def gold_correlation(self, exchange: str, isin: str) -> Path:
+        return self.gold / "correlation" / exchange / f"{isin}.parquet"
 
-    def gold_covariance(self, as_of: str) -> Path:
-        return self.gold / "covariance" / f"as_of={as_of}" / "covariance.parquet"
+    def gold_covariance(self, exchange: str, isin: str) -> Path:
+        return self.gold / "covariance" / exchange / f"{isin}.parquet"
 
     def current_universe(self) -> Path:
-        return self.metadata / "current_universe.json"
+        return self.silver / "universe" / "current_universe.json"
