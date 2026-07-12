@@ -20,6 +20,9 @@ Risk review rules:
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
+- A PR that has run and passed the full local quality gates counts as approved for merge.
+- The full local quality gates are `uv run founder-quality pr` and `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
+- Branch protection should not require a separate approving review when those full quality gates have passed.
 
 ## R001. Exchange API reliability can silently reduce historical completeness
 

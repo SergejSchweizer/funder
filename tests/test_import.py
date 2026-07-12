@@ -1,4 +1,4 @@
-from funder import __version__
+from founder import __version__
 
 
 def test_package_imports() -> None:

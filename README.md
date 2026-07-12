@@ -1,8 +1,8 @@
-# Funder
+# Founder
 
 Last reviewed: 2026-07-12
 
-Funder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
+Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
 
 The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
 
@@ -21,6 +21,7 @@ The primary data source is the EODHD subscription for EOD Historical Data. Flate
 - The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
 - Portfolio fetches should use one canonical listing per ISIN: prefer `XETRA` when that ISIN is listed there, otherwise select a fallback exchange deterministically.
 - The canonical no-duplicate-ISIN dataset is stored at `docs/eodhd_ucits_etf_canonical_isins.csv`.
+- EODHD HTTP requests are paced by the shared client and retry rate-limit responses with `Retry-After` support.
 
 ## ETF Discovery Statistics
 
@@ -120,17 +121,86 @@ Subject to constraints that will be made explicit before implementation, such as
 - `BACKLOG.md` tracks visible implementation work.
 - `DECISIONS.md` records durable technical decisions.
 - `AGENTS.md` stores generated project-history risk context.
+- `docs/lake_contracts.md` describes the local Bronze, Silver, Gold, and Meta table contracts.
 
-## Developer Quality Gates
+## Local Dry Run
 
-Install dependencies and run the local quality gate with:
+Run the mocked end-to-end pipeline without credentials:
+
+```bash
+uv run founder dry-run --root data/dry-run
+```
+
+The dry run writes search candidates, a canonical universe, fetch plan, quote rows, fundamentals profiles, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
+
+## EODHD Request Safety
+
+Founder spaces EODHD requests by default and retries transient failures so large fetches do not hammer the API. Tune these values in `.env.local` when the subscription limit changes:
+
+```text
+EODHD_TIMEOUT_SECONDS=30
+EODHD_MAX_RETRIES=2
+EODHD_MIN_REQUEST_INTERVAL_SECONDS=0.25
+EODHD_RETRY_BACKOFF_SECONDS=0.5
+```
+
+HTTP `429` responses are retried when retries remain. If EODHD sends `Retry-After`, Founder waits for that duration before retrying; otherwise it uses incremental backoff.
+
+## Quality Gates
+
+Founder uses exactly two quality gate layers.
+
+### PR Gate
+
+Run this before every commit, push, or pull request update:
+
+```bash
+uv run founder-quality pr
+```
+
+The PR gate runs:
+
+```text
+ruff check
+ruff format --check
+mypy
+pytest
+Conventional Commit validation for branch commits
+```
+
+The local pre-commit hook runs this same PR gate.
+
+### Main Gate
+
+Run this immediately before merging to `main`:
+
+```bash
+uv run founder-quality main
+```
+
+The main gate runs the PR gate and then requires a clean tracked working tree.
+For main merges, pytest must report at least 95% coverage:
+
+```text
+pytest --cov=founder --cov-report=term-missing --cov-fail-under=95
+```
+
+Both layers require Conventional Commit subjects for branch commits, using:
+
+```text
+type(optional-scope): subject
+```
+
+Allowed types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`.
+
+The local pre-commit setup also installs a `commit-msg` hook that validates the commit subject before a commit is accepted.
+
+GitHub protects `main` with pull-request review, conversation resolution, linear history, and disabled force pushes/deletions. Because `.github/` is intentionally not tracked, GitHub does not require a workflow status check.
+
+Install dependencies with:
 
 ```bash
 uv sync --dev
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src tests
-uv run pytest
 ```
 
 Install the pre-commit hook with:

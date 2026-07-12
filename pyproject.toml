@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "funder"
+name = "founder"
 version = "0.1.0"
 description = "Minimum-risk ETF portfolio tooling using EODHD EOD data."
 readme = "README.md"
@@ -11,7 +11,8 @@ requires-python = ">=3.14"
 dependencies = []
 
 [project.scripts]
-funder = "funder.cli:main"
+founder = "founder.cli:main"
+founder-quality = "founder.quality:main"
 
 [dependency-groups]
 dev = [
@@ -23,7 +24,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/funder"]
+packages = ["src/founder"]
 
 [tool.ruff]
 line-length = 100

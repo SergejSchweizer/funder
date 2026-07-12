@@ -10,7 +10,7 @@ Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status:
 
 ### PR01. Project Package And Quality Baseline
 
-Git status: merged. PR: https://github.com/SergejSchweizer/funder/pull/1.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/1.
 
 Depends on: initial documentation baseline.
 
@@ -22,7 +22,7 @@ Idempotency: Re-running commands should not create or modify data files.
 
 ### PR02. Shared Configuration, HTTP, And Contract Primitives
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR01.
 
@@ -34,7 +34,7 @@ Idempotency: Repeated client calls with the same mocked responses produce the sa
 
 ### PR03. Simple Bronze/Silver/Gold Lake Layout Contract
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR02.
 
@@ -46,11 +46,11 @@ Idempotency: Path/schema helpers are pure and deterministic.
 
 ### PR04. Search Module: EODHD Query And Raw Candidate Capture
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR03.
 
-Scope: Implement `funder search` to call EODHD search and exchange-symbol endpoints for configured name filters such as `UCITS ETF`; write raw/near-raw search responses under `data/bronze/eodhd/search/run_date=YYYY-MM-DD/`; normalize candidate rows into `data/silver/search/search_run_id=.../candidates.parquet`.
+Scope: Implement `founder search` to call EODHD search and exchange-symbol endpoints for configured name filters such as `UCITS ETF`; write raw/near-raw search responses under `data/bronze/eodhd/search/run_date=YYYY-MM-DD/`; normalize candidate rows into `data/silver/search/search_run_id=.../candidates.parquet`.
 
 Acceptance: Integration-safe tests use recorded or mocked EODHD responses; output includes names, ISINs, code, exchange, type, country, currency, source endpoint, and run id.
 
@@ -58,7 +58,7 @@ Idempotency: Re-running the same search run id overwrites or validates the same 
 
 ### PR05. Search Module: Canonical ISIN Selection Contract
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR04.
 
@@ -70,7 +70,7 @@ Idempotency: Same candidate input always produces byte-for-byte equivalent canon
 
 ### PR06. Search Module: Review Artifacts And Active Universe Pointer
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR05.
 
@@ -82,11 +82,11 @@ Idempotency: Re-approving the same search run leaves the active pointer unchange
 
 ### PR07. Fetch Module: Input Contract Validation And Planning
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR06.
 
-Scope: Implement `funder fetch plan` to read `canonical_universe.parquet`, validate required fields, reject duplicate or empty ISINs, derive EODHD symbols, and produce a fetch plan with per-listing start/end dates.
+Scope: Implement `founder fetch plan` to read `canonical_universe.parquet`, validate required fields, reject duplicate or empty ISINs, derive EODHD symbols, and produce a fetch plan with per-listing start/end dates.
 
 Acceptance: Tests cover valid canonical input, duplicate ISIN rejection, empty code/exchange rejection, and incremental date planning.
 
@@ -94,7 +94,7 @@ Idempotency: Planning reads existing metadata and produces stable plans without 
 
 ### PR08. Fetch Module: EOD Quote Download To Bronze
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR07.
 
@@ -106,7 +106,7 @@ Idempotency: Re-running the same run id does not duplicate quote records and can
 
 ### PR09. Fetch Module: Normalize Quotes To Silver
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR08.
 
@@ -118,7 +118,7 @@ Idempotency: Re-normalizing the same Bronze run is safe and produces no duplicat
 
 ### PR10. Fetch Module: Fundamentals And Identifier Mapping Capture
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR09.
 
@@ -130,7 +130,7 @@ Idempotency: Re-fetching the same run id records one latest payload per listing/
 
 ### PR11. Fetch Module: Coverage, Errors, And Monthly Refresh Behavior
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR10.
 
@@ -142,7 +142,7 @@ Idempotency: A failed run can be resumed; successful reruns update manifests wit
 
 ### PR12. Gold Inputs: Returns, Correlation, And Covariance Baseline
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR11.
 
@@ -154,7 +154,7 @@ Idempotency: Rebuilding the same `as_of` date replaces or validates the same Gol
 
 ### PR13. Finalization: End-To-End Dry Run, Docs, And Release Checklist
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: TBD.
 
 Depends on: PR12.
 
