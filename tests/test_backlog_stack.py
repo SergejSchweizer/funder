@@ -532,6 +532,49 @@ def test_gold_pearson_correlation_uses_incremental_calculation() -> None:
     ] == [pytest.approx(1.0)]
 
 
+def test_gold_covariance_uses_online_calculation() -> None:
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 1e12},
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-11",
+            "return": 1e12 + 1,
+        },
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-12",
+            "return": 1e12 + 2,
+        },
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-10", "return": 2e12},
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-11",
+            "return": 2e12 + 2,
+        },
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-12",
+            "return": 2e12 + 4,
+        },
+    ]
+
+    _, covariances = build_correlation_and_covariance(return_rows)
+
+    assert [
+        row["covariance"]
+        for row in covariances
+        if row["left_isin"] == "IE1" and row["right_isin"] == "IE2"
+    ] == [pytest.approx(2.0)]
+
+
 def test_gold_correlations_use_common_date_intersection_only() -> None:
     return_rows = [
         {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-09", "return": 999.0},
