@@ -103,11 +103,63 @@ def build_correlation_and_covariance(
     return correlations, covariances
 
 
+def _max_drawdown(ordered_quotes: Sequence[Mapping[str, Any]]) -> float:
+    peak: float | None = None
+    max_drawdown = 0.0
+    for row in ordered_quotes:
+        close = float(row["adjusted_close"])
+        peak = close if peak is None else max(peak, close)
+        if peak == 0:
+            continue
+        max_drawdown = min(max_drawdown, (close / peak) - 1.0)
+    return max_drawdown
+
+
+def build_asset_features(
+    quote_rows: Sequence[Mapping[str, Any]], return_rows: Sequence[Mapping[str, Any]]
+) -> list[JsonRow]:
+    quotes_by_listing: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    for row in quote_rows:
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        quotes_by_listing.setdefault(key, []).append(row)
+
+    returns_by_listing: dict[tuple[str, str, str], list[float]] = {}
+    for row in return_rows:
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        returns_by_listing.setdefault(key, []).append(float(row["return"]))
+
+    features: list[JsonRow] = []
+    for (isin, exchange, code), quotes in sorted(quotes_by_listing.items()):
+        ordered_quotes = sorted(quotes, key=lambda row: str(row["date"]))
+        returns = returns_by_listing.get((isin, exchange, code), [])
+        mean_return = sum(returns) / len(returns) if returns else 0.0
+        volatility = sqrt(covariance(returns, returns)) if len(returns) >= 2 else 0.0
+        first_close = float(ordered_quotes[0]["adjusted_close"])
+        last_close = float(ordered_quotes[-1]["adjusted_close"])
+        features.append(
+            {
+                "isin": isin,
+                "exchange": exchange,
+                "code": code,
+                "first_quote_date": str(ordered_quotes[0]["date"]),
+                "last_quote_date": str(ordered_quotes[-1]["date"]),
+                "quote_observation_count": len(ordered_quotes),
+                "return_observation_count": len(returns),
+                "total_return": 0.0 if first_close == 0 else (last_close / first_close) - 1.0,
+                "mean_return": mean_return,
+                "volatility": volatility,
+                "max_drawdown": _max_drawdown(ordered_quotes),
+            }
+        )
+    return features
+
+
 def write_gold_inputs(
     paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]]
-) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow]]:
+) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow], list[JsonRow]]:
     returns = build_returns(quote_rows)
     correlations, covariances = build_correlation_and_covariance(returns)
+    features = build_asset_features(quote_rows, returns)
 
     returns_by_listing: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     for row in returns:
@@ -133,4 +185,6 @@ def write_gold_inputs(
                 if str(item["left_exchange"]) == exchange and str(item["left_isin"]) == isin
             ],
         )
-    return returns, correlations, covariances
+    for row in features:
+        write_rows(paths.gold_asset_features(str(row["exchange"]), str(row["isin"])), [row])
+    return returns, correlations, covariances, features

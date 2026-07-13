@@ -104,7 +104,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
-`founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, and covariance rows from validated Silver quote history.
+`founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, covariance rows, and per-asset feature rows from validated Silver quote history.
 
 `founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold risk inputs and writes Gold metrics such as aligned return matrices, asset metrics, drawdowns, efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
 
@@ -125,7 +125,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Discovery**: EODHD search and exchange symbol-list enumeration identify ETF and fund universes by ticker, name, ISIN, exchange, and type.
 - **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
-- **Gold**: Portfolio-ready return, covariance, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
+- **Gold**: Portfolio-ready return, covariance, correlation, asset-feature, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
 - **Evaluation**: Portfolio metrics, drawdowns, efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis consume Gold inputs and stay separate from market-data ingestion.
 - **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.

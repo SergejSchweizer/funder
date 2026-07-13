@@ -79,5 +79,8 @@ class LakePaths:
     def gold_covariance(self, exchange: str, isin: str) -> Path:
         return self.gold / "covariance" / exchange / f"{isin}.parquet"
 
+    def gold_asset_features(self, exchange: str, isin: str) -> Path:
+        return self.gold / "features" / exchange / f"{isin}.parquet"
+
     def current_universe(self) -> Path:
         return self.silver / "universe" / "current_universe.json"

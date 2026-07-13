@@ -17,7 +17,7 @@ Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search
 
 - Bronze stores raw or near-raw EODHD search, quote, dividends, and splits payloads.
 - Silver stores normalized search candidates, canonical universe rows, and quote rows with one file per exchange and ISIN.
-- Gold stores adjusted-close returns, correlation, covariance, portfolio evaluation, and target-weight rows.
+- Gold stores adjusted-close returns, correlation, covariance, asset features, portfolio evaluation, and target-weight rows.
 - Silver also stores operational datasets for active universe pointers, bronze plans, bronze runs, coverage, errors, and dry-run summaries.
 
 Bronze quote rows are partitioned by exchange and quote year, with one file per ISIN:
@@ -33,6 +33,7 @@ silver/quotes/{exchange}/{ISIN}.parquet
 gold/returns/{exchange}/{ISIN}.parquet
 gold/correlation/{exchange}/{ISIN}.parquet
 gold/covariance/{exchange}/{ISIN}.parquet
+gold/features/{exchange}/{ISIN}.parquet
 ```
 
 Runtime logs are intentionally outside the lake under `.logs/`. They are operational diagnostics, not dataset artifacts.
@@ -59,6 +60,7 @@ silver/coverage/quote_gaps.parquet
 - `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Bronze downloads historical gaps first, then the tail to the selected run date.
 - `errors`: non-secret bronze error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions.
+- `features`: per-listing Gold asset feature rows with first and last quote dates, quote and return observation counts, total return, mean return, volatility, and maximum drawdown.
 
 Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Bronze applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
 

@@ -12,7 +12,7 @@ Last reviewed: 2026-07-13
 - [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
 - [Run Search And Bronze](#run-search-and-bronze)
-- [Scheduled Refresh Cron](#scheduled-refresh-cron)
+- [Scheduled Founder Cron](#scheduled-founder-cron)
 - [Local Dry Run](#local-dry-run)
 - [EODHD Request Safety](#eodhd-request-safety)
 - [Logging And Debugging](#logging-and-debugging)
@@ -226,9 +226,9 @@ Pass `--start-date` and/or `--end-date` only when you want to restrict the live 
 
 For full input format details and Python usage examples, see [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md#how-to-run-both-modules).
 
-## Scheduled Refresh Cron
+## Scheduled Founder Cron
 
-The `vcs` user crontab runs the full lake refresh every day at 18:00 local server time. Keep the job readable by defining absolute paths once and using `flock` so a slow previous refresh prevents overlap:
+The `vcs` user crontab runs Founder lake jobs every day at 18:00, 19:00, and 20:00 local server time. Keep the jobs readable by defining absolute paths once and using `flock` so slow previous runs prevent overlap:
 
 ```cron
 SHELL=/bin/bash
@@ -236,13 +236,25 @@ FOUNDER_PROJECT=/home/vcs/git/founder
 FOUNDER_UV=/home/vcs/.local/bin/uv
 FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
 FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
+FOUNDER_SILVER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-silver.lock
+FOUNDER_SILVER_LOG=/home/vcs/git/founder/.logs/cron-silver.log
+FOUNDER_GOLD_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-gold.lock
+FOUNDER_GOLD_LOG=/home/vcs/git/founder/.logs/cron-gold.log
 
 # Daily lake refresh at 18:00 local server time.
 # Runs Bronze -> Silver -> Gold and skips the run if a previous refresh is still active.
 0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+
+# Daily Silver rebuild at 19:00 local server time.
+# Rebuilds clean Silver quote tables from Bronze artifacts and skips overlapping Silver runs.
+0 19 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_SILVER_LOCK" "$FOUNDER_UV" run founder silver --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_SILVER_LOG" 2>&1
+
+# Daily Gold rebuild at 20:00 local server time.
+# Rebuilds portfolio-ready returns, risk matrices, and asset features from Silver tables.
+0 20 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_GOLD_LOCK" "$FOUNDER_UV" run founder gold --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_GOLD_LOG" 2>&1
 ```
 
-Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
+Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`, `.logs/cron-silver.log`, and `.logs/cron-gold.log`.
 
 ## Local Dry Run
 
@@ -252,7 +264,7 @@ Run the mocked end-to-end pipeline without credentials:
 uv run founder dry-run --root lake
 ```
 
-The dry run writes search candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
+The dry run writes search candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance/feature inputs under the selected local lake root.
 
 ## EODHD Request Safety
 
