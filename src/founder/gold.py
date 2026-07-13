@@ -160,8 +160,7 @@ def _correlation_value(
     left_values: Sequence[float], right_values: Sequence[float], metric: str
 ) -> float:
     if metric == "spearman":
-        left_values = _midranks(left_values)
-        right_values = _midranks(right_values)
+        return _approximate_online_spearman(left_values, right_values)
     return _incremental_pearson(left_values, right_values)
 
 
@@ -185,19 +184,64 @@ def _incremental_pearson(left_values: Sequence[float], right_values: Sequence[fl
     return 0.0 if denominator == 0 else comoment / denominator
 
 
-def _midranks(values: Sequence[float]) -> list[float]:
-    ranks = [0.0] * len(values)
-    ordered = sorted(enumerate(values), key=lambda item: (item[1], item[0]))
-    index = 0
-    while index < len(ordered):
-        end = index + 1
-        while end < len(ordered) and ordered[end][1] == ordered[index][1]:
-            end += 1
-        rank = ((index + 1) + end) / 2
-        for original_index, _ in ordered[index:end]:
-            ranks[original_index] = rank
-        index = end
-    return ranks
+def _approximate_online_spearman(
+    left_values: Sequence[float], right_values: Sequence[float]
+) -> float:
+    if len(left_values) < 2 or len(left_values) != len(right_values):
+        return 0.0
+    left_state = _OnlineMoments()
+    right_state = _OnlineMoments()
+    correlation = _OnlineCorrelation()
+    for left, right in zip(left_values, right_values, strict=True):
+        correlation.update(left_state.score(left), right_state.score(right))
+        left_state.update(left)
+        right_state.update(right)
+    return correlation.value()
+
+
+@dataclass
+class _OnlineMoments:
+    count: int = 0
+    mean: float = 0.0
+    m2: float = 0.0
+
+    def score(self, value: float) -> float:
+        if self.count < 2 or self.m2 == 0:
+            return 0.0
+        variance = self.m2 / (self.count - 1)
+        return 0.0 if variance <= 0 else (value - self.mean) / sqrt(variance)
+
+    def update(self, value: float) -> None:
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        self.m2 += delta * (value - self.mean)
+
+
+@dataclass
+class _OnlineCorrelation:
+    count: int = 0
+    left_mean: float = 0.0
+    right_mean: float = 0.0
+    left_m2: float = 0.0
+    right_m2: float = 0.0
+    comoment: float = 0.0
+
+    def update(self, left: float, right: float) -> None:
+        self.count += 1
+        left_delta = left - self.left_mean
+        right_delta = right - self.right_mean
+        self.left_mean += left_delta / self.count
+        self.right_mean += right_delta / self.count
+        self.comoment += left_delta * (right - self.right_mean)
+        self.left_m2 += left_delta * (left - self.left_mean)
+        self.right_m2 += right_delta * (right - self.right_mean)
+
+    def value(self) -> float:
+        if self.count < 2:
+            return 0.0
+        denominator = sqrt(self.left_m2 * self.right_m2)
+        return 0.0 if denominator == 0 else self.comoment / denominator
 
 
 def _limit_top_correlation_edges(

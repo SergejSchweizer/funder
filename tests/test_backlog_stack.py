@@ -542,6 +542,36 @@ def test_gold_correlation_edges_support_spearman_metric(tmp_path) -> None:  # ty
     assert read_rows(paths.gold_correlation_edges("snapshot-1", "spearman", 0)) == spearman
 
 
+def test_gold_spearman_correlation_uses_online_approximation() -> None:
+    return_rows = []
+    for index, (left_return, right_return) in enumerate(
+        zip([1.0, 2.0, 3.0, 4.0, 100.0], [1.0, 4.0, 9.0, 16.0, 25.0], strict=True),
+        start=1,
+    ):
+        return_rows.extend(
+            [
+                {
+                    "isin": "IE1",
+                    "exchange": "XETRA",
+                    "code": "AAA",
+                    "date": f"2026-07-{index:02d}",
+                    "return": left_return,
+                },
+                {
+                    "isin": "IE2",
+                    "exchange": "AS",
+                    "code": "BBB",
+                    "date": f"2026-07-{index:02d}",
+                    "return": right_return,
+                },
+            ]
+        )
+
+    spearman = build_correlation_edges(return_rows, version="snapshot-1", metric="spearman")
+
+    assert spearman[0]["value"] == pytest.approx(0.3722369419746893)
+
+
 def test_silver_writes_are_parallelized_by_listing(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     rows = [
