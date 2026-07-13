@@ -5,8 +5,8 @@ Last reviewed: 2026-07-13
 ## Table Of Contents
 
 - [How To Use This Backlog](#how-to-use-this-backlog)
-- [Search And Fetch Module PR Stack](#search-and-fetch-module-pr-stack)
-- [Fetch Process Refactor PR Queue](#fetch-process-refactor-pr-queue)
+- [Search And Bronze Module PR Stack](#search-and-bronze-module-pr-stack)
+- [Bronze Process Refactor PR Queue](#bronze-process-refactor-pr-queue)
 - [Portfolio Evaluation And Optimization PR Stack](#portfolio-evaluation-and-optimization-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
@@ -19,7 +19,7 @@ Every PR-sized backlog item must include `Git status` and `PR`. Use `Git status:
 
 Read this after the architecture and workflow docs when you need implementation status. This file should not explain module behavior in depth; it records scope, dependencies, acceptance criteria, idempotency expectations, Git status, and PR links for trackable work.
 
-## Search And Fetch Module PR Stack
+## Search And Bronze Module PR Stack
 
 ### PR01. Project Package And Quality Baseline
 
@@ -39,7 +39,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR01.
 
-Scope: Add shared config loading from environment, an EODHD HTTP client with timeout/retry/rate-limit handling, typed contract models for search candidates, canonical universe rows, fetch runs, errors, and lake paths.
+Scope: Add shared config loading from environment, an EODHD HTTP client with timeout/retry/rate-limit handling, typed contract models for search candidates, canonical universe rows, bronze runs, errors, and lake paths.
 
 Acceptance: Unit tests cover missing token handling, URL construction without token logging, contract validation, and deterministic lake path construction.
 
@@ -51,7 +51,7 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR02.
 
-Scope: Define the simple medallion lake layout: `lake/bronze`, `lake/silver`, and `lake/gold`; add schema docs for search outputs, canonical universe, quotes, coverage, and fetch manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
+Scope: Define the simple medallion lake layout: `lake/bronze`, `lake/silver`, and `lake/gold`; add schema docs for search outputs, canonical universe, quotes, coverage, and bronze manifests; update `.gitignore` so local lake data and DuckDB cache files stay out of Git.
 
 Acceptance: Tests verify all lake paths and schemas; docs describe which module writes or reads each table.
 
@@ -75,9 +75,9 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR04.
 
-Scope: Implement one-row-per-ISIN canonical selection from candidates, prefer `XETRA`, then deterministic fallback exchange ordering; exclude missing-ISIN rows from fetch input; write `canonical_universe.parquet` and `search_summary.json`.
+Scope: Implement one-row-per-ISIN canonical selection from candidates, prefer `XETRA`, then deterministic fallback exchange ordering; exclude missing-ISIN rows from bronze input; write `canonical_universe.parquet` and `search_summary.json`.
 
-Acceptance: Tests prove no duplicate ISINs, XETRA is always selected when available, fallback selection is stable, and missing ISIN rows are reported but not selected for fetch.
+Acceptance: Tests prove no duplicate ISINs, XETRA is always selected when available, fallback selection is stable, and missing ISIN rows are reported but not selected for bronze.
 
 Idempotency: Same candidate input always produces byte-for-byte equivalent canonical content apart from allowed metadata timestamps.
 
@@ -89,29 +89,29 @@ Depends on: PR05.
 
 Scope: Add human-readable CSV export for review, update `lake/silver/universe/current_universe.json` to point at an approved canonical universe, and document the approval workflow.
 
-Acceptance: Fetch can resolve the active universe path from metadata; docs explain how to approve a new search result without editing code.
+Acceptance: Bronze can resolve the active universe path from metadata; docs explain how to approve a new search result without editing code.
 
 Idempotency: Re-approving the same search run leaves the active pointer unchanged.
 
-### PR07. Fetch Module: Input Contract Validation And Planning
+### PR07. Bronze Module: Input Contract Validation And Planning
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR06.
 
-Scope: Implement `founder fetch plan` to read `canonical_universe.parquet`, validate required fields, reject duplicate or empty ISINs, derive EODHD symbols, and produce a fetch plan with per-listing start/end dates.
+Scope: Implement `founder bronze plan` to read `canonical_universe.parquet`, validate required fields, reject duplicate or empty ISINs, derive EODHD symbols, and produce a bronze plan with per-listing start/end dates.
 
 Acceptance: Tests cover valid canonical input, duplicate ISIN rejection, empty code/exchange rejection, and gap-aware date planning.
 
 Idempotency: Planning reads existing metadata and produces stable plans without calling EODHD or writing quote data.
 
-### PR08. Fetch Module: EOD Quote Download To Bronze
+### PR08. Bronze Module: EOD Quote Download To Bronze
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR07.
 
-Scope: Implement quote fetching for planned canonical listings; write raw EOD quote responses under `lake/bronze/quotes/{exchange}/{year}/{ISIN}.parquet`; capture per-symbol successes, failures, retry status, and API call metadata.
+Scope: Implement quote loading for planned canonical listings; write raw EOD quote responses under `lake/bronze/quotes/{exchange}/{year}/{ISIN}.parquet`; capture per-symbol successes, failures, retry status, and API call metadata.
 
 Acceptance: Tests use mocked EODHD responses; failures are recorded without stopping the whole batch unless configured; token never appears in logs or files.
 
@@ -123,33 +123,33 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR08.
 
-Scope: Build Silver quote responses from Bronze quote rows into `lake/silver/quotes/{exchange}/{ISIN}.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and fetched time.
+Scope: Build Silver quote responses from Bronze quote rows into `lake/silver/quotes/{exchange}/{ISIN}.parquet` with columns for ISIN, code, exchange, date, OHLC, adjusted close, volume, currency, run id, and bronzed time.
 
 Acceptance: Tests verify schema, date parsing, numeric types, duplicate prevention by `(isin, exchange, code, date)`, and per-ISIN Silver quote files.
 
 Idempotency: Re-running the same Silver quote build for a Bronze run is safe and produces no duplicate Silver quote rows.
 
-### PR10. Fetch Module: Identifier Mapping Capture
+### PR10. Bronze Module: Identifier Mapping Capture
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR09.
 
-Scope: Fetch ID mapping for canonical listings; archive complete raw payloads under Bronze; extract minimal Silver identifier tables needed for filtering/reporting.
+Scope: Bronze ID mapping for canonical listings; archive complete raw payloads under Bronze; extract minimal Silver identifier tables needed for filtering/reporting.
 
 Acceptance: Tests cover missing mappings, nested payload preservation, selected field extraction, and schema stability.
 
-Idempotency: Re-fetching the same run id records one latest payload per listing/run and preserves prior runs.
+Idempotency: Re-loading the same run id records one latest payload per listing/run and preserves prior runs.
 
-### PR11. Fetch Module: Coverage, Errors, And Monthly Refresh Behavior
+### PR11. Bronze Module: Coverage, Errors, And Monthly Refresh Behavior
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR10.
 
-Scope: Add `lake/silver/runs/fetch_runs.parquet` and `lake/silver/coverage/coverage.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next gap-aware fetch start with a small overlap window. Fetch failures are written to log files instead of lake Parquet tables.
+Scope: Add `lake/silver/runs/bronze_runs.parquet` and `lake/silver/coverage/coverage.parquet`; compute first/last quote dates, observed rows, missing periods, failed symbols, and next gap-aware bronze start with a small overlap window. Bronze failures are written to log files instead of lake Parquet tables.
 
-Acceptance: Tests cover first full fetch, gap-aware refresh fetches, overlap deduplication, partial failures, and coverage report generation.
+Acceptance: Tests cover first full bronze, gap-aware refresh loads, overlap deduplication, partial failures, and coverage report generation.
 
 Idempotency: A failed run can be resumed; successful reruns update manifests without duplicating quotes.
 
@@ -171,25 +171,25 @@ Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/3.
 
 Depends on: PR12.
 
-Scope: Add an end-to-end dry-run command that executes search, canonical selection, fetch planning, mocked fetch, Silver quote building, coverage reporting, and Gold input generation; update README, ARCHITECTURE, RISKS, DECISIONS, and BACKLOG with final commands and known limitations.
+Scope: Add an end-to-end dry-run command that executes search, canonical selection, bronze planning, mocked bronze, Silver quote building, coverage reporting, and Gold input generation; update README, ARCHITECTURE, RISKS, DECISIONS, and BACKLOG with final commands and known limitations.
 
 Acceptance: One command validates the full mocked pipeline from search contract to Gold risk inputs; all repository tracking docs are current; backlog statuses and PR links are filled for completed stack items.
 
 Idempotency: The final dry run is safe to execute repeatedly in a clean workspace and produces deterministic sample outputs.
 
-## Fetch Process Refactor PR Queue
+## Bronze Process Refactor PR Queue
 
-### PR14. Fetch Process: Cron-Safe Bronze Ingestion And Medallion Builds
+### PR14. Bronze Process: Cron-Safe Bronze Ingestion And Medallion Builds
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/13.
 
 Depends on: PR13.
 
-Scope: Refactor the full fetch process as one coherent change. Make `founder.fetch` responsible for EODHD ingestion to Bronze plus Silver operational fetch-plan, fetch-run, coverage, and gap metadata only; add bounded parallel EODHD fetching with default concurrency `2`; preserve shared request pacing and `Retry-After` handling; make Fetch safe for cron execution with stable run ids, resumable runs, and no overlapping writes; remove direct analytical Silver quote and Gold risk-output writes from fetch-owned code paths; add `founder.silver` for Bronze-to-Silver quote builds; add `founder gold` for Silver-to-Gold returns, correlation, and covariance builds; and add a convenience orchestration command such as `founder refresh` for running Fetch, Silver, and Gold in order.
+Scope: Refactor the full bronze process as one coherent change. Make `founder.bronze` responsible for EODHD ingestion to Bronze plus Silver operational bronze-plan, bronze-run, coverage, and gap metadata only; add bounded parallel EODHD loading with default concurrency `2`; preserve shared request pacing and `Retry-After` handling; make Bronze safe for cron execution with stable run ids, resumable runs, and no overlapping writes; remove direct analytical Silver quote and Gold risk-output writes from bronze-owned code paths; add `founder.silver` for Bronze-to-Silver quote builds; add `founder gold` for Silver-to-Gold returns, correlation, and covariance builds; and add a convenience orchestration command such as `founder refresh` for running Bronze, Silver, and Gold in order.
 
-Acceptance: Tests prove `founder fetch` writes Bronze and Silver operational datasets, does not write `lake/silver/quotes`, does not write `lake/gold`, preserves gap-aware planning, honors default concurrency `2`, accepts an explicit concurrency override, keeps token-safe retry/rate-limit behavior, prevents or reports overlapping cron runs for the same root/run id, and logs per-symbol failures without stopping the whole batch. Tests also prove `founder silver` rebuilds Silver quotes from Bronze without API calls, `founder gold` rebuilds Gold risk inputs from Silver without API calls, and `founder refresh` produces the same mocked final lake outputs as running the three phases manually.
+Acceptance: Tests prove `founder bronze` writes Bronze and Silver operational datasets, does not write `lake/silver/quotes`, does not write `lake/gold`, preserves gap-aware planning, honors default concurrency `2`, accepts an explicit concurrency override, keeps token-safe retry/rate-limit behavior, prevents or reports overlapping cron runs for the same root/run id, and logs per-symbol failures without stopping the whole batch. Tests also prove `founder silver` rebuilds Silver quotes from Bronze without API calls, `founder gold` rebuilds Gold risk inputs from Silver without API calls, and `founder refresh` produces the same mocked final lake outputs as running the three phases manually.
 
-Idempotency: Re-running the same cron fetch run id updates or validates Bronze and operational metadata without duplicating provider rows, losing partial progress, overlapping active writes, or touching analytical Silver and Gold outputs. Re-running Silver and Gold builds from unchanged inputs produces the same outputs without duplicate rows; re-running refresh with unchanged mocked inputs produces the same Bronze, Silver, Gold, and operational metadata outputs.
+Idempotency: Re-running the same cron bronze run id updates or validates Bronze and operational metadata without duplicating provider rows, losing partial progress, overlapping active writes, or touching analytical Silver and Gold outputs. Re-running Silver and Gold builds from unchanged inputs produces the same outputs without duplicate rows; re-running refresh with unchanged mocked inputs produces the same Bronze, Silver, Gold, and operational metadata outputs.
 
 ## Portfolio Evaluation And Optimization PR Stack
 
@@ -203,9 +203,9 @@ Priority: P0 foundation.
 
 Depends on: PR14.
 
-Scope: Add deterministic Gold path helpers, schema contracts, and documentation for independent portfolio evaluation outputs: aligned return matrices, asset metrics, portfolio returns, drawdowns, portfolio metrics, efficient-frontier points, frontier weights, and optimized weights. Keep the module independent of Search and Fetch.
+Scope: Add deterministic Gold path helpers, schema contracts, and documentation for independent portfolio evaluation outputs: aligned return matrices, asset metrics, portfolio returns, drawdowns, portfolio metrics, efficient-frontier points, frontier weights, and optimized weights. Keep the module independent of Search and Bronze.
 
-Acceptance: Tests verify every new Gold path and schema; docs state that evaluation reads existing Gold returns and writes only Gold datasets; no EODHD token, Search run, or Fetch run is required.
+Acceptance: Tests verify every new Gold path and schema; docs state that evaluation reads existing Gold returns and writes only Gold datasets; no EODHD token, Search run, or Bronze run is required.
 
 Idempotency: Path and schema helpers are pure and deterministic; adding contracts does not create or mutate lake data.
 
@@ -249,7 +249,7 @@ Scope: Extend `founder.portfolio` from constraint validation into deterministic 
 
 Acceptance: Tests cover objective selection, covariance-matrix use, expected-return vector use, full-investment constraints, long-only constraints, allocation caps, risk-free-rate handling, infeasible constraints, deterministic tie-breaking, and Gold target-weight output rows with objective metadata.
 
-Idempotency: Re-running the same optimization id with unchanged evaluation inputs and constraints produces the same target-weight rows and does not modify Search, Fetch, Bronze, or Silver data.
+Idempotency: Re-running the same optimization id with unchanged evaluation inputs and constraints produces the same target-weight rows and does not modify Search, Bronze, Bronze, or Silver data.
 
 ### PR19. Portfolio Module: Risk Parity And Equal Risk Contribution
 

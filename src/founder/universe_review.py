@@ -32,7 +32,7 @@ def survivorship_bias_warnings(candidates: Sequence[Mapping[str, Any]]) -> list[
             "Universe contains only active instruments; document survivorship-bias limits."
         )
     if missing_isin_rows(candidates):
-        warnings.append("Rows without ISIN are excluded from fetch inputs and require review.")
+        warnings.append("Rows without ISIN are excluded from bronze inputs and require review.")
     return warnings
 
 

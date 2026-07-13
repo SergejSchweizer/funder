@@ -12,7 +12,7 @@ Last reviewed: 2026-07-13
 - [R005. Documentation Snapshots Can Become Stale Relative to the Lake](#r005-documentation-snapshots-can-become-stale-relative-to-the-lake)
 - [R006. ETF Universe Discovery Can Be Incomplete or Duplicated](#r006-etf-universe-discovery-can-be-incomplete-or-duplicated)
 - [R007. Risk-Aware Weights Can Be Misleading Without Clean Inputs And Evaluation](#r007-risk-aware-weights-can-be-misleading-without-clean-inputs-and-evaluation)
-- [R008. Search And Fetch Contract Drift Can Corrupt The Lake](#r008-search-and-fetch-contract-drift-can-corrupt-the-lake)
+- [R008. Search And Bronze Contract Drift Can Corrupt The Lake](#r008-search-and-bronze-contract-drift-can-corrupt-the-lake)
 - [Update Rules](#update-rules)
 
 This file tracks active operational, data correctness, and architecture risks. Keep it aligned with `AGENTS.md` and project history when commits introduce or retire meaningful risks.
@@ -27,7 +27,7 @@ Status: Active
 
 Signal: External API route errors, retry behavior, rate limits, and long-running trade backfills appear repeatedly in project history.
 
-Mitigation: Keep debug logs, checkpoint keys, deterministic windows, bounded fetch concurrency, request pacing, `Retry-After` aware retries, cron no-overlap behavior, and completeness reports aligned before changing fetch execution.
+Mitigation: Keep debug logs, checkpoint keys, deterministic windows, bounded bronze concurrency, request pacing, `Retry-After` aware retries, cron no-overlap behavior, and completeness reports aligned before changing bronze execution.
 
 ## R002. Dataset Naming Drift Can Break Bronze, Silver, and Gold Joins
 
@@ -77,13 +77,13 @@ Signal: The project goal depends on covariance, drawdown, tail-risk, and backtes
 
 Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, drawdowns, CVaR, walk-forward behavior, rebalancing turnover, transaction-cost assumptions, explicit optimization constraints, and Flatex export assumptions before publishing portfolio weights.
 
-## R008. Search And Fetch Contract Drift Can Corrupt The Lake
+## R008. Search And Bronze Contract Drift Can Corrupt The Lake
 
 Status: Active
 
-Signal: The Search module selects the canonical universe, while the Fetch module will store full data for every selected ISIN.
+Signal: The Search module selects the canonical universe, while the Bronze module will store full data for every selected ISIN.
 
-Mitigation: Keep the module boundary contract versioned and tested. Fetch must reject duplicate ISINs, missing ISINs, missing symbols, and schema mismatches before writing lake data.
+Mitigation: Keep the module boundary contract versioned and tested. Bronze must reject duplicate ISINs, missing ISINs, missing symbols, and schema mismatches before writing lake data.
 
 ## Update Rules
 

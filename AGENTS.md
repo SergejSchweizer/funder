@@ -48,7 +48,7 @@ Status: Active
 
 Signal: Deribit route errors, retry behavior, and long-running trade backfills appear repeatedly in the history.
 
-Mitigation: Keep debug logs, checkpoint keys, deterministic windows, and completeness reports aligned before changing fetch execution.
+Mitigation: Keep debug logs, checkpoint keys, deterministic windows, and completeness reports aligned before changing bronze execution.
 
 Evidence:
 
@@ -56,8 +56,8 @@ Evidence:
 - 2026-07-04 `ca0e922` Rename option trades dataset to options_trades
 - 2026-07-04 `11da15c` Rename options trades and perps OHLCV datasets
 - 2026-07-03 `4393c40` Rename perpetual trades dataset
-- 2026-07-01 `f55d766` [codex] Extract OHLCV symbol fetch planning (#46)
-- 2026-06-29 `7232cc4` Extract fetch head gap planning (#42)
+- 2026-07-01 `f55d766` [codex] Extract OHLCV symbol bronze planning (#46)
+- 2026-06-29 `7232cc4` Extract bronze head gap planning (#42)
 
 ## R002. Dataset naming drift can break Bronze, Silver, and Gold joins
 
@@ -88,7 +88,7 @@ Evidence:
 
 - 2026-07-04 `ba93394` Add architecture documentation
 - 2026-07-01 `4e203fb` [codex] Complete Bronze refactor stack (#51)
-- 2026-07-01 `f55d766` [codex] Extract OHLCV symbol fetch planning (#46)
+- 2026-07-01 `f55d766` [codex] Extract OHLCV symbol bronze planning (#46)
 - 2026-07-01 `a2287a1` Align architecture and coverage refactor gates
 - 2026-07-01 `a674417` Consolidate refactor boundary work
 - 2026-06-29 `febd87e` Extract silver volatility transformation (#45)

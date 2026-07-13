@@ -1,7 +1,7 @@
 """Search normalization, canonical selection, and universe approval.
 
 The Search module turns broad EODHD discovery payloads into a stable universe
-contract for Fetch. It does not download quote history. Its
+contract for Bronze. It does not download quote history. Its
 output is a versioned `canonical_universe` table with one selected listing per
 non-empty ISIN, plus review artifacts that make missing identifiers visible.
 """
@@ -108,12 +108,12 @@ def write_search_run(
 
 
 def select_canonical(candidates: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
-    """Select one fetchable listing per ISIN.
+    """Select one bronze-ready listing per ISIN.
 
-    Rows without an ISIN are excluded because Fetch requires stable identifiers.
+    Rows without an ISIN are excluded because Bronze requires stable identifiers.
     For duplicate listings, XETRA wins when present; otherwise sorting by
     exchange and code gives a deterministic fallback. Returned rows are sorted by
-    ISIN and marked `selected_for_fetch=true`.
+    ISIN and marked `selected_for_bronze=true`.
     """
     grouped: dict[str, list[Mapping[str, Any]]] = {}
     missing_isin = 0
@@ -152,7 +152,7 @@ def select_canonical(candidates: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
                 "name": str(chosen.get("name", "")),
                 "normalized_name": str(chosen.get("normalized_name", "")),
                 "selection_reason": reason,
-                "selected_for_fetch": True,
+                "selected_for_bronze": True,
             }
         )
     if missing_isin:
@@ -168,7 +168,7 @@ def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonR
 
     This reads normalized candidates, writes the canonical table, writes a small
     summary with missing-ISIN counts, and exports a CSV for human review before
-    Fetch consumes the universe.
+    Bronze consumes the universe.
     """
     candidates = read_rows(paths.candidates(search_run_id))
     canonical = select_canonical(candidates)
@@ -194,10 +194,10 @@ def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonR
 def approve_universe(
     paths: LakePaths, search_run_id: str, *, approved_at: datetime | None = None
 ) -> JsonRow:
-    """Mark a canonical universe as the active Fetch input.
+    """Mark a canonical universe as the active Bronze input.
 
     Approval writes `current_universe.json` in lake metadata with the selected Search run
-    id and canonical-universe path. Fetch can resolve this pointer without
+    id and canonical-universe path. Bronze can resolve this pointer without
     knowing how Search produced the universe.
     """
     pointer = {
