@@ -2,6 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True)
+class DatasetContract:
+    name: str
+    version: int
+    owner: str
+    required_fields: tuple[str, ...]
+    optional_fields: tuple[str, ...] = ()
+    sort_key: tuple[str, ...] = ()
+
+
 SCHEMAS: dict[str, tuple[str, ...]] = {
     "search_candidates": (
         "search_run_id",
@@ -98,6 +113,20 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "input_snapshot_date",
         "input_listing_count",
         "completed_at",
+    ),
+    "job_manifests": (
+        "job_id",
+        "job_type",
+        "run_id",
+        "status",
+        "started_at",
+        "finished_at",
+        "input_paths",
+        "output_paths",
+        "row_counts",
+        "concurrency",
+        "resume_marker",
+        "error_summary",
     ),
     "return_matrix": (
         "evaluation_id",
@@ -248,15 +277,104 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+DATASET_OWNERS: dict[str, str] = {
+    "search_candidates": "search",
+    "canonical_universe": "search",
+    "bronze_plan": "bronze",
+    "quotes": "silver",
+    "coverage": "bronze",
+    "quote_gaps": "bronze",
+    "errors": "bronze",
+    "returns": "gold",
+    "correlation": "gold",
+    "covariance": "gold",
+    "gold_runs": "gold",
+    "job_manifests": "operations",
+    "return_matrix": "evaluation",
+    "asset_metrics": "evaluation",
+    "portfolio_returns": "evaluation",
+    "drawdowns": "evaluation",
+    "portfolio_metrics": "evaluation",
+    "frontier_points": "evaluation",
+    "frontier_weights": "evaluation",
+    "backtests": "evaluation",
+    "backtest_weights": "evaluation",
+    "rebalance_events": "evaluation",
+    "tail_risk": "evaluation",
+    "optimized_weights": "portfolio",
+    "hrp_clusters": "portfolio",
+    "diversification_metrics": "portfolio",
+}
+
+DATASET_SORT_KEYS: dict[str, tuple[str, ...]] = {
+    "search_candidates": ("search_run_id", "isin", "exchange", "code"),
+    "canonical_universe": ("isin",),
+    "bronze_plan": ("run_id", "isin", "exchange", "code"),
+    "quotes": ("isin", "exchange", "code", "date"),
+    "coverage": ("isin", "exchange", "code"),
+    "quote_gaps": ("isin", "gap_start", "gap_end"),
+    "returns": ("isin", "exchange", "code", "date"),
+    "correlation": ("left_isin", "left_exchange", "left_code", "right_isin"),
+    "covariance": ("left_isin", "left_exchange", "left_code", "right_isin"),
+    "gold_runs": ("isin", "exchange", "code"),
+    "job_manifests": ("job_type", "run_id"),
+    "return_matrix": ("evaluation_id", "date", "isin"),
+    "asset_metrics": ("evaluation_id", "isin"),
+    "portfolio_returns": ("evaluation_id", "portfolio_id", "date"),
+    "drawdowns": ("evaluation_id", "portfolio_id", "date"),
+    "portfolio_metrics": ("evaluation_id", "portfolio_id"),
+    "frontier_points": ("evaluation_id", "frontier_point_id"),
+    "frontier_weights": ("evaluation_id", "frontier_point_id", "isin"),
+    "backtests": ("run_id", "split_id"),
+    "backtest_weights": ("run_id", "split_id", "isin"),
+    "rebalance_events": ("run_id", "date"),
+    "tail_risk": ("run_id", "portfolio_id"),
+    "optimized_weights": ("evaluation_id", "objective", "portfolio_id", "isin"),
+    "hrp_clusters": ("evaluation_id", "portfolio_id", "cluster_id"),
+    "diversification_metrics": ("evaluation_id", "portfolio_id"),
+}
+
+
+def _build_dataset_contracts() -> dict[str, DatasetContract]:
+    contracts: dict[str, DatasetContract] = {}
+    for name, fields in SCHEMAS.items():
+        if len(set(fields)) != len(fields):
+            raise ValueError(f"duplicate fields in schema: {name}")
+        if name in contracts:
+            raise ValueError(f"duplicate dataset contract: {name}")
+        contracts[name] = DatasetContract(
+            name=name,
+            version=1,
+            owner=DATASET_OWNERS.get(name, "unknown"),
+            required_fields=fields,
+            sort_key=DATASET_SORT_KEYS.get(name, ()),
+        )
+    return contracts
+
+
+DATASET_CONTRACTS: dict[str, DatasetContract] = _build_dataset_contracts()
+
 
 def required_fields(table_name: str) -> tuple[str, ...]:
     try:
-        return SCHEMAS[table_name]
+        return DATASET_CONTRACTS[table_name].required_fields
     except KeyError as error:
         raise ValueError(f"unknown schema: {table_name}") from error
 
 
-def validate_fields(table_name: str, row: dict[str, object]) -> None:
+def dataset_contract(table_name: str) -> DatasetContract:
+    try:
+        return DATASET_CONTRACTS[table_name]
+    except KeyError as error:
+        raise ValueError(f"unknown dataset contract: {table_name}") from error
+
+
+def validate_fields(table_name: str, row: Mapping[str, object]) -> None:
     missing = [field for field in required_fields(table_name) if field not in row]
     if missing:
         raise ValueError(f"{table_name} row missing fields: {', '.join(missing)}")
+
+
+def validate_rows(table_name: str, rows: Sequence[Mapping[str, Any]]) -> None:
+    for row in rows:
+        validate_fields(table_name, row)

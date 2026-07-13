@@ -15,6 +15,8 @@ ListingKey = tuple[str, str, str]
 MAX_EXACT_WEIGHT_CANDIDATES = 20_000
 RISK_PARITY_OBJECTIVES = {"risk_parity", "equal_risk_contribution"}
 MAXIMUM_DIVERSIFICATION_OBJECTIVE = "maximum_diversification"
+BASELINE_OPTIMIZER_TYPE = "deterministic_baseline"
+PRODUCTION_OPTIMIZER_TYPE = "production_solver"
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,34 @@ class PortfolioConstraints:
             "min_weight": self.min_weight,
             "max_weight": self.max_weight,
             "min_quote_coverage": self.min_quote_coverage,
+        }
+
+
+@dataclass(frozen=True)
+class OptimizerDiagnostics:
+    optimizer_type: str
+    optimizer_status: str
+    objective_value: float
+    expected_return: float
+    portfolio_variance: float
+    constraint_violations: tuple[str, ...]
+    covariance_condition: str
+    missing_covariance_count: int
+    input_listing_count: int
+    turnover_estimate: float = 0.0
+
+    def as_dict(self) -> JsonRow:
+        return {
+            "optimizer_type": self.optimizer_type,
+            "optimizer_status": self.optimizer_status,
+            "objective_value": self.objective_value,
+            "expected_return": self.expected_return,
+            "portfolio_variance": self.portfolio_variance,
+            "constraint_violations": list(self.constraint_violations),
+            "covariance_condition": self.covariance_condition,
+            "missing_covariance_count": self.missing_covariance_count,
+            "input_listing_count": self.input_listing_count,
+            "turnover_estimate": self.turnover_estimate,
         }
 
 
@@ -170,6 +200,46 @@ def optimize_portfolio(
     return result
 
 
+def build_optimizer_diagnostics(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    expected_returns: Mapping[str, float],
+    weights: Mapping[str, float],
+    *,
+    objective: str,
+    constraints: PortfolioConstraints,
+    optimizer_type: str = BASELINE_OPTIMIZER_TYPE,
+) -> JsonRow:
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
+    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+    expected_return = _portfolio_return(ordered, ordered_weights, expected_returns)
+    violations = _constraint_violations(weights, constraints)
+    missing_covariances = sum(
+        1 for left in ordered for right in ordered if (left, right) not in covariances
+    )
+    diagonal_values = [covariances.get((listing, listing), 0.0) for listing in ordered]
+    if missing_covariances:
+        covariance_condition = "missing_covariance"
+    elif all(value <= 0 for value in diagonal_values):
+        covariance_condition = "zero_variance"
+    else:
+        covariance_condition = "ok"
+    diagnostics = OptimizerDiagnostics(
+        optimizer_type=optimizer_type,
+        optimizer_status="feasible" if not violations else "constraint_violation",
+        objective_value=_objective_value(objective, ordered, ordered_weights, covariances),
+        expected_return=expected_return,
+        portfolio_variance=portfolio_variance,
+        constraint_violations=tuple(violations),
+        covariance_condition=covariance_condition,
+        missing_covariance_count=missing_covariances,
+        input_listing_count=len(ordered),
+    )
+    return diagnostics.as_dict()
+
+
 def build_target_weight_rows(
     listings: Sequence[Mapping[str, Any]],
     weights: Mapping[str, float],
@@ -227,11 +297,21 @@ def write_optimized_weights(
     )
     ordered = _listing_keys(listings)
     ordered_weights = tuple(weights[isin] for isin, _, _ in ordered)
-    diagnostics: JsonRow = {
-        "risk_free_rate": risk_free_rate,
-        "target_return": target_return,
-        "expected_return": _portfolio_return(ordered, ordered_weights, expected_returns),
-    }
+    diagnostics: JsonRow = build_optimizer_diagnostics(
+        listings,
+        covariance_rows,
+        expected_returns,
+        weights,
+        objective=objective,
+        constraints=constraints,
+    )
+    diagnostics.update(
+        {
+            "risk_free_rate": risk_free_rate,
+            "target_return": target_return,
+            "expected_return": _portfolio_return(ordered, ordered_weights, expected_returns),
+        }
+    )
     if objective in RISK_PARITY_OBJECTIVES:
         risk_rows = build_risk_contribution_rows(
             listings,
@@ -353,7 +433,17 @@ def write_hierarchical_risk_parity(
         objective="hierarchical_risk_parity",
         portfolio_id=portfolio_id,
         constraints=constraints,
-        diagnostics={"ordered_isins": ",".join(sorted(weights))},
+        diagnostics={
+            **build_optimizer_diagnostics(
+                listings,
+                covariance_rows,
+                {},
+                weights,
+                objective="hierarchical_risk_parity",
+                constraints=constraints,
+            ),
+            "ordered_isins": ",".join(sorted(weights)),
+        },
     )
     cluster_rows = build_hrp_cluster_rows(
         listings,
@@ -425,6 +515,14 @@ def write_maximum_diversification(
         objective=MAXIMUM_DIVERSIFICATION_OBJECTIVE,
         portfolio_id=portfolio_id,
         constraints=constraints,
+        diagnostics=build_optimizer_diagnostics(
+            listings,
+            covariance_rows,
+            {},
+            weights,
+            objective=MAXIMUM_DIVERSIFICATION_OBJECTIVE,
+            constraints=constraints,
+        ),
     )
     metric_rows = build_diversification_metric_rows(
         listings,
@@ -542,6 +640,37 @@ def _covariance_map(
         right = (str(row["right_isin"]), str(row["right_exchange"]), str(row["right_code"]))
         values[(left, right)] = float(row["covariance"])
     return values
+
+
+def _constraint_violations(
+    weights: Mapping[str, float], constraints: PortfolioConstraints
+) -> list[str]:
+    violations: list[str] = []
+    total = sum(float(weight) for weight in weights.values())
+    if not isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        violations.append("weights_do_not_sum_to_one")
+    for isin, weight in sorted(weights.items()):
+        value = float(weight)
+        if constraints.long_only and value < 0:
+            violations.append(f"negative_weight:{isin}")
+        if value < constraints.min_weight:
+            violations.append(f"below_min_weight:{isin}")
+        if value > constraints.max_weight:
+            violations.append(f"above_max_weight:{isin}")
+    return violations
+
+
+def _objective_value(
+    objective: str,
+    listings: Sequence[ListingKey],
+    weights: Sequence[float],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> float:
+    if objective == MAXIMUM_DIVERSIFICATION_OBJECTIVE:
+        return _diversification_ratio(listings, weights, covariances)
+    if objective in RISK_PARITY_OBJECTIVES:
+        return _risk_parity_residual(listings, weights, covariances)
+    return _portfolio_variance(listings, weights, covariances)
 
 
 def _candidate_weights(
