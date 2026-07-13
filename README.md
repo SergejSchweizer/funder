@@ -193,6 +193,8 @@ uv run founder silver
 uv run founder gold
 ```
 
+Gold defaults to two parallel workers so a 4-core host keeps capacity for the rest of the system while building per-ISIN return, feature, correlation, and covariance outputs. It writes `lake/gold/runs/gold_runs.parquet` and resumes completed ISIN listings when the last quote date, global input snapshot date, and listing count still match. Symmetric correlation and covariance pairs are computed once and written to the relevant per-ISIN files.
+
 Use the refresh command when you want the three phases in one cron-friendly command:
 
 ```bash

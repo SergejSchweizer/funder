@@ -195,6 +195,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write verbose DEBUG logs.",
     )
     gold.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
+    gold.add_argument(
+        "--concurrency",
+        type=_positive_int,
+        default=2,
+        help="Maximum parallel Gold workers. Defaults to 2 for 4-core hosts.",
+    )
     refresh = subparsers.add_parser("refresh", help="Run Bronze, Silver, and Gold in order.")
     refresh.add_argument(
         "--debug",
@@ -301,13 +307,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "gold":
-        summary = _run_gold_command(Path(args.root))
+        summary = _run_gold_command(Path(args.root), concurrency=args.concurrency)
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "refresh":
         bronze_summary = _run_bronze_command(args)
         silver_summary = _run_silver_command(Path(args.root))
-        gold_summary = _run_gold_command(Path(args.root))
+        gold_summary = _run_gold_command(Path(args.root), concurrency=args.concurrency)
         print(
             json.dumps(
                 {
@@ -449,11 +455,13 @@ def _run_silver_command(root: Path) -> dict[str, Any]:
     return {"quote_rows": len(quote_rows)}
 
 
-def _run_gold_command(root: Path) -> dict[str, Any]:
+def _run_gold_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
     paths = LakePaths(root=root)
-    LOGGER.info("running gold build root=%s", root)
+    LOGGER.info("running gold build root=%s concurrency=%s", root, concurrency)
     quotes = read_silver_quotes(paths)
-    returns, correlations, covariances, features = write_gold_inputs(paths, quotes)
+    returns, correlations, covariances, features = write_gold_inputs(
+        paths, quotes, concurrency=concurrency
+    )
     LOGGER.info(
         "gold build complete root=%s returns=%s features=%s",
         root,
@@ -461,6 +469,7 @@ def _run_gold_command(root: Path) -> dict[str, Any]:
         len(features),
     )
     return {
+        "concurrency": concurrency,
         "correlation_rows": len(correlations),
         "covariance_rows": len(covariances),
         "feature_rows": len(features),

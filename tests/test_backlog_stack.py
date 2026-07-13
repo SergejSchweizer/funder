@@ -26,7 +26,7 @@ from founder.search import (
     write_canonical_universe,
     write_search_run,
 )
-from founder.table_io import read_json, read_rows
+from founder.table_io import read_json, read_rows, write_rows
 
 
 def test_lake_schemas_and_paths_cover_backlog_tables(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -378,7 +378,7 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
     returns = build_returns(quotes)
     correlations, covariances = build_correlation_and_covariance(returns)
     written_returns, written_correlations, written_covariances, written_features = (
-        write_gold_inputs(paths, quotes)
+        write_gold_inputs(paths, quotes, concurrency=2)
     )
 
     assert returns[0]["return"] == pytest.approx(0.1)
@@ -390,6 +390,37 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
     assert read_rows(paths.gold_correlation("XETRA", "IE1")) == written_correlations[:2]
     assert read_rows(paths.gold_covariance("XETRA", "IE1")) == written_covariances[:2]
     assert read_rows(paths.gold_asset_features("XETRA", "IE1")) == written_features[:1]
+    assert read_rows(paths.gold_runs())[0]["input_last_quote_date"] == "2026-07-11"
+    assert read_rows(paths.gold_runs())[0]["input_snapshot_date"] == "2026-07-11"
+    assert read_rows(paths.gold_runs())[0]["input_listing_count"] == 2
+
+
+def test_gold_inputs_resume_completed_listings_by_last_quote_date(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    quotes = [
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-10",
+            "adjusted_close": 100,
+        },
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-11",
+            "adjusted_close": 110,
+        },
+    ]
+
+    first = write_gold_inputs(paths, quotes, concurrency=1)
+    stale_feature = [{**first[3][0], "total_return": 99.0}]
+    write_rows(paths.gold_asset_features("XETRA", "IE1"), stale_feature)
+    second = write_gold_inputs(paths, quotes, concurrency=1)
+
+    assert second[3] == stale_feature
+    assert read_rows(paths.gold_asset_features("XETRA", "IE1")) == stale_feature
 
 
 def test_dry_run_pipeline_is_repeatable(tmp_path) -> None:  # type: ignore[no-untyped-def]

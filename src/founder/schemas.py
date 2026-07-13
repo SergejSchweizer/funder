@@ -89,6 +89,16 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "right_code",
         "covariance",
     ),
+    "gold_runs": (
+        "status",
+        "isin",
+        "exchange",
+        "code",
+        "input_last_quote_date",
+        "input_snapshot_date",
+        "input_listing_count",
+        "completed_at",
+    ),
     "return_matrix": (
         "evaluation_id",
         "date",

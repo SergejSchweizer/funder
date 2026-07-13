@@ -34,6 +34,7 @@ gold/returns/{exchange}/{ISIN}.parquet
 gold/correlation/{exchange}/{ISIN}.parquet
 gold/covariance/{exchange}/{ISIN}.parquet
 gold/features/{exchange}/{ISIN}.parquet
+gold/runs/gold_runs.parquet
 gold/evaluation/return_matrices/{evaluation_id}.parquet
 gold/evaluation/asset_metrics/{evaluation_id}.parquet
 gold/evaluation/portfolio_returns/{evaluation_id}.parquet
@@ -69,6 +70,9 @@ silver/coverage/quote_gaps.parquet
 - `errors`: non-secret bronze error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions.
 - `features`: per-listing Gold asset feature rows with first and last quote dates, quote and return observation counts, total return, mean return, volatility, and maximum drawdown.
+- `gold_runs`: per-listing Gold completion manifest with status, input last quote date, global input snapshot date, listing count, and completion time. Gold uses this to resume the per-ISIN job without reprocessing completed listings when the input snapshot has not changed.
+
+Gold input builds are designed for large ETF universes. The CLI defaults to two parallel Gold workers, processes one ISIN listing per worker task, and computes each symmetric correlation/covariance pair only once before writing per-left-listing files. If any listing date or the listing count changes, the global input snapshot changes and Gold recomputes the affected matrix outputs instead of trusting stale pair statistics.
 
 Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Bronze applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
 

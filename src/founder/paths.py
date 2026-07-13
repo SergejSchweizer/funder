@@ -70,6 +70,9 @@ class LakePaths:
     def dry_run_summary(self) -> Path:
         return self.silver / "runs" / "dry_run_summary.json"
 
+    def gold_runs(self) -> Path:
+        return self.gold / "runs" / "gold_runs.parquet"
+
     def gold_returns(self, exchange: str, isin: str) -> Path:
         return self.gold / "returns" / exchange / f"{isin}.parquet"
 
