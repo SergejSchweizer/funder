@@ -471,6 +471,51 @@ def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None
     assert read_rows(paths.gold_correlation_edges("snapshot-1", "pearson", 0)) == written
 
 
+def test_gold_pearson_correlation_uses_incremental_calculation() -> None:
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 1e9},
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-11",
+            "return": 1e9 + 1,
+        },
+        {
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "date": "2026-07-12",
+            "return": 1e9 + 2,
+        },
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-10", "return": 2e9},
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-11",
+            "return": 2e9 + 2,
+        },
+        {
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "date": "2026-07-12",
+            "return": 2e9 + 4,
+        },
+    ]
+
+    correlations, _ = build_correlation_and_covariance(return_rows)
+    edges = build_correlation_edges(return_rows, version="snapshot-1", metric="pearson")
+
+    assert edges[0]["value"] == pytest.approx(1.0)
+    assert [
+        row["correlation"]
+        for row in correlations
+        if row["left_isin"] == "IE1" and row["right_isin"] == "IE2"
+    ] == [pytest.approx(1.0)]
+
+
 def test_gold_correlation_edges_support_spearman_metric(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     return_rows = [

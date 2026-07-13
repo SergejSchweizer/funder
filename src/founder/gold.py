@@ -19,7 +19,6 @@ QuotesByListing = dict[ListingKey, list[JsonRow]]
 _WORKER_LISTINGS: tuple[ListingKey, ...] = ()
 _WORKER_RETURNS_BY_LISTING: ReturnsByListing = {}
 _WORKER_QUOTES_BY_LISTING: QuotesByListing = {}
-_WORKER_VARIANCE_BY_LISTING: dict[ListingKey, float] = {}
 
 
 @dataclass(frozen=True)
@@ -89,19 +88,13 @@ def build_correlation_and_covariance(
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     returns_by_listing = _index_returns(return_rows)
     listings = tuple(sorted(returns_by_listing))
-    variances = {
-        listing: covariance(list(values.values()), list(values.values()))
-        for listing, values in returns_by_listing.items()
-    }
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
     for left_index, left in enumerate(listings):
         for right in listings[left_index:]:
             left_values, right_values = _paired_indexed_values(returns_by_listing, left, right)
             cov = covariance(left_values, right_values)
-            left_var = variances[left]
-            right_var = variances[right]
-            corr = 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+            corr = _incremental_pearson(left_values, right_values)
             correlations.extend(_symmetric_pair_rows(left, right, "correlation", corr))
             covariances.extend(_symmetric_pair_rows(left, right, "covariance", cov))
     return _sort_pair_rows(correlations), _sort_pair_rows(covariances)
@@ -169,10 +162,27 @@ def _correlation_value(
     if metric == "spearman":
         left_values = _midranks(left_values)
         right_values = _midranks(right_values)
-    left_var = covariance(left_values, left_values)
-    right_var = covariance(right_values, right_values)
-    cov = covariance(left_values, right_values)
-    return 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+    return _incremental_pearson(left_values, right_values)
+
+
+def _incremental_pearson(left_values: Sequence[float], right_values: Sequence[float]) -> float:
+    if len(left_values) < 2 or len(left_values) != len(right_values):
+        return 0.0
+    left_mean = 0.0
+    right_mean = 0.0
+    left_m2 = 0.0
+    right_m2 = 0.0
+    comoment = 0.0
+    for count, (left, right) in enumerate(zip(left_values, right_values, strict=True), start=1):
+        left_delta = left - left_mean
+        right_delta = right - right_mean
+        left_mean += left_delta / count
+        right_mean += right_delta / count
+        comoment += left_delta * (right - right_mean)
+        left_m2 += left_delta * (left - left_mean)
+        right_m2 += right_delta * (right - right_mean)
+    denominator = sqrt(left_m2 * right_m2)
+    return 0.0 if denominator == 0 else comoment / denominator
 
 
 def _midranks(values: Sequence[float]) -> list[float]:
@@ -358,14 +368,11 @@ def _init_gold_worker(
     listings: tuple[ListingKey, ...],
     returns_by_listing: ReturnsByListing,
     quotes_by_listing: QuotesByListing,
-    variance_by_listing: dict[ListingKey, float],
 ) -> None:
     global _WORKER_LISTINGS, _WORKER_RETURNS_BY_LISTING, _WORKER_QUOTES_BY_LISTING
-    global _WORKER_VARIANCE_BY_LISTING
     _WORKER_LISTINGS = listings
     _WORKER_RETURNS_BY_LISTING = returns_by_listing
     _WORKER_QUOTES_BY_LISTING = quotes_by_listing
-    _WORKER_VARIANCE_BY_LISTING = variance_by_listing
 
 
 def _listing_last_quote_date(quotes: Sequence[Mapping[str, Any]]) -> str:
@@ -394,9 +401,7 @@ def _gold_listing_worker(args: tuple[LakePaths, ListingKey, str, str, int]) -> G
     for right in _WORKER_LISTINGS[left_index:]:
         left_values, right_values = _paired_indexed_values(_WORKER_RETURNS_BY_LISTING, left, right)
         cov = covariance(left_values, right_values)
-        left_var = _WORKER_VARIANCE_BY_LISTING.get(left, 0.0)
-        right_var = _WORKER_VARIANCE_BY_LISTING.get(right, 0.0)
-        corr = 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+        corr = _incremental_pearson(left_values, right_values)
         correlations.extend(_symmetric_pair_rows(left, right, "correlation", corr))
         covariances.extend(_symmetric_pair_rows(left, right, "covariance", cov))
 
@@ -476,10 +481,6 @@ def write_gold_inputs(
     returns_by_listing = _index_returns(returns)
     quotes_by_listing = _index_quotes(quote_rows)
     listings = tuple(sorted(quotes_by_listing))
-    variance_by_listing = {
-        listing: covariance(list(values.values()), list(values.values()))
-        for listing, values in returns_by_listing.items()
-    }
     completed_at = datetime.now(UTC).isoformat()
     workers = max(1, concurrency)
     input_snapshot_date = max(
@@ -497,7 +498,7 @@ def write_gold_inputs(
             len(listings),
         )
     ]
-    _init_gold_worker(listings, returns_by_listing, quotes_by_listing, variance_by_listing)
+    _init_gold_worker(listings, returns_by_listing, quotes_by_listing)
     if workers == 1 or len(pending) <= 1:
         processed = [
             _gold_listing_worker((paths, listing, completed_at, input_snapshot_date, len(listings)))
@@ -507,7 +508,7 @@ def write_gold_inputs(
         with ProcessPoolExecutor(
             max_workers=workers,
             initializer=_init_gold_worker,
-            initargs=(listings, returns_by_listing, quotes_by_listing, variance_by_listing),
+            initargs=(listings, returns_by_listing, quotes_by_listing),
         ) as executor:
             processed = list(
                 executor.map(
