@@ -293,6 +293,20 @@ Acceptance: Tests cover Spearman edge values, separate metric paths, unchanged P
 
 Idempotency: Re-running the same Spearman edge build for a version replaces stale Spearman bucket files and does not modify Pearson edge outputs.
 
+### PR29. Gold Correlation Edges: Skip Same-ISIN Pairs
+
+Git status: in progress. PR: local branch `feat/skip-same-isin-correlation-edges`.
+
+Priority: P0 scalability and duplicate-instrument hygiene.
+
+Depends on: PR27.
+
+Scope: Update Gold `correlation_edges` so pair generation skips listings with the same ISIN even when exchange or code differs. Preserve upper-triangle output, metric-specific paths, common-date intersections, threshold filtering, top-k limiting, and bucketed Parquet output.
+
+Acceptance: Tests prove same-ISIN cross-listing pairs are not emitted, cross-ISIN pairs remain, and edge rows still stay upper-triangle and deterministic.
+
+Idempotency: Re-running the same edge build for a version and metric replaces the same bucket files without reintroducing same-ISIN rows.
+
 ### PR20. Evaluation Module: Walk-Forward Backtesting
 
 Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/34.
