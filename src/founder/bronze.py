@@ -352,7 +352,7 @@ def _easter_sunday(year: int) -> date:
     return date(year, month, day)
 
 
-def _merge_rows(
+def merge_rows(
     existing_rows: Sequence[Mapping[str, Any]],
     new_rows: Sequence[Mapping[str, Any]],
     *,
@@ -420,7 +420,7 @@ def write_eodhd_dataset_to_bronze(
                 )
                 write_rows(
                     bronze_path,
-                    _merge_rows(
+                    merge_rows(
                         read_rows(bronze_path),
                         rows,
                         key_fields=("isin", "exchange", "code", "date"),
@@ -637,7 +637,7 @@ def write_silver_quotes(paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]
         by_listing.setdefault((str(row["exchange"]), str(row["isin"])), []).append(row)
     for (exchange, isin), rows in by_listing.items():
         quote_path = paths.silver_quote_file(exchange, isin)
-        merged_rows = _merge_rows(
+        merged_rows = merge_rows(
             read_rows(quote_path),
             rows,
             key_fields=("isin", "exchange", "code", "date"),

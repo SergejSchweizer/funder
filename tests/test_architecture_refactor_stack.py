@@ -3,8 +3,13 @@ from __future__ import annotations
 import importlib
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
+
+from founder.architecture_checks import check_architecture
 from founder.gold import write_gold_inputs
+from founder.gold_pair_stats import bucket_correlation_edges, index_returns, iter_pair_observations
 from founder.paths import LakePaths
 from founder.portfolio import (
     BASELINE_OPTIMIZER_TYPE,
@@ -20,8 +25,8 @@ def test_internal_evaluation_and_portfolio_boundaries_preserve_public_imports() 
     matrix = importlib.import_module("founder.evaluation_parts.matrix")
     objectives = importlib.import_module("founder.portfolio_parts.objectives")
 
-    assert matrix.build_return_matrix.__module__ == "founder.evaluation"
-    assert objectives.optimize_portfolio.__module__ == "founder.portfolio"
+    assert matrix.build_return_matrix.__module__ == "founder.evaluation_parts.matrix"
+    assert objectives.optimize_portfolio.__module__ == "founder.portfolio_parts.objectives"
 
 
 def test_internal_boundary_modules_expose_declared_reexports() -> None:
@@ -47,6 +52,145 @@ def test_internal_boundary_modules_expose_declared_reexports() -> None:
         assert all(
             getattr(module, name).__module__.startswith("founder.") for name in module.__all__
         )
+
+
+def test_evaluation_boundary_functions_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeEvaluation:
+        def __getattr__(self, name: str) -> Any:
+            def delegated(*_args: object, **_kwargs: object) -> Any:
+                if (
+                    name.startswith("write_")
+                    or name.startswith("build_walk")
+                    or name.startswith("build_efficient")
+                ):
+                    return ([], [])
+                return []
+
+            return delegated
+
+    fake = FakeEvaluation()
+    modules = [
+        importlib.import_module("founder.evaluation_parts.backtest"),
+        importlib.import_module("founder.evaluation_parts.frontier"),
+        importlib.import_module("founder.evaluation_parts.matrix"),
+        importlib.import_module("founder.evaluation_parts.metrics"),
+        importlib.import_module("founder.evaluation_parts.portfolio_returns"),
+        importlib.import_module("founder.evaluation_parts.rebalance"),
+        importlib.import_module("founder.evaluation_parts.tail_risk"),
+    ]
+    for module in modules:
+        monkeypatch.setattr(module.importlib, "import_module", lambda _name, fake=fake: fake)
+
+    modules[0].build_walk_forward_backtest(
+        [], [], run_id="r", evaluation_id="e", objective="o", constraints=object()
+    )
+    modules[0].write_walk_forward_backtest(
+        Path("lake"), evaluation_id="e", run_id="r", objective="o", constraints=object()
+    )
+    modules[1].build_efficient_frontier(
+        [], [], {}, evaluation_id="e", constraints=object(), target_returns=[]
+    )
+    modules[1].write_efficient_frontier(
+        Path("lake"), evaluation_id="e", constraints=object(), target_returns=[]
+    )
+    modules[2].read_gold_returns(Path("lake"))
+    modules[2].build_return_matrix([], "e")
+    modules[2].write_evaluation_outputs(Path("lake"), evaluation_id="e")
+    modules[3].build_asset_metrics([], "e")
+    modules[3].build_portfolio_metrics([], [], evaluation_id="e", portfolio_id="p")
+    modules[4].build_portfolio_returns([], {}, evaluation_id="e", portfolio_id="p")
+    modules[4].build_drawdowns([])
+    modules[4].write_portfolio_evaluation(Path("lake"), evaluation_id="e", portfolio_id="p")
+    modules[5].build_rebalance_events([], run_id="r", evaluation_id="e", portfolio_id="p")
+    modules[5].write_rebalance_simulation(
+        Path("lake"), evaluation_id="e", run_id="r", portfolio_id="p"
+    )
+    modules[6].build_tail_risk_rows([], run_id="r", evaluation_id="e", portfolio_id="p")
+    modules[6].write_tail_risk_evaluation(
+        Path("lake"), evaluation_id="e", run_id="r", portfolio_id="p"
+    )
+
+
+def test_portfolio_boundary_functions_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePortfolio:
+        PortfolioConstraints = PortfolioConstraints
+
+        def __getattr__(self, name: str) -> Any:
+            def delegated(*_args: object, **_kwargs: object) -> Any:
+                if name.startswith("write_hierarchical") or name.startswith("write_maximum"):
+                    return ([], [])
+                if "weights" in name or name.endswith("seed") or name.startswith("optimize"):
+                    return {}
+                return []
+
+            return delegated
+
+    fake = FakePortfolio()
+    modules = [
+        importlib.import_module("founder.portfolio_parts.constraints"),
+        importlib.import_module("founder.portfolio_parts.diversification"),
+        importlib.import_module("founder.portfolio_parts.hrp"),
+        importlib.import_module("founder.portfolio_parts.objectives"),
+        importlib.import_module("founder.portfolio_parts.risk_parity"),
+    ]
+    for module in modules:
+        monkeypatch.setattr(module.importlib, "import_module", lambda _name, fake=fake: fake)
+
+    modules[0].validate_weights({}, object())
+    modules[0].equal_weight_seed([], object())
+    modules[1].build_diversification_metric_rows(
+        [], [], {}, evaluation_id="e", portfolio_id="p", diagnostics={}
+    )
+    modules[1].write_maximum_diversification(Path("lake"), evaluation_id="e")
+    modules[2].hierarchical_risk_parity_weights([], [], object())
+    modules[2].build_hrp_cluster_rows([], [], {}, evaluation_id="e", portfolio_id="p")
+    modules[2].write_hierarchical_risk_parity(Path("lake"), evaluation_id="e")
+    modules[3].optimize_portfolio([], [])
+    modules[3].build_target_weight_rows(
+        [],
+        {},
+        evaluation_id="e",
+        objective="o",
+        portfolio_id="p",
+        constraints=object(),
+        diagnostics={},
+    )
+    modules[3].write_optimized_weights(Path("lake"), evaluation_id="e")
+    modules[4].build_risk_contribution_rows([], [], {}, evaluation_id="e", portfolio_id="p")
+
+
+def test_architecture_checks_pass_current_import_boundaries() -> None:
+    assert check_architecture() == []
+
+
+def test_gold_pair_engine_streams_upper_triangle_observations() -> None:
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-01-01", "return": 0.01},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-01-02", "return": 0.02},
+        {"isin": "IE2", "exchange": "XETRA", "code": "BBB", "date": "2026-01-01", "return": 0.03},
+        {"isin": "IE2", "exchange": "XETRA", "code": "BBB", "date": "2026-01-02", "return": 0.04},
+        {"isin": "IE3", "exchange": "XETRA", "code": "CCC", "date": "2026-01-02", "return": 0.05},
+    ]
+
+    observations = list(iter_pair_observations(index_returns(return_rows), include_self=False))
+
+    assert [(item.left_id, item.right_id) for item in observations] == [(0, 1), (0, 2), (1, 2)]
+    assert all(item.left_id < item.right_id for item in observations)
+    assert observations[0].dates == ("2026-01-01", "2026-01-02")
+    assert observations[1].dates == ("2026-01-02",)
+
+
+def test_gold_pair_engine_assigns_deterministic_edge_buckets() -> None:
+    rows = [
+        {"left_id": 3, "right_id": 4, "value": 0.5},
+        {"left_id": 2, "right_id": 3, "value": 0.4},
+    ]
+
+    by_bucket = bucket_correlation_edges(rows, bucket_count=2)
+
+    assert list(by_bucket) == [0, 1]
+    assert by_bucket[0][0]["bucket"] == 0
+    assert by_bucket[1][0]["bucket"] == 1
 
 
 def test_job_manifest_redacts_secrets_and_gold_writes_compatibility_manifest(
