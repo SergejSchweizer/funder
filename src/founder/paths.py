@@ -115,11 +115,29 @@ class LakePaths:
     def gold_frontier_weights(self, evaluation_id: str) -> Path:
         return self.gold / "evaluation" / "frontier_weights" / f"{evaluation_id}.parquet"
 
+    def gold_backtests(self, run_id: str) -> Path:
+        return self.gold / "evaluation" / "backtests" / f"{run_id}.parquet"
+
+    def gold_backtest_weights(self, run_id: str) -> Path:
+        return self.gold / "evaluation" / "backtest_weights" / f"{run_id}.parquet"
+
+    def gold_rebalance_events(self, run_id: str) -> Path:
+        return self.gold / "evaluation" / "rebalance_events" / f"{run_id}.parquet"
+
+    def gold_tail_risk(self, run_id: str) -> Path:
+        return self.gold / "evaluation" / "tail_risk" / f"{run_id}.parquet"
+
     def gold_optimized_weights(self, objective: str, evaluation_id: str) -> Path:
         return self.gold / "weights" / objective / f"{evaluation_id}.parquet"
 
     def gold_risk_contributions(self, objective: str, evaluation_id: str) -> Path:
         return self.gold / "risk_contributions" / objective / f"{evaluation_id}.parquet"
+
+    def gold_hrp_clusters(self, evaluation_id: str) -> Path:
+        return self.gold / "clusters" / "hierarchical_risk_parity" / f"{evaluation_id}.parquet"
+
+    def gold_diversification_metrics(self, evaluation_id: str) -> Path:
+        return self.gold / "metrics" / "maximum_diversification" / f"{evaluation_id}.parquet"
 
     def current_universe(self) -> Path:
         return self.silver / "universe" / "current_universe.json"

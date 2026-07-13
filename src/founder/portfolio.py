@@ -14,6 +14,7 @@ from founder.table_io import JsonRow, read_rows, write_rows
 ListingKey = tuple[str, str, str]
 MAX_EXACT_WEIGHT_CANDIDATES = 20_000
 RISK_PARITY_OBJECTIVES = {"risk_parity", "equal_risk_contribution"}
+MAXIMUM_DIVERSIFICATION_OBJECTIVE = "maximum_diversification"
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,7 @@ def optimize_portfolio(
         "minimum_variance",
         "maximum_sharpe",
         "target_return_minimum_variance",
+        MAXIMUM_DIVERSIFICATION_OBJECTIVE,
         *RISK_PARITY_OBJECTIVES,
     }:
         raise ValueError(f"unknown optimization objective: {objective}")
@@ -144,6 +146,14 @@ def optimize_portfolio(
                 _portfolio_variance(ordered, weights, covariances),
                 abs(_portfolio_return(ordered, weights, expected_returns) - target_value),
                 weights,
+            ),
+        )
+    elif objective == MAXIMUM_DIVERSIFICATION_OBJECTIVE:
+        best = max(
+            feasible,
+            key=lambda weights: (
+                _diversification_ratio(ordered, weights, covariances),
+                tuple(-weight for weight in weights),
             ),
         )
     else:
@@ -274,6 +284,166 @@ def write_optimized_weights(
     return rows
 
 
+def hierarchical_risk_parity_weights(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    constraints: PortfolioConstraints,
+) -> dict[str, float]:
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    raw_weights = _recursive_hrp_weights(ordered, covariances)
+    capped = {
+        isin: min(constraints.max_weight, max(constraints.min_weight, raw_weights[isin]))
+        for isin, _, _ in ordered
+    }
+    total = sum(capped.values())
+    if total == 0:
+        raise ValueError("no feasible HRP weights")
+    weights = {isin: weight / total for isin, weight in capped.items()}
+    validate_weights(weights, constraints)
+    return weights
+
+
+def build_hrp_cluster_rows(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+) -> list[JsonRow]:
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    rows: list[JsonRow] = []
+    for index, cluster in enumerate(_cluster_splits(ordered), start=1):
+        left, right = cluster
+        left_variance = _cluster_variance(left, covariances)
+        right_variance = _cluster_variance(right, covariances)
+        total = left_variance + right_variance
+        allocation = 0.5 if total == 0 else right_variance / total
+        rows.append(
+            {
+                "evaluation_id": evaluation_id,
+                "portfolio_id": portfolio_id,
+                "cluster_id": f"cluster-{index:03d}",
+                "left_cluster": ",".join(item[0] for item in left),
+                "right_cluster": ",".join(item[0] for item in right),
+                "cluster_variance": left_variance + right_variance,
+                "allocation": allocation,
+                "ordered_isins": ",".join(item[0] for item in ordered),
+            }
+        )
+    return rows
+
+
+def write_hierarchical_risk_parity(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+    constraints: PortfolioConstraints,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
+    listings = _listing_rows(matrix_rows)
+    covariance_rows = _read_covariances(paths, listings)
+    weights = hierarchical_risk_parity_weights(listings, covariance_rows, constraints)
+    weight_rows = build_target_weight_rows(
+        listings,
+        weights,
+        evaluation_id=evaluation_id,
+        objective="hierarchical_risk_parity",
+        portfolio_id=portfolio_id,
+        constraints=constraints,
+        diagnostics={"ordered_isins": ",".join(sorted(weights))},
+    )
+    cluster_rows = build_hrp_cluster_rows(
+        listings,
+        covariance_rows,
+        evaluation_id=evaluation_id,
+        portfolio_id=portfolio_id,
+    )
+    _replace_portfolio_rows(
+        paths.gold_optimized_weights("hierarchical_risk_parity", evaluation_id),
+        portfolio_id,
+        weight_rows,
+    )
+    _replace_portfolio_rows(paths.gold_hrp_clusters(evaluation_id), portfolio_id, cluster_rows)
+    return weight_rows, cluster_rows
+
+
+def build_diversification_metric_rows(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    weights: Mapping[str, float],
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+) -> list[JsonRow]:
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
+    ratio = _diversification_ratio(ordered, ordered_weights, covariances)
+    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+    asset_volatility = sum(
+        weight * (max(0.0, covariances.get((listing, listing), 0.0)) ** 0.5)
+        for listing, weight in zip(ordered, ordered_weights, strict=True)
+    )
+    return [
+        {
+            "evaluation_id": evaluation_id,
+            "portfolio_id": portfolio_id,
+            "diversification_ratio": ratio,
+            "portfolio_volatility": max(0.0, portfolio_variance) ** 0.5,
+            "weighted_asset_volatility": asset_volatility,
+            "diagnostics": json.dumps({"objective": MAXIMUM_DIVERSIFICATION_OBJECTIVE}),
+        }
+    ]
+
+
+def write_maximum_diversification(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+    constraints: PortfolioConstraints,
+    grid_step: float = 0.01,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
+    listings = _listing_rows(matrix_rows)
+    covariance_rows = _read_covariances(paths, listings)
+    weights = optimize_portfolio(
+        listings,
+        covariance_rows,
+        {},
+        objective=MAXIMUM_DIVERSIFICATION_OBJECTIVE,
+        constraints=constraints,
+        grid_step=grid_step,
+    )
+    weight_rows = build_target_weight_rows(
+        listings,
+        weights,
+        evaluation_id=evaluation_id,
+        objective=MAXIMUM_DIVERSIFICATION_OBJECTIVE,
+        portfolio_id=portfolio_id,
+        constraints=constraints,
+    )
+    metric_rows = build_diversification_metric_rows(
+        listings,
+        covariance_rows,
+        weights,
+        evaluation_id=evaluation_id,
+        portfolio_id=portfolio_id,
+    )
+    _replace_portfolio_rows(
+        paths.gold_optimized_weights(MAXIMUM_DIVERSIFICATION_OBJECTIVE, evaluation_id),
+        portfolio_id,
+        weight_rows,
+    )
+    _replace_portfolio_rows(
+        paths.gold_diversification_metrics(evaluation_id), portfolio_id, metric_rows
+    )
+    return weight_rows, metric_rows
+
+
 def build_risk_contribution_rows(
     listings: Sequence[Mapping[str, Any]],
     covariance_rows: Sequence[Mapping[str, Any]],
@@ -335,6 +505,18 @@ def _listing_rows(matrix_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
         {"isin": isin, "exchange": exchange, "code": code}
         for isin, exchange, code in _listing_keys(matrix_rows)
     ]
+
+
+def _replace_portfolio_rows(
+    path: Any, portfolio_id: str, rows: Sequence[Mapping[str, Any]]
+) -> None:
+    existing = [row for row in read_rows(path) if str(row["portfolio_id"]) != portfolio_id]
+    write_rows(
+        path,
+        sorted(
+            [*existing, *rows], key=lambda row: (str(row["portfolio_id"]), str(row.get("isin", "")))
+        ),
+    )
 
 
 def _expected_returns(matrix_rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
@@ -425,6 +607,62 @@ def _portfolio_variance(
         for right, right_weight in zip(listings, weights, strict=True):
             variance += left_weight * right_weight * covariances.get((left, right), 0.0)
     return variance
+
+
+def _diversification_ratio(
+    listings: Sequence[ListingKey],
+    weights: Sequence[float],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> float:
+    portfolio_variance = _portfolio_variance(listings, weights, covariances)
+    if portfolio_variance <= 0:
+        return 0.0
+    weighted_volatility = sum(
+        weight * (max(0.0, covariances.get((listing, listing), 0.0)) ** 0.5)
+        for listing, weight in zip(listings, weights, strict=True)
+    )
+    return float(weighted_volatility / (portfolio_variance**0.5))
+
+
+def _cluster_splits(
+    listings: Sequence[ListingKey],
+) -> list[tuple[list[ListingKey], list[ListingKey]]]:
+    if len(listings) <= 1:
+        return []
+    midpoint = len(listings) // 2
+    left = list(listings[:midpoint])
+    right = list(listings[midpoint:])
+    return [(left, right), *_cluster_splits(left), *_cluster_splits(right)]
+
+
+def _cluster_variance(
+    listings: Sequence[ListingKey], covariances: Mapping[tuple[ListingKey, ListingKey], float]
+) -> float:
+    if not listings:
+        return 0.0
+    weight = 1.0 / len(listings)
+    return _portfolio_variance(listings, [weight] * len(listings), covariances)
+
+
+def _recursive_hrp_weights(
+    listings: Sequence[ListingKey], covariances: Mapping[tuple[ListingKey, ListingKey], float]
+) -> dict[str, float]:
+    if len(listings) == 1:
+        return {listings[0][0]: 1.0}
+    midpoint = len(listings) // 2
+    left = list(listings[:midpoint])
+    right = list(listings[midpoint:])
+    left_variance = _cluster_variance(left, covariances)
+    right_variance = _cluster_variance(right, covariances)
+    total = left_variance + right_variance
+    left_allocation = 0.5 if total == 0 else right_variance / total
+    right_allocation = 1.0 - left_allocation
+    weights: dict[str, float] = {}
+    for isin, weight in _recursive_hrp_weights(left, covariances).items():
+        weights[isin] = weight * left_allocation
+    for isin, weight in _recursive_hrp_weights(right, covariances).items():
+        weights[isin] = weight * right_allocation
+    return weights
 
 
 def _marginal_risk_contribution(

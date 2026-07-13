@@ -22,11 +22,26 @@ from founder.bronze import (
     write_raw_eodhd_datasets_to_bronze,
 )
 from founder.config import load_eodhd_config
+from founder.evaluation import (
+    build_asset_metrics,
+    write_efficient_frontier,
+    write_evaluation_outputs,
+    write_portfolio_evaluation,
+    write_rebalance_simulation,
+    write_tail_risk_evaluation,
+    write_walk_forward_backtest,
+)
 from founder.gold import write_gold_inputs
 from founder.http import EodhdClient
 from founder.logging import get_logger, setup_logging
 from founder.paths import LakePaths
 from founder.pipeline import run_dry_run
+from founder.portfolio import (
+    PortfolioConstraints,
+    write_hierarchical_risk_parity,
+    write_maximum_diversification,
+    write_optimized_weights,
+)
 from founder.search import (
     approve_universe,
     normalize_name,
@@ -40,7 +55,7 @@ from founder.silver import (
     read_bronze_quote_rows,
     read_silver_quotes,
 )
-from founder.table_io import write_rows
+from founder.table_io import read_rows, write_rows
 
 DEFAULT_ROOT = Path("lake")
 DEFAULT_SEARCH_INPUT = Path("docs/eodhd_ucits_etf_matches.csv")
@@ -69,6 +84,17 @@ def _positive_int(value: str) -> int:
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
     return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def _target_returns(value: str) -> list[float]:
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
 
 
 def _read_candidate_payload(path: Path) -> list[dict[str, Any]]:
@@ -207,6 +233,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=2,
         help="Maximum parallel Gold workers. Defaults to 2 for 4-core hosts.",
     )
+    evaluate = subparsers.add_parser("evaluate", help="Build evaluation and portfolio outputs.")
+    evaluate.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Write verbose DEBUG logs.",
+    )
+    evaluate.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to evaluate.")
+    evaluate.add_argument("--evaluation-id", default="default", help="Stable evaluation id.")
+    evaluate.add_argument("--portfolio-id", default="equal-weight", help="Stable portfolio id.")
+    evaluate.add_argument(
+        "--objective",
+        default="equal_weight",
+        help="Optimization objective such as minimum_variance or risk_parity.",
+    )
+    evaluate.add_argument("--optimize", action="store_true", help="Write optimized weights.")
+    evaluate.add_argument("--walk-forward", action="store_true", help="Write walk-forward outputs.")
+    evaluate.add_argument("--rebalance", action="store_true", help="Write rebalance events.")
+    evaluate.add_argument(
+        "--frontier", action="store_true", help="Write efficient-frontier outputs."
+    )
+    evaluate.add_argument("--tail-risk", action="store_true", help="Write tail-risk outputs.")
+    evaluate.add_argument("--run-id", default="evaluation-run", help="Run id for optional outputs.")
+    evaluate.add_argument("--train-window", type=_positive_int, default=2)
+    evaluate.add_argument("--test-window", type=_positive_int, default=1)
+    evaluate.add_argument("--schedule", default="monthly")
+    evaluate.add_argument("--grid-step", type=_positive_float, default=0.1)
+    evaluate.add_argument("--max-weight", type=_positive_float, default=1.0)
+    evaluate.add_argument("--target-returns", type=_target_returns, default=[0.0, 0.01])
+    evaluate.add_argument("--confidence-level", type=float, default=0.95)
     refresh = subparsers.add_parser("refresh", help="Run Bronze, Silver, and Gold in order.")
     refresh.add_argument(
         "--debug",
@@ -314,6 +370,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
     if args.command == "gold":
         summary = _run_gold_command(Path(args.root), concurrency=args.concurrency)
+        print(json.dumps(summary, sort_keys=True))
+        return
+    if args.command == "evaluate":
+        summary = _run_evaluate_command(args)
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "refresh":
@@ -481,3 +541,99 @@ def _run_gold_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
         "feature_rows": len(features),
         "return_rows": len(returns),
     }
+
+
+def _run_evaluate_command(args: argparse.Namespace) -> dict[str, Any]:
+    paths = LakePaths(root=Path(args.root))
+    constraints = PortfolioConstraints(max_weight=args.max_weight)
+    matrix = read_rows(paths.gold_return_matrix(args.evaluation_id))
+    if matrix:
+        asset_metrics = read_rows(paths.gold_asset_metrics(args.evaluation_id))
+        if not asset_metrics:
+            asset_metrics = build_asset_metrics(matrix, args.evaluation_id)
+            write_rows(paths.gold_asset_metrics(args.evaluation_id), asset_metrics)
+    else:
+        matrix, asset_metrics = write_evaluation_outputs(paths, evaluation_id=args.evaluation_id)
+    portfolio_returns, drawdowns, portfolio_metrics = write_portfolio_evaluation(
+        paths,
+        evaluation_id=args.evaluation_id,
+        portfolio_id=args.portfolio_id,
+    )
+    summary: dict[str, Any] = {
+        "asset_metric_rows": len(asset_metrics),
+        "drawdown_rows": len(drawdowns),
+        "evaluation_id": args.evaluation_id,
+        "portfolio_metric_rows": len(portfolio_metrics),
+        "portfolio_return_rows": len(portfolio_returns),
+        "return_matrix_rows": len(matrix),
+    }
+    if args.optimize:
+        if args.objective == "hierarchical_risk_parity":
+            weight_rows, cluster_rows = write_hierarchical_risk_parity(
+                paths,
+                evaluation_id=args.evaluation_id,
+                portfolio_id=args.portfolio_id,
+                constraints=constraints,
+            )
+            summary["cluster_rows"] = len(cluster_rows)
+        elif args.objective == "maximum_diversification":
+            weight_rows, metric_rows = write_maximum_diversification(
+                paths,
+                evaluation_id=args.evaluation_id,
+                portfolio_id=args.portfolio_id,
+                constraints=constraints,
+                grid_step=args.grid_step,
+            )
+            summary["diversification_metric_rows"] = len(metric_rows)
+        else:
+            weight_rows = write_optimized_weights(
+                paths,
+                evaluation_id=args.evaluation_id,
+                objective=args.objective,
+                portfolio_id=args.portfolio_id,
+                constraints=constraints,
+                grid_step=args.grid_step,
+            )
+        summary["optimized_weight_rows"] = len(weight_rows)
+    if args.walk_forward:
+        backtests, backtest_weights = write_walk_forward_backtest(
+            paths,
+            evaluation_id=args.evaluation_id,
+            run_id=args.run_id,
+            objective=args.objective,
+            constraints=constraints,
+            train_window=args.train_window,
+            test_window=args.test_window,
+            grid_step=args.grid_step,
+        )
+        summary["backtest_rows"] = len(backtests)
+        summary["backtest_weight_rows"] = len(backtest_weights)
+    if args.rebalance:
+        rebalance_events = write_rebalance_simulation(
+            paths,
+            evaluation_id=args.evaluation_id,
+            run_id=args.run_id,
+            portfolio_id=args.portfolio_id,
+            schedule=args.schedule,
+        )
+        summary["rebalance_event_rows"] = len(rebalance_events)
+    if args.frontier:
+        frontier_points, frontier_weights = write_efficient_frontier(
+            paths,
+            evaluation_id=args.evaluation_id,
+            constraints=constraints,
+            target_returns=args.target_returns,
+            grid_step=args.grid_step,
+        )
+        summary["frontier_point_rows"] = len(frontier_points)
+        summary["frontier_weight_rows"] = len(frontier_weights)
+    if args.tail_risk:
+        tail_rows = write_tail_risk_evaluation(
+            paths,
+            evaluation_id=args.evaluation_id,
+            run_id=args.run_id,
+            portfolio_id=args.portfolio_id,
+            confidence_level=args.confidence_level,
+        )
+        summary["tail_risk_rows"] = len(tail_rows)
+    return summary

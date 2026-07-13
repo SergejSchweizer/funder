@@ -115,7 +115,12 @@ def test_gold_evaluation_schema_contracts_are_registered() -> None:
     assert "drawdown_duration" in required_fields("drawdowns")
     assert "frontier_point_id" in required_fields("frontier_points")
     assert "weight" in required_fields("frontier_weights")
+    assert "split_id" in required_fields("backtests")
+    assert "post_cost_return" in required_fields("rebalance_events")
+    assert "cvar" in required_fields("tail_risk")
     assert "constraints" in required_fields("optimized_weights")
+    assert "cluster_variance" in required_fields("hrp_clusters")
+    assert "diversification_ratio" in required_fields("diversification_metrics")
 
 
 def test_gold_evaluation_schema_validation_reports_missing_fields() -> None:

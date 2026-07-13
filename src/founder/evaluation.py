@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from math import sqrt
 from typing import Any
 
 from founder.gold import covariance
 from founder.paths import LakePaths
+from founder.portfolio import PortfolioConstraints, optimize_portfolio
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ANNUAL_TRADING_DAYS = 252
@@ -281,3 +283,460 @@ def write_portfolio_evaluation(
         sorted([*existing_metrics, *metrics], key=lambda row: str(row["portfolio_id"])),
     )
     return portfolio_returns, drawdowns, metrics
+
+
+def build_walk_forward_backtest(
+    matrix_rows: Sequence[Mapping[str, Any]],
+    *,
+    run_id: str,
+    evaluation_id: str,
+    objective: str,
+    constraints: PortfolioConstraints,
+    train_window: int,
+    test_window: int,
+    mode: str = "rolling",
+    grid_step: float = 0.1,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    dates = sorted({str(row["date"]) for row in matrix_rows})
+    if train_window < 1 or test_window < 1:
+        raise ValueError("train_window and test_window must be positive")
+    if mode not in {"rolling", "expanding"}:
+        raise ValueError("mode must be rolling or expanding")
+    metrics: list[JsonRow] = []
+    weight_rows: list[JsonRow] = []
+    previous_weights: dict[str, float] = {}
+    split_index = 1
+    start = train_window
+    while start + test_window <= len(dates):
+        train_dates = dates[:start] if mode == "expanding" else dates[start - train_window : start]
+        test_dates = dates[start : start + test_window]
+        train_rows = [row for row in matrix_rows if str(row["date"]) in set(train_dates)]
+        test_rows = [row for row in matrix_rows if str(row["date"]) in set(test_dates)]
+        listings = _listing_rows(train_rows)
+        covariance_rows = _matrix_covariance_rows(train_rows)
+        expected_returns = _expected_returns(train_rows)
+        weights = optimize_portfolio(
+            listings,
+            covariance_rows,
+            expected_returns,
+            objective=objective,
+            constraints=constraints,
+            grid_step=grid_step,
+        )
+        split_id = f"split-{split_index:03d}"
+        portfolio_returns = build_portfolio_returns(
+            test_rows,
+            evaluation_id=evaluation_id,
+            portfolio_id=split_id,
+            weights=weights,
+        )
+        drawdowns = build_drawdowns(portfolio_returns)
+        returns = [float(row["return"]) for row in portfolio_returns]
+        volatility = sqrt(covariance(returns, returns)) if len(returns) >= 2 else 0.0
+        realized_return = sum(returns)
+        turnover = _turnover(previous_weights, weights)
+        metrics.append(
+            {
+                "run_id": run_id,
+                "evaluation_id": evaluation_id,
+                "split_id": split_id,
+                "objective": objective,
+                "train_start_date": train_dates[0],
+                "train_end_date": train_dates[-1],
+                "test_start_date": test_dates[0],
+                "test_end_date": test_dates[-1],
+                "realized_return": realized_return,
+                "realized_volatility": volatility,
+                "sharpe_ratio": _ratio(realized_return, volatility),
+                "max_drawdown": min((float(row["drawdown"]) for row in drawdowns), default=0.0),
+                "turnover": turnover,
+            }
+        )
+        weight_rows.extend(
+            {
+                "run_id": run_id,
+                "evaluation_id": evaluation_id,
+                "split_id": split_id,
+                "isin": str(row["isin"]),
+                "exchange": str(row["exchange"]),
+                "code": str(row["code"]),
+                "weight": weights[str(row["isin"])],
+            }
+            for row in listings
+        )
+        previous_weights = weights
+        split_index += 1
+        start += test_window
+    return metrics, sorted(weight_rows, key=lambda row: (str(row["split_id"]), str(row["isin"])))
+
+
+def write_walk_forward_backtest(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    run_id: str,
+    objective: str,
+    constraints: PortfolioConstraints,
+    train_window: int,
+    test_window: int,
+    mode: str = "rolling",
+    grid_step: float = 0.1,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    matrix = _read_or_build_matrix(paths, evaluation_id)
+    metrics, weights = build_walk_forward_backtest(
+        matrix,
+        run_id=run_id,
+        evaluation_id=evaluation_id,
+        objective=objective,
+        constraints=constraints,
+        train_window=train_window,
+        test_window=test_window,
+        mode=mode,
+        grid_step=grid_step,
+    )
+    write_rows(paths.gold_backtests(run_id), metrics)
+    write_rows(paths.gold_backtest_weights(run_id), weights)
+    return metrics, weights
+
+
+def build_rebalance_events(
+    matrix_rows: Sequence[Mapping[str, Any]],
+    *,
+    run_id: str,
+    evaluation_id: str,
+    portfolio_id: str,
+    target_weights: Mapping[str, float],
+    schedule: str,
+    transaction_cost_rate: float = 0.0,
+    drift_threshold: float | None = None,
+) -> list[JsonRow]:
+    if schedule not in {"monthly", "quarterly", "annual", "threshold"}:
+        raise ValueError("unknown rebalance schedule")
+    rows_by_date = _rows_by_date(matrix_rows)
+    weights = dict(target_weights)
+    current_weights = dict(weights)
+    value = 1.0
+    events: list[JsonRow] = []
+    last_period = ""
+    for item_date in sorted(rows_by_date):
+        period = _rebalance_period(item_date, schedule)
+        daily_return = sum(
+            current_weights[str(row["isin"])] * float(row["return"])
+            for row in rows_by_date[item_date]
+        )
+        drift = sum(abs(current_weights[isin] - weights[isin]) for isin in weights) / 2
+        scheduled = period != last_period
+        threshold_hit = (
+            schedule == "threshold" and drift_threshold is not None and drift >= drift_threshold
+        )
+        is_rebalance = scheduled or threshold_hit
+        turnover = _turnover(current_weights, weights) if is_rebalance else 0.0
+        cost = turnover * transaction_cost_rate
+        post_cost_return = daily_return - cost
+        value *= 1.0 + post_cost_return
+        if is_rebalance:
+            current_weights = dict(weights)
+            last_period = period
+        else:
+            total = sum(current_weights[isin] * (1.0 + daily_return) for isin in current_weights)
+            if total:
+                current_weights = {
+                    isin: current_weights[isin] * (1.0 + daily_return) / total
+                    for isin in current_weights
+                }
+        events.append(
+            {
+                "run_id": run_id,
+                "evaluation_id": evaluation_id,
+                "portfolio_id": portfolio_id,
+                "date": item_date,
+                "schedule": schedule,
+                "turnover": turnover,
+                "transaction_cost": cost,
+                "post_cost_return": post_cost_return,
+                "portfolio_value": value,
+                "is_rebalance": is_rebalance,
+            }
+        )
+    return events
+
+
+def write_rebalance_simulation(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    run_id: str,
+    portfolio_id: str,
+    target_weights: Mapping[str, float] | None = None,
+    schedule: str = "monthly",
+    transaction_cost_rate: float = 0.0,
+    drift_threshold: float | None = None,
+) -> list[JsonRow]:
+    matrix = _read_or_build_matrix(paths, evaluation_id)
+    weights = equal_weight_portfolio(matrix) if target_weights is None else dict(target_weights)
+    events = build_rebalance_events(
+        matrix,
+        run_id=run_id,
+        evaluation_id=evaluation_id,
+        portfolio_id=portfolio_id,
+        target_weights=weights,
+        schedule=schedule,
+        transaction_cost_rate=transaction_cost_rate,
+        drift_threshold=drift_threshold,
+    )
+    write_rows(paths.gold_rebalance_events(run_id), events)
+    return events
+
+
+def build_efficient_frontier(
+    matrix_rows: Sequence[Mapping[str, Any]],
+    *,
+    evaluation_id: str,
+    constraints: PortfolioConstraints,
+    target_returns: Sequence[float],
+    risk_free_rate: float = 0.0,
+    grid_step: float = 0.1,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    listings = _listing_rows(matrix_rows)
+    covariance_rows = _matrix_covariance_rows(matrix_rows)
+    expected_returns = _expected_returns(matrix_rows)
+    covariance_map = _covariance_map(covariance_rows)
+    points: list[JsonRow] = []
+    weights_rows: list[JsonRow] = []
+    for index, target in enumerate(target_returns, start=1):
+        point_id = f"frontier-{index:03d}"
+        try:
+            weights = optimize_portfolio(
+                listings,
+                covariance_rows,
+                expected_returns,
+                objective="target_return_minimum_variance",
+                constraints=constraints,
+                target_return=target,
+                grid_step=grid_step,
+            )
+            ordered = _listing_keys(listings)
+            ordered_weights = tuple(weights[isin] for isin, _, _ in ordered)
+            expected = sum(expected_returns.get(isin, 0.0) * weights[isin] for isin in weights)
+            volatility = _portfolio_volatility(ordered, ordered_weights, covariance_map)
+            feasible = True
+        except ValueError:
+            weights = {str(row["isin"]): 0.0 for row in listings}
+            expected = 0.0
+            volatility = 0.0
+            feasible = False
+        points.append(
+            {
+                "evaluation_id": evaluation_id,
+                "frontier_point_id": point_id,
+                "target_return": target,
+                "expected_return": expected,
+                "volatility": volatility,
+                "sharpe_ratio": _ratio(expected - risk_free_rate, volatility),
+                "is_feasible": feasible,
+                "diagnostics": json.dumps({"grid_step": grid_step}, sort_keys=True),
+            }
+        )
+        weights_rows.extend(
+            {
+                "evaluation_id": evaluation_id,
+                "frontier_point_id": point_id,
+                "isin": str(row["isin"]),
+                "exchange": str(row["exchange"]),
+                "code": str(row["code"]),
+                "weight": weights[str(row["isin"])],
+            }
+            for row in listings
+        )
+    return points, sorted(
+        weights_rows, key=lambda row: (str(row["frontier_point_id"]), str(row["isin"]))
+    )
+
+
+def write_efficient_frontier(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    constraints: PortfolioConstraints,
+    target_returns: Sequence[float],
+    risk_free_rate: float = 0.0,
+    grid_step: float = 0.1,
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    matrix = _read_or_build_matrix(paths, evaluation_id)
+    points, weights = build_efficient_frontier(
+        matrix,
+        evaluation_id=evaluation_id,
+        constraints=constraints,
+        target_returns=target_returns,
+        risk_free_rate=risk_free_rate,
+        grid_step=grid_step,
+    )
+    write_rows(paths.gold_frontier_points(evaluation_id), points)
+    write_rows(paths.gold_frontier_weights(evaluation_id), weights)
+    return points, weights
+
+
+def build_tail_risk_rows(
+    matrix_rows: Sequence[Mapping[str, Any]],
+    *,
+    run_id: str,
+    evaluation_id: str,
+    portfolio_id: str,
+    weights: Mapping[str, float],
+    confidence_level: float,
+) -> list[JsonRow]:
+    if not 0 < confidence_level < 1:
+        raise ValueError("confidence_level must be in (0, 1)")
+    returns = [
+        float(row["return"])
+        for row in build_portfolio_returns(
+            matrix_rows,
+            evaluation_id=evaluation_id,
+            portfolio_id=portfolio_id,
+            weights=weights,
+        )
+    ]
+    losses = sorted([-item for item in returns])
+    if not losses:
+        return []
+    threshold_index = min(len(losses) - 1, int(confidence_level * len(losses)))
+    var = losses[threshold_index]
+    tail = [loss for loss in losses if loss >= var]
+    cvar = sum(tail) / len(tail)
+    return [
+        {
+            "run_id": run_id,
+            "evaluation_id": evaluation_id,
+            "portfolio_id": portfolio_id,
+            "confidence_level": confidence_level,
+            "var": var,
+            "cvar": cvar,
+            "tail_observation_count": len(tail),
+            "scenario_count": len(losses),
+        }
+    ]
+
+
+def write_tail_risk_evaluation(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    run_id: str,
+    portfolio_id: str,
+    weights: Mapping[str, float] | None = None,
+    confidence_level: float = 0.95,
+) -> list[JsonRow]:
+    matrix = _read_or_build_matrix(paths, evaluation_id)
+    portfolio_weights = equal_weight_portfolio(matrix) if weights is None else dict(weights)
+    rows = build_tail_risk_rows(
+        matrix,
+        run_id=run_id,
+        evaluation_id=evaluation_id,
+        portfolio_id=portfolio_id,
+        weights=portfolio_weights,
+        confidence_level=confidence_level,
+    )
+    write_rows(paths.gold_tail_risk(run_id), rows)
+    return rows
+
+
+def _read_or_build_matrix(paths: LakePaths, evaluation_id: str) -> list[JsonRow]:
+    matrix = read_rows(paths.gold_return_matrix(evaluation_id))
+    if matrix:
+        return matrix
+    matrix, _ = write_evaluation_outputs(paths, evaluation_id=evaluation_id)
+    return matrix
+
+
+def _listing_keys(rows: Sequence[Mapping[str, Any]]) -> list[tuple[str, str, str]]:
+    return sorted({(str(row["isin"]), str(row["exchange"]), str(row["code"])) for row in rows})
+
+
+def _listing_rows(rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
+    return [
+        {"isin": isin, "exchange": exchange, "code": code}
+        for isin, exchange, code in _listing_keys(rows)
+    ]
+
+
+def _rows_by_date(rows: Sequence[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
+    by_date: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        by_date.setdefault(str(row["date"]), []).append(row)
+    return by_date
+
+
+def _expected_returns(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    by_isin: dict[str, list[float]] = {}
+    for row in rows:
+        by_isin.setdefault(str(row["isin"]), []).append(float(row["return"]))
+    return {isin: sum(values) / len(values) for isin, values in by_isin.items()}
+
+
+def _matrix_covariance_rows(rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
+    by_listing: dict[tuple[str, str, str], dict[str, float]] = {}
+    for row in rows:
+        by_listing.setdefault((str(row["isin"]), str(row["exchange"]), str(row["code"])), {})[
+            str(row["date"])
+        ] = float(row["return"])
+    output: list[JsonRow] = []
+    for left in sorted(by_listing):
+        for right in sorted(by_listing):
+            common_dates = sorted(set(by_listing[left]) & set(by_listing[right]))
+            value = covariance(
+                [by_listing[left][item] for item in common_dates],
+                [by_listing[right][item] for item in common_dates],
+            )
+            output.append(
+                {
+                    "left_isin": left[0],
+                    "left_exchange": left[1],
+                    "left_code": left[2],
+                    "right_isin": right[0],
+                    "right_exchange": right[1],
+                    "right_code": right[2],
+                    "covariance": value,
+                }
+            )
+    return output
+
+
+def _covariance_map(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[tuple[tuple[str, str, str], tuple[str, str, str]], float]:
+    return {
+        (
+            (str(row["left_isin"]), str(row["left_exchange"]), str(row["left_code"])),
+            (str(row["right_isin"]), str(row["right_exchange"]), str(row["right_code"])),
+        ): float(row["covariance"])
+        for row in rows
+    }
+
+
+def _portfolio_volatility(
+    listings: Sequence[tuple[str, str, str]],
+    weights: Sequence[float],
+    covariances: Mapping[tuple[tuple[str, str, str], tuple[str, str, str]], float],
+) -> float:
+    variance = 0.0
+    for left, left_weight in zip(listings, weights, strict=True):
+        for right, right_weight in zip(listings, weights, strict=True):
+            variance += left_weight * right_weight * covariances.get((left, right), 0.0)
+    return sqrt(max(0.0, variance))
+
+
+def _turnover(previous: Mapping[str, float], current: Mapping[str, float]) -> float:
+    if not previous:
+        return 0.0
+    keys = set(previous) | set(current)
+    return sum(abs(previous.get(key, 0.0) - current.get(key, 0.0)) for key in keys) / 2
+
+
+def _rebalance_period(item_date: str, schedule: str) -> str:
+    year, month, _ = item_date.split("-")
+    if schedule == "annual":
+        return year
+    if schedule == "quarterly":
+        quarter = ((int(month) - 1) // 3) + 1
+        return f"{year}-Q{quarter}"
+    return f"{year}-{month}"
