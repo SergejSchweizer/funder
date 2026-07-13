@@ -225,7 +225,7 @@ Idempotency: Re-running evaluation with the same Gold returns and evaluation id 
 
 ### PR17. Evaluation Module: Portfolio Returns And Drawdown Metrics
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 first decision support.
 

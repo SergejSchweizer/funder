@@ -106,7 +106,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, covariance rows, and per-asset feature rows from validated Silver quote history. Gold processes listings with bounded parallelism, defaults to two workers, avoids duplicate symmetric pair calculations, and uses a per-listing Gold run manifest to resume unchanged input snapshots.
 
-`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices and asset metrics today; later evaluation work extends this boundary with drawdowns, efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
+`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
 
 `founder.portfolio` owns optimization constraints and target weights. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers.
 
@@ -126,7 +126,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
 - **Gold**: Portfolio-ready return, covariance, correlation, asset-feature, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
-- **Evaluation**: Return matrices and asset metrics consume Gold inputs and stay separate from market-data ingestion. Portfolio metrics, drawdowns, efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis build on that boundary.
+- **Evaluation**: Return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics consume Gold inputs and stay separate from market-data ingestion. Efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis build on that boundary.
 - **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and at least 95% test coverage before main merges.
@@ -157,7 +157,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 Portfolio evaluation should be reproducible from existing Gold risk inputs and should not require Search, Bronze, EODHD credentials, or broker access. The planned analysis scope is risk-first because the ETF universe is large, return forecasts are noisy, and many UCITS ETF listings are highly correlated.
 
-The evaluation layer computes aligned return matrices and asset-level metrics from Gold return files. It should later add portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, ulcer index, efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
+The evaluation layer computes aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index from Gold return files. It should later add efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
 
 The portfolio layer should compare equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
 

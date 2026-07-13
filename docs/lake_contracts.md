@@ -98,6 +98,8 @@ Gold evaluation datasets include:
 
 Evaluation outputs should include explicit run ids, objective names, annualization settings, risk-free-rate assumptions, constraints, and input dataset identifiers so results can be compared and rebuilt deterministically.
 
+Current portfolio evaluation writes equal-weight or explicit long-only cash-free weight results. Recomputing the same portfolio id replaces that portfolio's return and metric rows while preserving other portfolios in the same evaluation id.
+
 ## How This Fits The Onboarding Flow
 
 Use the deterministic mocked pipeline to see these contracts written end to end:
