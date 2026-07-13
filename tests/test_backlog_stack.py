@@ -516,6 +516,41 @@ def test_gold_pearson_correlation_uses_incremental_calculation() -> None:
     ] == [pytest.approx(1.0)]
 
 
+def test_gold_correlations_use_common_date_intersection_only() -> None:
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-09", "return": 999.0},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 1.0},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-11", "return": 2.0},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-12", "return": 3.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-10", "return": 3.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-11", "return": 2.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-12", "return": 1.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-13", "return": -999.0},
+    ]
+
+    correlations, covariances = build_correlation_and_covariance(return_rows)
+    pearson_edges = build_correlation_edges(return_rows, version="snapshot-1", metric="pearson")
+    spearman_edges = build_correlation_edges(return_rows, version="snapshot-1", metric="spearman")
+
+    pair_correlation = [
+        row["correlation"]
+        for row in correlations
+        if row["left_isin"] == "IE1" and row["right_isin"] == "IE2"
+    ]
+    pair_covariance = [
+        row["covariance"]
+        for row in covariances
+        if row["left_isin"] == "IE1" and row["right_isin"] == "IE2"
+    ]
+    assert pair_correlation == [pytest.approx(-1.0)]
+    assert pair_covariance == [pytest.approx(-1.0)]
+    assert pearson_edges[0]["date_start"] == "2026-07-10"
+    assert pearson_edges[0]["date_end"] == "2026-07-12"
+    assert pearson_edges[0]["n_observations"] == 3
+    assert pearson_edges[0]["value"] == pytest.approx(-1.0)
+    assert spearman_edges[0]["n_observations"] == 3
+
+
 def test_gold_correlation_edges_support_spearman_metric(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     return_rows = [
