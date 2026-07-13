@@ -75,12 +75,10 @@ def _paired_values(
 def covariance(left_values: Sequence[float], right_values: Sequence[float]) -> float:
     if len(left_values) < 2 or len(left_values) != len(right_values):
         return 0.0
-    left_mean = sum(left_values) / len(left_values)
-    right_mean = sum(right_values) / len(right_values)
-    return sum(
-        (left - left_mean) * (right - right_mean)
-        for left, right in zip(left_values, right_values, strict=True)
-    ) / (len(left_values) - 1)
+    state = _OnlineCorrelation()
+    for left, right in zip(left_values, right_values, strict=True):
+        state.update(left, right)
+    return state.sample_covariance()
 
 
 def build_correlation_and_covariance(
@@ -169,21 +167,10 @@ def _correlation_value(
 def _incremental_pearson(left_values: Sequence[float], right_values: Sequence[float]) -> float:
     if len(left_values) < 2 or len(left_values) != len(right_values):
         return 0.0
-    left_mean = 0.0
-    right_mean = 0.0
-    left_m2 = 0.0
-    right_m2 = 0.0
-    comoment = 0.0
-    for count, (left, right) in enumerate(zip(left_values, right_values, strict=True), start=1):
-        left_delta = left - left_mean
-        right_delta = right - right_mean
-        left_mean += left_delta / count
-        right_mean += right_delta / count
-        comoment += left_delta * (right - right_mean)
-        left_m2 += left_delta * (left - left_mean)
-        right_m2 += right_delta * (right - right_mean)
-    denominator = sqrt(left_m2 * right_m2)
-    return 0.0 if denominator == 0 else comoment / denominator
+    state = _OnlineCorrelation()
+    for left, right in zip(left_values, right_values, strict=True):
+        state.update(left, right)
+    return state.value()
 
 
 def _approximate_online_spearman(
@@ -244,6 +231,11 @@ class _OnlineCorrelation:
             return 0.0
         denominator = sqrt(self.left_m2 * self.right_m2)
         return 0.0 if denominator == 0 else self.comoment / denominator
+
+    def sample_covariance(self) -> float:
+        if self.count < 2:
+            return 0.0
+        return self.comoment / (self.count - 1)
 
 
 def _limit_top_correlation_edges(
