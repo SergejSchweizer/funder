@@ -94,7 +94,9 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.paths` owns lake artifact locations. It keeps Bronze, Silver, and Gold path construction deterministic so modules do not hard-code filesystem layouts.
 
-`founder.schemas` owns required table fields. It gives Search, Bronze, coverage, and tests one place to check the shape of table contracts before data moves between layers.
+`founder.schemas` owns dataset contracts. It gives Search, Bronze, Silver, Gold, Evaluation, Portfolio, and tests one registry for dataset ownership, schema versions, required fields, and stable sort keys before data moves between layers.
+
+`founder.run_state` owns shared job manifests. It records deterministic job ids, job type, run id, status, input and output paths, row counts, concurrency, resume markers, and redacted error summaries without replacing module-specific compatibility manifests in one step.
 
 `founder.table_io` owns current table serialization. It reads and writes JSON objects, physical Parquet row tables, and review CSVs behind helper functions so storage details stay out of module logic.
 
@@ -108,9 +110,9 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.gold` owns portfolio-ready risk inputs. It builds daily adjusted-close log returns, incremental Pearson correlations, online sample covariance rows, correlation edge rows, and per-asset feature rows from validated Silver quote history. Gold processes listings with bounded parallelism, defaults to two workers, avoids duplicate symmetric pair calculations, and uses a per-listing Gold run manifest to resume unchanged input snapshots.
 
-`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
+`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD. `founder.evaluation_parts` provides internal package-style boundaries while preserving the public `founder.evaluation` import surface.
 
-`founder.portfolio` owns optimization constraints, target weights, and risk-contribution diagnostics. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers.
+`founder.portfolio` owns optimization constraints, target weights, and risk-contribution diagnostics. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers. `founder.portfolio_parts` provides internal package-style boundaries while preserving the public `founder.portfolio` import surface. Existing optimizers are deterministic baseline decision-support outputs and include structured diagnostics; they are not execution approval by themselves.
 
 `founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
 
@@ -132,6 +134,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and at least 95% test coverage before main merges.
+- **Operations**: Long-running jobs can write shared deterministic job manifests alongside compatibility module manifests.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
 - **Logging**: Shared Founder logging writes uniformly formatted `.logs/` files with debug verbosity and retention.
 - **Run locks**: Stable layer locks under `lake/{bronze,silver,gold}/runs/*.lock` prevent duplicate same-layer commands on one host.
@@ -154,7 +157,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Bronze**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
 - **Silver**: normalized candidates, canonical universe, one quote file per exchange and ISIN, and coverage-ready tables.
 - **Gold**: portfolio-ready returns, correlation, covariance, evaluation metrics, frontier points, backtests, risk inputs, and portfolio weights.
-- **Silver operational datasets**: active universe pointer, bronze plans, bronze runs, coverage, errors, and dataset version metadata stored under focused Silver directories.
+- **Silver operational datasets**: active universe pointer, bronze plans, bronze runs, coverage, errors, shared job manifests, and dataset version metadata stored under focused Silver directories.
 
 ## Portfolio Analysis And Evaluation
 
@@ -163,6 +166,8 @@ Portfolio evaluation should be reproducible from existing Gold risk inputs and s
 The evaluation layer computes aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, ulcer index, efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics from Gold return files.
 
 The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, and maximum diversification today. CVaR-aware target weights remain a tail-risk extension after historical CVaR evaluation. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
+
+Portfolio target-weight outputs include optimizer diagnostics such as optimizer type, status, objective value, covariance condition, missing covariance count, input listing count, and constraint violations. The current optimizer type is `deterministic_baseline`; future solver-backed optimizers must use the same diagnostics contract before any output can be treated as production execution input.
 
 ## Boundaries
 

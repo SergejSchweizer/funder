@@ -70,6 +70,9 @@ class LakePaths:
     def dry_run_summary(self) -> Path:
         return self.silver / "runs" / "dry_run_summary.json"
 
+    def job_manifest(self, job_type: str, run_id: str) -> Path:
+        return self.silver / "runs" / "jobs" / job_type / f"{run_id}.json"
+
     def gold_runs(self) -> Path:
         return self.gold / "runs" / "gold_runs.parquet"
 

@@ -19,6 +19,7 @@ Last reviewed: 2026-07-13
 - [D012. Keep Optimization Constraints And Trade Exports Separate](#d012-keep-optimization-constraints-and-trade-exports-separate)
 - [D013. Store Large Correlation Search As Edge Tables](#d013-store-large-correlation-search-as-edge-tables)
 - [D014. Use Per-Layer Process Locks](#d014-use-per-layer-process-locks)
+- [D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries](#d015-use-dataset-contracts-and-job-manifests-for-refactor-boundaries)
 - [Update Rules](#update-rules)
 
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
@@ -198,6 +199,18 @@ Decision: Use stable OS-backed locks per lake layer: `lake/bronze/runs/bronze.lo
 Consequences: Different layers may still run at the same time when explicitly started, but duplicate Bronze, duplicate Silver, and duplicate Gold writes are blocked. The lock files may remain as metadata after a process exits, but the OS lock is released when the process terminates, avoiding stale file-existence locks.
 
 Update trigger: Revisit if Founder moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole-refresh serialization instead of same-layer serialization.
+
+## D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries
+
+Date: 2026-07-13
+
+Context: The codebase is moving from broad module files toward smaller refactor boundaries while keeping existing lake names, CLI behavior, and compatibility manifests stable.
+
+Decision: Keep dataset ownership, schema versions, required fields, and stable sort keys in a central dataset contract registry. Use shared job manifests for long-running operational runs while preserving existing module-specific manifests during migration. Keep deterministic baseline portfolio optimizers behind a diagnostics contract that distinguishes decision-support outputs from future production solver outputs.
+
+Consequences: Refactors should route new validation through the registry, write shared job manifests for new long-running jobs, and include optimizer diagnostics whenever target weights are written. Existing path strings, lake table names, public imports, and CLI behavior should remain compatible unless a later decision records an explicit migration.
+
+Update trigger: Revisit if dataset schema versions need migrations, job manifests move to a database-backed scheduler, or production solver-backed optimizers replace deterministic baseline objectives.
 
 ## Update Rules
 

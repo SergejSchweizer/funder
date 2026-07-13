@@ -24,7 +24,7 @@ from founder.gold import (
 )
 from founder.paths import LakePaths
 from founder.pipeline import run_dry_run
-from founder.schemas import required_fields, validate_fields
+from founder.schemas import dataset_contract, required_fields, validate_fields, validate_rows
 from founder.search import (
     approve_universe,
     resolve_current_universe,
@@ -57,6 +57,19 @@ def test_lake_schemas_and_paths_cover_backlog_tables(tmp_path) -> None:  # type:
 
     with pytest.raises(ValueError, match="unknown schema"):
         required_fields("unknown")
+
+
+def test_dataset_contract_registry_preserves_required_fields() -> None:
+    contract = dataset_contract("returns")
+
+    assert contract.name == "returns"
+    assert contract.owner == "gold"
+    assert contract.version == 1
+    assert contract.required_fields == required_fields("returns")
+    assert contract.sort_key == ("isin", "exchange", "code", "date")
+    validate_rows("returns", [{field: "value" for field in required_fields("returns")}])
+    with pytest.raises(ValueError, match="unknown dataset contract"):
+        dataset_contract("missing")
 
 
 def test_search_writes_candidates_selects_canonical_and_approves_universe(tmp_path) -> None:  # type: ignore[no-untyped-def]

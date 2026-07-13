@@ -8,6 +8,7 @@ Last reviewed: 2026-07-13
 - [Search And Bronze Module PR Stack](#search-and-bronze-module-pr-stack)
 - [Bronze Process Refactor PR Queue](#bronze-process-refactor-pr-queue)
 - [Portfolio Evaluation And Optimization PR Stack](#portfolio-evaluation-and-optimization-pr-stack)
+- [Architecture Refactor PR Stack](#architecture-refactor-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -404,6 +405,80 @@ Scope: Add a user entry point such as `founder evaluate` that runs evaluation an
 Acceptance: CLI tests cover evaluation-only runs, optimization-enabled runs, selected objective flags, walk-forward and rebalancing flags, missing Gold input handling, deterministic dry-run outputs, and clear summaries of generated Gold datasets.
 
 Idempotency: Re-running the same command with the same evaluation id and unchanged inputs produces the same Gold outputs and summary without duplicate rows or API calls.
+
+## Architecture Refactor PR Stack
+
+Priority policy: Keep this stack behavior-preserving first. Each PR must be small enough to review by module boundary, must preserve existing lake dataset names and CLI behavior unless its scope explicitly says otherwise, and must pass the existing PR quality gate before the next PR starts.
+
+### PR30. Gold Pair Statistics Boundary Refactor
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+
+Priority: P0 scalability and correctness guardrail.
+
+Depends on: PR29.
+
+Scope: Split `founder.gold` pair-statistic logic into focused internal units for return indexing, common-date pairing, online moments, Pearson/Spearman/covariance calculation, edge limiting, and deterministic pair-row construction. Preserve public Gold function names, CLI output, lake paths, schemas, worker concurrency behavior, and resume manifests. Add one shared pair-iteration path so dense correlation, covariance, and edge outputs cannot drift in ordering or same-ISIN filtering rules.
+
+Acceptance: Tests prove unchanged outputs for existing return, covariance, correlation, Spearman edge, top-k, threshold, same-ISIN skip, concurrency, and resume fixtures. Tests also prove the shared pair iterator emits upper-triangle pairs deterministically, never recomputes symmetric pairs, and exposes enough metadata for both dense rows and edge rows.
+
+Idempotency: Refactoring does not create new lake datasets or mutate existing data. Re-running Gold with unchanged Silver quotes produces the same return, covariance, correlation, feature, edge, and manifest rows as before the refactor.
+
+### PR31. Dataset Contract Registry Refactor
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+
+Priority: P0 schema drift prevention.
+
+Depends on: PR30.
+
+Scope: Introduce a central dataset contract registry that owns dataset names, schema versions, required fields, optional fields, stable sort keys, and owning module metadata for Search, Bronze, Silver, Gold, Evaluation, and Portfolio outputs. Keep existing path helpers and `required_fields` behavior compatible while routing them through the registry. Add validation helpers that writers can call before writing rows, but migrate writer call sites only where the touched module already has focused tests.
+
+Acceptance: Tests verify every existing dataset contract currently referenced by paths, schemas, docs, and CLI summaries is present in the registry; required-field results remain backwards-compatible; registry lookup is deterministic; duplicate dataset names or fields fail fast; and row validation reports missing fields without reading credentials or lake data.
+
+Idempotency: Registry lookups and validation are pure. Adding the registry must not rewrite lake files, rename datasets, change path strings, or modify existing CLI summaries except for deterministic error messages from validation helpers.
+
+### PR32. Evaluation And Portfolio Package Boundary Refactor
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+
+Priority: P1 maintainability for analysis and optimizer growth.
+
+Depends on: PR31.
+
+Scope: Convert the broad Evaluation and Portfolio modules into package-style boundaries while preserving import compatibility from `founder.evaluation` and `founder.portfolio`. Move matrix, asset metric, portfolio return, drawdown, walk-forward, rebalance, frontier, tail-risk, constraint, objective, risk-parity, HRP, maximum-diversification, and writer helpers into focused internal modules. Keep public functions re-exported from the original module names so existing CLI and tests continue to work.
+
+Acceptance: Tests prove existing imports, CLI evaluation behavior, dry-run integration, optimizer outputs, and Gold writer paths remain unchanged. Module-level tests cover that internal packages do not import Search, Bronze, Silver, CLI, or config modules, preserving architecture direction.
+
+Idempotency: The refactor is behavior-preserving and writes no data by itself. Re-running evaluation and portfolio commands with unchanged Gold inputs produces the same output rows, file paths, and summaries as before the refactor.
+
+### PR33. Unified Run State And Job Manifest Refactor
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+
+Priority: P1 operations and dashboard readiness.
+
+Depends on: PR32.
+
+Scope: Add a shared run-state contract for long-running Search, Bronze, Silver, Gold, Evaluation, and Portfolio jobs. Record deterministic job manifests with job type, run id, status, timestamps, input paths, output paths, row counts, concurrency, resume marker, and non-secret error summary. Keep existing module-specific manifests readable and write compatibility adapters instead of replacing them in one step. Expose a small internal service API that CLI commands can use without embedding job-state formatting logic.
+
+Acceptance: Tests cover manifest creation for successful, partial, failed, and resumed jobs; token redaction; deterministic manifest ids; stable JSON ordering; compatibility with existing Bronze and Gold run metadata; and CLI summaries sourced from the shared run-state API. Tests prove failed or resumed jobs do not duplicate provider, Silver, Gold, Evaluation, or Portfolio rows.
+
+Idempotency: Re-running the same job id with unchanged inputs updates only deterministic status and summary fields allowed by the manifest contract, preserves prior error evidence, and never creates duplicate lake rows or overlapping active-job locks.
+
+### PR34. Production Optimizer Interface And Diagnostics Refactor
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+
+Priority: P2 portfolio trust and future solver integration.
+
+Depends on: PR33.
+
+Scope: Separate deterministic baseline optimizers from future production solver-backed optimizers behind a stable optimizer interface. Add structured diagnostics for feasibility, objective value, constraint violations, covariance conditioning, input coverage, turnover estimate, and optimizer status. Preserve existing equal-weight, minimum-variance, maximum-Sharpe, target-return minimum-variance, risk-parity, HRP, maximum-diversification, frontier, and CVaR outputs while adding diagnostics rows or metadata through explicit Gold contracts.
+
+Acceptance: Tests cover identical target weights for existing deterministic optimizers, deterministic diagnostics for feasible and infeasible cases, covariance warning thresholds, missing-input coverage warnings, allocation-bound violations, and CLI summaries that distinguish baseline results from production-ready solver results. Docs state that baseline objectives are deterministic decision-support outputs, not execution approval.
+
+Idempotency: Optimizer diagnostics are deterministic for unchanged inputs and constraints. Re-running an optimization id overwrites or validates the same target-weight and diagnostic outputs without changing Search, Bronze, Silver, Gold return, or Evaluation datasets.
 
 ## Future Work After Finalization
 

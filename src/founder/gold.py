@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,6 +10,7 @@ from math import log, sqrt
 from typing import Any
 
 from founder.paths import LakePaths
+from founder.run_state import build_job_manifest, write_job_manifest
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ListingKey = tuple[str, str, str]
@@ -28,6 +29,17 @@ class GoldListingResult:
     covariances: list[JsonRow]
     features: list[JsonRow]
     manifest: JsonRow
+
+
+@dataclass(frozen=True)
+class PairObservation:
+    left: ListingKey
+    right: ListingKey
+    left_id: int
+    right_id: int
+    dates: tuple[str, ...]
+    left_values: tuple[float, ...]
+    right_values: tuple[float, ...]
 
 
 def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
@@ -85,16 +97,13 @@ def build_correlation_and_covariance(
     return_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     returns_by_listing = _index_returns(return_rows)
-    listings = tuple(sorted(returns_by_listing))
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
-    for left_index, left in enumerate(listings):
-        for right in listings[left_index:]:
-            left_values, right_values = _paired_indexed_values(returns_by_listing, left, right)
-            cov = covariance(left_values, right_values)
-            corr = _incremental_pearson(left_values, right_values)
-            correlations.extend(_symmetric_pair_rows(left, right, "correlation", corr))
-            covariances.extend(_symmetric_pair_rows(left, right, "covariance", cov))
+    for pair in _iter_pair_observations(returns_by_listing, include_self=True):
+        cov = covariance(pair.left_values, pair.right_values)
+        corr = _incremental_pearson(pair.left_values, pair.right_values)
+        correlations.extend(_symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
+        covariances.extend(_symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
     return _sort_pair_rows(correlations), _sort_pair_rows(covariances)
 
 
@@ -114,37 +123,33 @@ def build_correlation_edges(
         raise ValueError("top_k_per_left must be positive")
 
     returns_by_listing = _index_returns(return_rows)
-    listings = tuple(sorted(returns_by_listing))
-    listing_ids = {listing: index for index, listing in enumerate(listings)}
     rows: list[JsonRow] = []
-    for left_index, left in enumerate(listings):
-        for right in listings[left_index + 1 :]:
-            if left[0] == right[0]:
-                continue
-            dates = sorted(set(returns_by_listing[left]) & set(returns_by_listing[right]))
-            left_values = [returns_by_listing[left][item] for item in dates]
-            right_values = [returns_by_listing[right][item] for item in dates]
-            corr = _correlation_value(left_values, right_values, metric)
-            if min_abs_correlation is not None and abs(corr) < min_abs_correlation:
-                continue
-            rows.append(
-                {
-                    "version": version,
-                    "metric": metric,
-                    "left_id": listing_ids[left],
-                    "right_id": listing_ids[right],
-                    "left_isin": left[0],
-                    "left_exchange": left[1],
-                    "left_code": left[2],
-                    "right_isin": right[0],
-                    "right_exchange": right[1],
-                    "right_code": right[2],
-                    "date_start": dates[0] if dates else "",
-                    "date_end": dates[-1] if dates else "",
-                    "n_observations": len(dates),
-                    "value": corr,
-                }
-            )
+    for pair in _iter_pair_observations(
+        returns_by_listing,
+        include_self=False,
+        skip_same_isin=True,
+    ):
+        corr = _correlation_value(pair.left_values, pair.right_values, metric)
+        if min_abs_correlation is not None and abs(corr) < min_abs_correlation:
+            continue
+        rows.append(
+            {
+                "version": version,
+                "metric": metric,
+                "left_id": pair.left_id,
+                "right_id": pair.right_id,
+                "left_isin": pair.left[0],
+                "left_exchange": pair.left[1],
+                "left_code": pair.left[2],
+                "right_isin": pair.right[0],
+                "right_exchange": pair.right[1],
+                "right_code": pair.right[2],
+                "date_start": pair.dates[0] if pair.dates else "",
+                "date_end": pair.dates[-1] if pair.dates else "",
+                "n_observations": len(pair.dates),
+                "value": corr,
+            }
+        )
     rows = _limit_top_correlation_edges(rows, top_k_per_left)
     return sorted(
         rows,
@@ -307,6 +312,32 @@ def _index_quotes(quote_rows: Sequence[Mapping[str, Any]]) -> QuotesByListing:
     return indexed
 
 
+def _iter_pair_observations(
+    returns_by_listing: ReturnsByListing,
+    *,
+    include_self: bool,
+    skip_same_isin: bool = False,
+) -> Iterator[PairObservation]:
+    listings = tuple(sorted(returns_by_listing))
+    for left_id, left in enumerate(listings):
+        right_start = left_id if include_self else left_id + 1
+        for right_id, right in enumerate(listings[right_start:], start=right_start):
+            if skip_same_isin and left[0] == right[0]:
+                continue
+            left_rows = returns_by_listing[left]
+            right_rows = returns_by_listing[right]
+            dates = tuple(sorted(set(left_rows) & set(right_rows)))
+            yield PairObservation(
+                left=left,
+                right=right,
+                left_id=left_id,
+                right_id=right_id,
+                dates=dates,
+                left_values=tuple(left_rows[item] for item in dates),
+                right_values=tuple(right_rows[item] for item in dates),
+            )
+
+
 def _paired_indexed_values(
     returns_by_listing: ReturnsByListing, left: ListingKey, right: ListingKey
 ) -> tuple[list[float], list[float]]:
@@ -435,13 +466,13 @@ def _gold_listing_worker(args: tuple[LakePaths, ListingKey, str, str, int]) -> G
     )
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
-    left_index = _WORKER_LISTINGS.index(left)
-    for right in _WORKER_LISTINGS[left_index:]:
-        left_values, right_values = _paired_indexed_values(_WORKER_RETURNS_BY_LISTING, left, right)
-        cov = covariance(left_values, right_values)
-        corr = _incremental_pearson(left_values, right_values)
-        correlations.extend(_symmetric_pair_rows(left, right, "correlation", corr))
-        covariances.extend(_symmetric_pair_rows(left, right, "covariance", cov))
+    for pair in _iter_pair_observations(_WORKER_RETURNS_BY_LISTING, include_self=True):
+        if pair.left != left:
+            continue
+        cov = covariance(pair.left_values, pair.right_values)
+        corr = _incremental_pearson(pair.left_values, pair.right_values)
+        correlations.extend(_symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
+        covariances.extend(_symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
 
     write_rows(paths.gold_returns(left[1], left[0]), return_rows)
     if feature_rows:
@@ -587,6 +618,26 @@ def write_gold_inputs(
     manifest_rows = [result.manifest for result in results if result.manifest]
     if manifest_rows:
         write_rows(paths.gold_runs(), manifest_rows)
+    write_job_manifest(
+        paths,
+        build_job_manifest(
+            job_type="gold",
+            run_id=f"gold-{input_snapshot_date or 'empty'}",
+            status="completed",
+            started_at=completed_at,
+            finished_at=completed_at,
+            input_paths=[paths.silver / "quotes"],
+            output_paths=[paths.gold_runs(), paths.gold / "returns", paths.gold / "correlation"],
+            row_counts={
+                "returns": sum(len(result.returns) for result in results),
+                "correlations": sum(len(result.correlations) for result in results),
+                "covariances": sum(len(result.covariances) for result in results),
+                "features": sum(len(result.features) for result in results),
+            },
+            concurrency=workers,
+            resume_marker=input_snapshot_date,
+        ),
+    )
     return (
         [row for result in results for row in result.returns],
         _sort_pair_rows([row for result in results for row in result.correlations]),
