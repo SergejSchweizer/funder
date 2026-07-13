@@ -225,7 +225,7 @@ Idempotency: Re-running evaluation with the same Gold returns and evaluation id 
 
 ### PR17. Evaluation Module: Portfolio Returns And Drawdown Metrics
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/24.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/24.
 
 Priority: P0 first decision support.
 
