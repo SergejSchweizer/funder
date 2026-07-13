@@ -295,7 +295,7 @@ Idempotency: Re-running the same Spearman edge build for a version replaces stal
 
 ### PR29. Gold Correlation Edges: Skip Same-ISIN Pairs
 
-Git status: in progress. PR: local branch `feat/skip-same-isin-correlation-edges`.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/40.
 
 Priority: P0 scalability and duplicate-instrument hygiene.
 
