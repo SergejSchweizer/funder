@@ -159,7 +159,7 @@ Portfolio evaluation should be reproducible from existing Gold risk inputs and s
 
 The evaluation layer computes aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index from Gold return files. It should later add efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
 
-The portfolio layer should compare equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
+The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, and target-return minimum variance today. It should later add risk parity, hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
 
 ## Boundaries
 

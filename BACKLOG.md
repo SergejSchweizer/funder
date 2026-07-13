@@ -239,7 +239,7 @@ Idempotency: Recomputing the same portfolio id from the same return matrix and w
 
 ### PR18. Portfolio Module: Core Optimization Objectives And Target Weights
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/26.
 
 Priority: P0 first optimizer.
 
@@ -249,7 +249,7 @@ Scope: Extend `founder.portfolio` from constraint validation into deterministic 
 
 Acceptance: Tests cover objective selection, covariance-matrix use, expected-return vector use, full-investment constraints, long-only constraints, allocation caps, risk-free-rate handling, infeasible constraints, deterministic tie-breaking, and Gold target-weight output rows with objective metadata.
 
-Idempotency: Re-running the same optimization id with unchanged evaluation inputs and constraints produces the same target-weight rows and does not modify Search, Bronze, Bronze, or Silver data.
+Idempotency: Re-running the same optimization id with unchanged evaluation inputs and constraints produces the same target-weight rows and does not modify Search, Bronze, Silver, or Gold evaluation data.
 
 ### PR19. Portfolio Module: Risk Parity And Equal Risk Contribution
 

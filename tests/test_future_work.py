@@ -8,12 +8,17 @@ from founder.docs_refresh import (
     main,
     write_docs_refresh_report,
 )
+from founder.paths import LakePaths
 from founder.portfolio import (
     PortfolioConstraints,
+    build_target_weight_rows,
     equal_weight_seed,
     minimum_variance_two_asset_weight,
+    optimize_portfolio,
     validate_weights,
+    write_optimized_weights,
 )
+from founder.table_io import read_rows, write_rows
 from founder.trading import prepare_flatex_orders, write_flatex_orders
 from founder.universe_review import currency_exposure, missing_isin_rows, review_universe
 
@@ -70,6 +75,236 @@ def test_portfolio_constraints_reject_invalid_inputs() -> None:
         constraints=PortfolioConstraints(max_weight=0.8),
     )
     assert equal_split == {"left": 0.5, "right": 0.5}
+
+
+def test_portfolio_objectives_select_deterministic_weights() -> None:
+    listings = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB"},
+    ]
+    covariance_rows = [
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.00,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.00,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.04,
+        },
+    ]
+    expected_returns = {"IE1": 0.01, "IE2": 0.03}
+    constraints = PortfolioConstraints(max_weight=0.8)
+
+    assert optimize_portfolio(
+        listings,
+        covariance_rows,
+        expected_returns,
+        objective="equal_weight",
+        constraints=constraints,
+    ) == {"IE1": 0.5, "IE2": 0.5}
+    assert optimize_portfolio(
+        listings,
+        covariance_rows,
+        expected_returns,
+        objective="minimum_variance",
+        constraints=constraints,
+        grid_step=0.1,
+    ) == {"IE1": 0.8, "IE2": 0.2}
+    assert optimize_portfolio(
+        listings,
+        covariance_rows,
+        expected_returns,
+        objective="maximum_sharpe",
+        constraints=constraints,
+        risk_free_rate=0.005,
+        grid_step=0.1,
+    ) == {"IE1": 0.4, "IE2": 0.6}
+    assert optimize_portfolio(
+        listings,
+        covariance_rows,
+        expected_returns,
+        objective="target_return_minimum_variance",
+        constraints=constraints,
+        target_return=0.02,
+        grid_step=0.1,
+    ) == {"IE1": 0.5, "IE2": 0.5}
+
+
+def test_portfolio_objectives_reject_infeasible_constraints() -> None:
+    listings = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB"},
+    ]
+    with pytest.raises(ValueError, match="no feasible weights"):
+        optimize_portfolio(
+            listings,
+            [],
+            {"IE1": 0.01, "IE2": 0.02},
+            objective="minimum_variance",
+            constraints=PortfolioConstraints(max_weight=0.4),
+            grid_step=0.1,
+        )
+    with pytest.raises(ValueError, match="target_return is required"):
+        optimize_portfolio(
+            listings,
+            [],
+            {"IE1": 0.01, "IE2": 0.02},
+            objective="target_return_minimum_variance",
+            constraints=PortfolioConstraints(max_weight=1.0),
+        )
+    with pytest.raises(ValueError, match="satisfy target_return"):
+        optimize_portfolio(
+            listings,
+            [],
+            {"IE1": 0.01, "IE2": 0.02},
+            objective="target_return_minimum_variance",
+            constraints=PortfolioConstraints(max_weight=1.0),
+            target_return=0.03,
+            grid_step=0.1,
+        )
+
+
+def test_portfolio_objectives_use_bounded_large_universe_fallback() -> None:
+    listings = [
+        {"isin": f"IE{index}", "exchange": "XETRA", "code": f"ETF{index}"} for index in range(1, 7)
+    ]
+
+    weights = optimize_portfolio(
+        listings,
+        [],
+        {str(row["isin"]): 0.01 for row in listings},
+        objective="minimum_variance",
+        constraints=PortfolioConstraints(max_weight=0.5),
+        grid_step=0.01,
+    )
+
+    assert set(weights) == {"IE1", "IE2", "IE3", "IE4", "IE5", "IE6"}
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+
+def test_optimized_weight_rows_and_gold_write_are_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    matrix_rows = [
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE1",
+            "exchange": "XETRA",
+            "code": "AAA",
+            "return": 0.01,
+        },
+        {
+            "evaluation_id": "eval-1",
+            "date": "2026-07-11",
+            "isin": "IE2",
+            "exchange": "AS",
+            "code": "BBB",
+            "return": 0.03,
+        },
+    ]
+    covariance_rows = [
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.01,
+        },
+        {
+            "left_isin": "IE1",
+            "left_exchange": "XETRA",
+            "left_code": "AAA",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.00,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE1",
+            "right_exchange": "XETRA",
+            "right_code": "AAA",
+            "covariance": 0.00,
+        },
+        {
+            "left_isin": "IE2",
+            "left_exchange": "AS",
+            "left_code": "BBB",
+            "right_isin": "IE2",
+            "right_exchange": "AS",
+            "right_code": "BBB",
+            "covariance": 0.04,
+        },
+    ]
+    write_rows(paths.gold_return_matrix("eval-1"), matrix_rows)
+    write_rows(paths.gold_covariance("XETRA", "IE1"), covariance_rows[:2])
+    write_rows(paths.gold_covariance("AS", "IE2"), covariance_rows[2:])
+    constraints = PortfolioConstraints(max_weight=0.8)
+
+    rows = build_target_weight_rows(
+        [{"isin": "IE1", "exchange": "XETRA", "code": "AAA"}],
+        {"IE1": 1.0},
+        evaluation_id="eval-1",
+        objective="equal_weight",
+        portfolio_id="baseline",
+        constraints=PortfolioConstraints(max_weight=1.0),
+    )
+    assert rows[0]["constraints"] == (
+        '{"long_only": true, "max_weight": 1.0, "min_quote_coverage": 0.95, "min_weight": 0.0}'
+    )
+
+    first = write_optimized_weights(
+        paths,
+        evaluation_id="eval-1",
+        objective="minimum_variance",
+        portfolio_id="min-var",
+        constraints=constraints,
+        grid_step=0.1,
+    )
+    second = write_optimized_weights(
+        paths,
+        evaluation_id="eval-1",
+        objective="minimum_variance",
+        portfolio_id="min-var",
+        constraints=constraints,
+        grid_step=0.1,
+    )
+
+    assert first == second
+    assert [row["weight"] for row in first] == [0.8, 0.2]
+    assert read_rows(paths.gold_optimized_weights("minimum_variance", "eval-1")) == first
 
 
 def test_flatex_orders_are_deterministic_and_exportable(tmp_path) -> None:  # type: ignore[no-untyped-def]
