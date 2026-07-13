@@ -412,7 +412,7 @@ Priority policy: Keep this stack behavior-preserving first. Each PR must be smal
 
 ### PR30. Gold Pair Statistics Boundary Refactor
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/44.
 
 Priority: P0 scalability and correctness guardrail.
 
@@ -426,7 +426,7 @@ Idempotency: Refactoring does not create new lake datasets or mutate existing da
 
 ### PR31. Dataset Contract Registry Refactor
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/44.
 
 Priority: P0 schema drift prevention.
 
@@ -440,7 +440,7 @@ Idempotency: Registry lookups and validation are pure. Adding the registry must 
 
 ### PR32. Evaluation And Portfolio Package Boundary Refactor
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/44.
 
 Priority: P1 maintainability for analysis and optimizer growth.
 
@@ -454,7 +454,7 @@ Idempotency: The refactor is behavior-preserving and writes no data by itself. R
 
 ### PR33. Unified Run State And Job Manifest Refactor
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/44.
 
 Priority: P1 operations and dashboard readiness.
 
@@ -468,7 +468,7 @@ Idempotency: Re-running the same job id with unchanged inputs updates only deter
 
 ### PR34. Production Optimizer Interface And Diagnostics Refactor
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/44.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/44.
 
 Priority: P2 portfolio trust and future solver integration.
 
