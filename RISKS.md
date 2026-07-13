@@ -13,6 +13,7 @@ Last reviewed: 2026-07-13
 - [R006. ETF Universe Discovery Can Be Incomplete or Duplicated](#r006-etf-universe-discovery-can-be-incomplete-or-duplicated)
 - [R007. Risk-Aware Weights Can Be Misleading Without Clean Inputs And Evaluation](#r007-risk-aware-weights-can-be-misleading-without-clean-inputs-and-evaluation)
 - [R008. Search And Bronze Contract Drift Can Corrupt The Lake](#r008-search-and-bronze-contract-drift-can-corrupt-the-lake)
+- [R009. Dense Correlation Storage Can Become Unqueryable At Large Universe Size](#r009-dense-correlation-storage-can-become-unqueryable-at-large-universe-size)
 - [Update Rules](#update-rules)
 
 This file tracks active operational, data correctness, and architecture risks. Keep it aligned with `AGENTS.md` and project history when commits introduce or retire meaningful risks.
@@ -84,6 +85,14 @@ Status: Active
 Signal: The Search module selects the canonical universe, while the Bronze module will store full data for every selected ISIN.
 
 Mitigation: Keep the module boundary contract versioned and tested. Bronze must reject duplicate ISINs, missing ISINs, missing symbols, and schema mismatches before writing lake data.
+
+## R009. Dense Correlation Storage Can Become Unqueryable At Large Universe Size
+
+Status: Active
+
+Signal: The target universe may reach 150,000 ISINs, which implies billions of possible pair statistics.
+
+Mitigation: Store scalable pair-search outputs as bucketed `gold/correlation_edges` rows with upper-triangle pairs, common-date observation metadata, threshold filtering, and top-k limiting before adding dense matrix or sparse-array storage.
 
 ## Update Rules
 

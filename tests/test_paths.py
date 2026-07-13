@@ -37,6 +37,9 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_covariance("XETRA", "IE0000000001") == Path(
         "lake/gold/covariance/XETRA/IE0000000001.parquet"
     )
+    assert paths.gold_correlation_edges("snapshot-1", "pearson", 7) == Path(
+        "lake/gold/correlation_edges/version=snapshot-1/metric=pearson/bucket=007.parquet"
+    )
     assert paths.gold_asset_features("XETRA", "IE0000000001") == Path(
         "lake/gold/features/XETRA/IE0000000001.parquet"
     )

@@ -17,6 +17,7 @@ Last reviewed: 2026-07-13
 - [D010. Use Two Quality Gate Layers](#d010-use-two-quality-gate-layers)
 - [D011. Write Physical Parquet Lake Tables](#d011-write-physical-parquet-lake-tables)
 - [D012. Keep Optimization Constraints And Trade Exports Separate](#d012-keep-optimization-constraints-and-trade-exports-separate)
+- [D013. Store Large Correlation Search As Edge Tables](#d013-store-large-correlation-search-as-edge-tables)
 - [Update Rules](#update-rules)
 
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
@@ -172,6 +173,18 @@ Decision: Keep portfolio constraint validation in `founder.portfolio`, universe 
 Consequences: Optimization logic can evolve independently from Flatex formatting. Missing-ISIN, currency, and survivorship-bias review summaries stay visible before weights are trusted or exported.
 
 Update trigger: Revisit if a real optimizer, broker API integration, or multi-broker export format is added.
+
+## D013. Store Large Correlation Search As Edge Tables
+
+Date: 2026-07-13
+
+Context: Correlation analysis may need to cover up to 150,000 ISINs. A dense matrix is expensive to query and hard to filter, while most product workflows need pair search, thresholds, top-k related instruments, and common-observation metadata.
+
+Decision: Keep the existing per-ISIN Gold correlation and covariance baseline for small inputs, and add `gold/correlation_edges` as the scalable pair-search contract. Correlation edge rows store only upper-triangle pairs with deterministic listing ids, metric/version fields, common date range, common observation count, and bucketed Parquet output.
+
+Consequences: Large-universe work should query `correlation_edges` instead of treating dense matrices as the primary persisted artifact. Future DuckDB, Polars, or sparse-array work should preserve the edge schema or document an explicit migration.
+
+Update trigger: Revisit if the project adopts a different primary matrix store, changes bucket strategy, or requires exact random-access dense matrix slices as the main workload.
 
 ## Update Rules
 

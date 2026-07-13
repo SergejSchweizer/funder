@@ -265,6 +265,20 @@ Acceptance: Tests cover diagonal covariance, correlated assets, zero-variance as
 
 Idempotency: Re-running the same risk-parity optimization id with unchanged covariance and constraints produces the same risk contribution and target-weight Gold rows.
 
+### PR27. Gold Correlation Edge Dataset Baseline
+
+Git status: merged. PR: local branch `pr-gold-correlation-edges`.
+
+Priority: P0 scalability foundation.
+
+Depends on: PR18.
+
+Scope: Add a compact Gold `correlation_edges` dataset for pair search and filtering without materializing dense `150k x 150k` matrices as the primary storage contract. Store upper-triangle pairs only, include deterministic listing ids, metric/version metadata, common date range, common observation count, and bucketed Parquet files.
+
+Acceptance: Tests cover deterministic edge ordering, threshold filtering, top-k limiting, common-date observation metadata, upper-triangle-only output, bucketed Gold paths, and idempotent rewrites.
+
+Idempotency: Re-running the same edge build for a version and metric replaces stale bucket files and writes the same rows for unchanged returns and options.
+
 ### PR20. Evaluation Module: Walk-Forward Backtesting
 
 Git status: not started. PR: TBD.

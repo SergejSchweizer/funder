@@ -104,7 +104,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
-`founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, covariance rows, and per-asset feature rows from validated Silver quote history. Gold processes listings with bounded parallelism, defaults to two workers, avoids duplicate symmetric pair calculations, and uses a per-listing Gold run manifest to resume unchanged input snapshots.
+`founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, covariance rows, correlation edge rows, and per-asset feature rows from validated Silver quote history. Gold processes listings with bounded parallelism, defaults to two workers, avoids duplicate symmetric pair calculations, and uses a per-listing Gold run manifest to resume unchanged input snapshots.
 
 `founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
 
@@ -125,7 +125,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 - **Discovery**: EODHD search and exchange symbol-list enumeration identify ETF and fund universes by ticker, name, ISIN, exchange, and type.
 - **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
-- **Gold**: Portfolio-ready return, covariance, correlation, asset-feature, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
+- **Gold**: Portfolio-ready return, covariance, correlation, correlation-edge, asset-feature, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
 - **Evaluation**: Return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics consume Gold inputs and stay separate from market-data ingestion. Efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis build on that boundary.
 - **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.

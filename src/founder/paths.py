@@ -82,6 +82,15 @@ class LakePaths:
     def gold_covariance(self, exchange: str, isin: str) -> Path:
         return self.gold / "covariance" / exchange / f"{isin}.parquet"
 
+    def gold_correlation_edges(self, version: str, metric: str, bucket: int) -> Path:
+        return (
+            self.gold
+            / "correlation_edges"
+            / f"version={version}"
+            / f"metric={metric}"
+            / f"bucket={bucket:03d}.parquet"
+        )
+
     def gold_asset_features(self, exchange: str, isin: str) -> Path:
         return self.gold / "features" / exchange / f"{isin}.parquet"
 

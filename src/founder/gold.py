@@ -107,6 +107,118 @@ def build_correlation_and_covariance(
     return _sort_pair_rows(correlations), _sort_pair_rows(covariances)
 
 
+def build_correlation_edges(
+    return_rows: Sequence[Mapping[str, Any]],
+    *,
+    version: str,
+    metric: str = "pearson",
+    min_abs_correlation: float | None = None,
+    top_k_per_left: int | None = None,
+) -> list[JsonRow]:
+    if metric != "pearson":
+        raise ValueError(f"unsupported correlation edge metric: {metric}")
+    if min_abs_correlation is not None and not 0 <= min_abs_correlation <= 1:
+        raise ValueError("min_abs_correlation must be in [0, 1]")
+    if top_k_per_left is not None and top_k_per_left < 1:
+        raise ValueError("top_k_per_left must be positive")
+
+    returns_by_listing = _index_returns(return_rows)
+    listings = tuple(sorted(returns_by_listing))
+    listing_ids = {listing: index for index, listing in enumerate(listings)}
+    rows: list[JsonRow] = []
+    for left_index, left in enumerate(listings):
+        for right in listings[left_index + 1 :]:
+            dates = sorted(set(returns_by_listing[left]) & set(returns_by_listing[right]))
+            left_values = [returns_by_listing[left][item] for item in dates]
+            right_values = [returns_by_listing[right][item] for item in dates]
+            left_var = covariance(left_values, left_values)
+            right_var = covariance(right_values, right_values)
+            cov = covariance(left_values, right_values)
+            corr = 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+            if min_abs_correlation is not None and abs(corr) < min_abs_correlation:
+                continue
+            rows.append(
+                {
+                    "version": version,
+                    "metric": metric,
+                    "left_id": listing_ids[left],
+                    "right_id": listing_ids[right],
+                    "left_isin": left[0],
+                    "left_exchange": left[1],
+                    "left_code": left[2],
+                    "right_isin": right[0],
+                    "right_exchange": right[1],
+                    "right_code": right[2],
+                    "date_start": dates[0] if dates else "",
+                    "date_end": dates[-1] if dates else "",
+                    "n_observations": len(dates),
+                    "value": corr,
+                }
+            )
+    rows = _limit_top_correlation_edges(rows, top_k_per_left)
+    return sorted(
+        rows,
+        key=lambda row: (
+            int(row["left_id"]),
+            -abs(float(row["value"])),
+            int(row["right_id"]),
+        ),
+    )
+
+
+def _limit_top_correlation_edges(
+    rows: Sequence[JsonRow], top_k_per_left: int | None
+) -> list[JsonRow]:
+    if top_k_per_left is None:
+        return list(rows)
+    by_left: dict[int, list[JsonRow]] = {}
+    for row in rows:
+        by_left.setdefault(int(row["left_id"]), []).append(row)
+    limited: list[JsonRow] = []
+    for left_id in sorted(by_left):
+        limited.extend(
+            sorted(
+                by_left[left_id],
+                key=lambda row: (-abs(float(row["value"])), int(row["right_id"])),
+            )[:top_k_per_left]
+        )
+    return limited
+
+
+def write_correlation_edges(
+    paths: LakePaths,
+    return_rows: Sequence[Mapping[str, Any]],
+    *,
+    version: str,
+    metric: str = "pearson",
+    min_abs_correlation: float | None = None,
+    top_k_per_left: int | None = None,
+    bucket_count: int = 128,
+) -> list[JsonRow]:
+    if bucket_count < 1:
+        raise ValueError("bucket_count must be positive")
+    rows = build_correlation_edges(
+        return_rows,
+        version=version,
+        metric=metric,
+        min_abs_correlation=min_abs_correlation,
+        top_k_per_left=top_k_per_left,
+    )
+    base = paths.gold / "correlation_edges" / f"version={version}" / f"metric={metric}"
+    if base.exists():
+        for stale_path in base.glob("bucket=*.parquet"):
+            stale_path.unlink()
+    by_bucket: dict[int, list[JsonRow]] = {}
+    for row in rows:
+        bucket = int(row["left_id"]) % bucket_count
+        row_with_bucket = dict(row)
+        row_with_bucket["bucket"] = bucket
+        by_bucket.setdefault(bucket, []).append(row_with_bucket)
+    for bucket, bucket_rows in sorted(by_bucket.items()):
+        write_rows(paths.gold_correlation_edges(version, metric, bucket), bucket_rows)
+    return [row for bucket in sorted(by_bucket) for row in by_bucket[bucket]]
+
+
 def _index_returns(return_rows: Sequence[Mapping[str, Any]]) -> ReturnsByListing:
     indexed: ReturnsByListing = {}
     for row in return_rows:

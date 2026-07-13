@@ -14,7 +14,13 @@ from founder.bronze import (
     write_bronze_manifests,
     write_quotes_to_bronze,
 )
-from founder.gold import build_correlation_and_covariance, build_returns, write_gold_inputs
+from founder.gold import (
+    build_correlation_and_covariance,
+    build_correlation_edges,
+    build_returns,
+    write_correlation_edges,
+    write_gold_inputs,
+)
 from founder.paths import LakePaths
 from founder.pipeline import run_dry_run
 from founder.schemas import required_fields, validate_fields
@@ -393,6 +399,38 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
     assert read_rows(paths.gold_runs())[0]["input_last_quote_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_snapshot_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_listing_count"] == 2
+
+
+def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 0.01},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-11", "return": 0.02},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-12", "return": 0.03},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-10", "return": 0.03},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-11", "return": 0.02},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-12", "return": 0.01},
+    ]
+
+    edges = build_correlation_edges(return_rows, version="snapshot-1", top_k_per_left=1)
+    written = write_correlation_edges(
+        paths,
+        return_rows,
+        version="snapshot-1",
+        min_abs_correlation=0.5,
+        top_k_per_left=1,
+        bucket_count=2,
+    )
+
+    assert [(row["left_isin"], row["right_isin"]) for row in edges] == [("IE1", "IE2")]
+    assert written[0]["version"] == "snapshot-1"
+    assert written[0]["metric"] == "pearson"
+    assert written[0]["left_id"] < written[0]["right_id"]
+    assert written[0]["date_start"] == "2026-07-10"
+    assert written[0]["date_end"] == "2026-07-12"
+    assert written[0]["n_observations"] == 3
+    assert written[0]["value"] == pytest.approx(-1.0)
+    assert read_rows(paths.gold_correlation_edges("snapshot-1", "pearson", 0)) == written
 
 
 def test_silver_writes_are_parallelized_by_listing(tmp_path) -> None:  # type: ignore[no-untyped-def]
