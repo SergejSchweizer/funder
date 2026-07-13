@@ -162,7 +162,7 @@ Portfolio analysis and evaluation computations include:
 
 The first trusted portfolio candidates should be constrained minimum variance and risk parity, with hierarchical risk parity and maximum diversification as robust alternatives for larger ETF universes. Maximum Sharpe should be treated as a comparison technique until the expected-return model is deliberately chosen and tested out of sample.
 
-The current evaluation baseline writes return matrices, asset metrics, portfolio returns, drawdowns, and portfolio metrics for equal-weight or explicit long-only cash-free weights. The first portfolio optimizers write equal-weight, constrained minimum-variance, maximum-Sharpe comparison, target-return minimum-variance, and risk-parity target weights from Gold evaluation inputs. Risk-parity runs also write marginal, absolute, and percent risk-contribution diagnostics. CLI entry points are tracked separately in the backlog.
+The current evaluation baseline writes return matrices, asset metrics, portfolio returns, drawdowns, portfolio metrics, walk-forward backtests, rebalancing events, efficient frontiers, and tail-risk summaries for equal-weight or explicit long-only cash-free weights. Portfolio optimizers write equal-weight, constrained minimum-variance, maximum-Sharpe comparison, target-return minimum-variance, risk-parity, hierarchical-risk-parity, and maximum-diversification target weights from Gold evaluation inputs. Risk-parity and diversification runs also write diagnostic rows, and `founder evaluate` exposes the evaluation path from the CLI.
 
 ## Documentation Map
 

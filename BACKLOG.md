@@ -295,7 +295,7 @@ Idempotency: Re-running the same Spearman edge build for a version replaces stal
 
 ### PR20. Evaluation Module: Walk-Forward Backtesting
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 trust gate.
 
@@ -309,7 +309,7 @@ Idempotency: Re-running the same walk-forward backtest id with unchanged returns
 
 ### PR21. Evaluation Module: Rebalancing Simulation
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 implementation realism.
 
@@ -323,7 +323,7 @@ Idempotency: Re-running the same rebalancing simulation id with unchanged return
 
 ### PR22. Portfolio Module: Hierarchical Risk Parity
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P2 correlated-universe optimizer.
 
@@ -337,7 +337,7 @@ Idempotency: Re-running the same HRP optimization id with unchanged correlation,
 
 ### PR23. Portfolio Module: Maximum Diversification Objective
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P2 robust comparison optimizer.
 
@@ -351,7 +351,7 @@ Idempotency: Re-running the same maximum-diversification optimization id with un
 
 ### PR24. Evaluation Module: Efficient Frontier Generator
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P2 analysis and visualization.
 
@@ -365,7 +365,7 @@ Idempotency: Re-running the same frontier evaluation id with the same inputs and
 
 ### PR25. Portfolio Module: CVaR And Tail-Risk Optimization
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P3 tail-risk extension.
 
@@ -379,7 +379,7 @@ Idempotency: Re-running the same CVaR evaluation or optimization id with unchang
 
 ### PR26. Evaluation CLI And Dry-Run Integration
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 for P0/P1 objectives, P3 for full advanced stack.
 

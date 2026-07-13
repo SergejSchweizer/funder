@@ -65,11 +65,25 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_frontier_weights("eval-1") == Path(
         "lake/gold/evaluation/frontier_weights/eval-1.parquet"
     )
+    assert paths.gold_backtests("bt-1") == Path("lake/gold/evaluation/backtests/bt-1.parquet")
+    assert paths.gold_backtest_weights("bt-1") == Path(
+        "lake/gold/evaluation/backtest_weights/bt-1.parquet"
+    )
+    assert paths.gold_rebalance_events("rebalance-1") == Path(
+        "lake/gold/evaluation/rebalance_events/rebalance-1.parquet"
+    )
+    assert paths.gold_tail_risk("tail-1") == Path("lake/gold/evaluation/tail_risk/tail-1.parquet")
     assert paths.gold_optimized_weights("minimum_variance", "eval-1") == Path(
         "lake/gold/weights/minimum_variance/eval-1.parquet"
     )
     assert paths.gold_risk_contributions("risk_parity", "eval-1") == Path(
         "lake/gold/risk_contributions/risk_parity/eval-1.parquet"
+    )
+    assert paths.gold_hrp_clusters("eval-1") == Path(
+        "lake/gold/clusters/hierarchical_risk_parity/eval-1.parquet"
+    )
+    assert paths.gold_diversification_metrics("eval-1") == Path(
+        "lake/gold/metrics/maximum_diversification/eval-1.parquet"
     )
     assert paths.bronze_plan("bronze-1") == Path("lake/silver/plans/bronze_plans/bronze-1.parquet")
     assert paths.coverage() == Path("lake/silver/coverage/coverage.parquet")

@@ -11,8 +11,10 @@ from founder.bronze import (
     normalize_quote_rows,
     write_bronze_manifests,
 )
+from founder.evaluation import write_evaluation_outputs, write_portfolio_evaluation
 from founder.gold import write_gold_inputs
 from founder.paths import LakePaths
+from founder.portfolio import PortfolioConstraints, write_optimized_weights
 from founder.search import approve_universe, write_canonical_universe, write_search_run
 from founder.silver import write_silver_quotes
 from founder.table_io import JsonRow, write_json, write_rows
@@ -110,6 +112,20 @@ def run_dry_run(root: Path) -> JsonRow:
     write_silver_quotes(paths, quotes, concurrency=2)
     coverage = write_bronze_manifests(paths, run_id=run_id, quote_rows=quotes)
     returns, correlations, covariances, features = write_gold_inputs(paths, quotes)
+    matrix, asset_metrics = write_evaluation_outputs(paths, evaluation_id="dry-run")
+    portfolio_returns, drawdowns, portfolio_metrics = write_portfolio_evaluation(
+        paths,
+        evaluation_id="dry-run",
+        portfolio_id="equal-weight",
+    )
+    optimized_weights = write_optimized_weights(
+        paths,
+        evaluation_id="dry-run",
+        objective="minimum_variance",
+        portfolio_id="minimum-variance",
+        constraints=PortfolioConstraints(max_weight=1.0),
+        grid_step=0.1,
+    )
     summary: JsonRow = {
         "search_run_id": search_run_id,
         "bronze_run_id": run_id,
@@ -122,6 +138,12 @@ def run_dry_run(root: Path) -> JsonRow:
         "correlation_rows": len(correlations),
         "covariance_rows": len(covariances),
         "feature_rows": len(features),
+        "return_matrix_rows": len(matrix),
+        "asset_metric_rows": len(asset_metrics),
+        "portfolio_return_rows": len(portfolio_returns),
+        "drawdown_rows": len(drawdowns),
+        "portfolio_metric_rows": len(portfolio_metrics),
+        "optimized_weight_rows": len(optimized_weights),
     }
     write_json(paths.dry_run_summary(), summary)
     return summary
