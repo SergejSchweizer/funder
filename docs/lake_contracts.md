@@ -11,19 +11,19 @@ Last reviewed: 2026-07-13
 
 Founder uses deterministic local lake artifacts under a `LakePaths` root. Table paths ending in `.parquet` are physical Apache Parquet files written through `founder.table_io`; JSON and CSV artifacts keep their native formats.
 
-Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search, Fetch, Gold, or storage code. Read [docs/search_fetch_workflow.md](search_fetch_workflow.md) for executable examples that use these contracts.
+Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search, Bronze, Gold, or storage code. Read [docs/search_bronze_workflow.md](search_bronze_workflow.md) for executable examples that use these contracts.
 
 ## Layers
 
-- Fetch stores raw or near-raw EODHD search, quote, dividends, and splits payloads.
+- Bronze stores raw or near-raw EODHD search, quote, dividends, and splits payloads.
 - Silver stores normalized search candidates, canonical universe rows, and quote rows with one file per exchange and ISIN.
 - Gold stores adjusted-close returns, correlation, covariance, portfolio evaluation, and target-weight rows.
-- Silver also stores operational datasets for active universe pointers, fetch plans, fetch runs, coverage, errors, and dry-run summaries.
+- Silver also stores operational datasets for active universe pointers, bronze plans, bronze runs, coverage, errors, and dry-run summaries.
 
-Fetch quote rows are partitioned by exchange and quote year, with one file per ISIN:
+Bronze quote rows are partitioned by exchange and quote year, with one file per ISIN:
 
 ```text
-fetch/quotes/{exchange}/{year}/{ISIN}.parquet
+bronze/quotes/{exchange}/{year}/{ISIN}.parquet
 ```
 
 Silver and Gold remove the year directory so all years for an ISIN stay in one file:
@@ -41,8 +41,8 @@ Operational Silver artifacts use focused directories rather than a fourth lake l
 
 ```text
 silver/universe/current_universe.json
-silver/plans/fetch_plans/{run_id}.parquet
-silver/runs/fetch_runs.parquet
+silver/plans/bronze_plans/{run_id}.parquet
+silver/runs/bronze_runs.parquet
 silver/runs/dry_run_summary.json
 silver/coverage/coverage.parquet
 silver/coverage/quote_gaps.parquet
@@ -51,20 +51,20 @@ silver/coverage/quote_gaps.parquet
 ## Core Tables
 
 - `search_candidates`: normalized discovery rows with search run id, query, endpoint, instrument identifiers, type, country, currency, ISIN, name, normalized name, and discovery timestamp.
-- `canonical_universe`: one selected listing per ISIN, including selection reason and `selected_for_fetch=true`.
-- `fetch_plan`: run id, ISIN, code, exchange, derived EODHD symbol, start date, and end date. In default gap-aware runs, one listing can expand into multiple gap windows.
-- `quotes`: normalized OHLCV rows with adjusted close, currency, run id, and fetch timestamp. Delta writes merge into existing per-ISIN files by ISIN, exchange, code, and quote date.
-- `dividends` and `splits`: near-raw EODHD rows archived under `fetch/{dataset}/{exchange}/{year}/{ISIN}.parquet` for each approved listing, matching the quote partition shape.
-- `coverage`: first and last quote dates, observed rows, missing periods, and next fetch start used by gap-aware Fetch planning.
-- `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Fetch downloads historical gaps first, then the tail to the selected run date.
-- `errors`: non-secret fetch error records.
+- `canonical_universe`: one selected listing per ISIN, including selection reason and `selected_for_bronze=true`.
+- `bronze_plan`: run id, ISIN, code, exchange, derived EODHD symbol, start date, and end date. In default gap-aware runs, one listing can expand into multiple gap windows.
+- `quotes`: normalized OHLCV rows with adjusted close, currency, run id, and bronze timestamp. Delta writes merge into existing per-ISIN files by ISIN, exchange, code, and quote date.
+- `dividends` and `splits`: near-raw EODHD rows archived under `bronze/{dataset}/{exchange}/{year}/{ISIN}.parquet` for each approved listing, matching the quote partition shape.
+- `coverage`: first and last quote dates, observed rows, missing periods, and next bronze start used by gap-aware Bronze planning.
+- `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Bronze downloads historical gaps first, then the tail to the selected run date.
+- `errors`: non-secret bronze error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions.
 
-Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Fetch applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Fetch rows beside quotes.
+Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Bronze applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
 
 ## Portfolio Evaluation Outputs
 
-Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They should be reproducible without EODHD credentials and should not mutate Fetch or Silver market data.
+Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They should be reproducible without EODHD credentials and should not mutate Bronze or Silver market data.
 
 Planned Gold evaluation datasets include:
 

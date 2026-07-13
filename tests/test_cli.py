@@ -107,7 +107,7 @@ def test_cli_runs_search_and_bronze_modules(
 
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--mock",
@@ -117,7 +117,7 @@ def test_cli_runs_search_and_bronze_modules(
         ]
     )
     bronze_output = capsys.readouterr()
-    assert '"fetch_plan_rows": 1' in bronze_output.out
+    assert '"bronze_plan_rows": 1' in bronze_output.out
     assert '"bronze_quote_rows": 2' in bronze_output.out
     assert '"concurrency": 2' in bronze_output.out
 
@@ -189,7 +189,7 @@ def test_cli_bronze_can_select_one_isin(
 
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--mock",
@@ -201,13 +201,14 @@ def test_cli_bronze_can_select_one_isin(
     )
 
     bronze_output = capsys.readouterr()
-    assert '"fetch_plan_rows": 1' in bronze_output.out
-    assert read_rows(LakePaths(root=root).fetch_plan("fetch-20260712"))[0]["isin"] == "IE0000000002"
+    assert '"bronze_plan_rows": 1' in bronze_output.out
+    plan_rows = read_rows(LakePaths(root=root).bronze_plan("bronze-20260712"))
+    assert plan_rows[0]["isin"] == "IE0000000002"
 
 
 def test_cli_bronze_limit_and_isin_are_mutually_exclusive() -> None:
     with pytest.raises(SystemExit):
-        main(["fetch", "--limit", "1", "--isin", "IE0000000001"])
+        main(["bronze", "--limit", "1", "--isin", "IE0000000001"])
 
 
 def test_cli_bronze_live_defaults_to_gap_aware_full_history(
@@ -252,18 +253,18 @@ def test_cli_bronze_live_defaults_to_gap_aware_full_history(
 
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-live",
+            "bronze-live",
             "--run-date",
             "2026-07-12",
         ]
     )
 
     bronze_output = capsys.readouterr()
-    assert '"fetch_plan_rows": 1' in bronze_output.out
+    assert '"bronze_plan_rows": 1' in bronze_output.out
     assert '"gap_aware": true' in bronze_output.out
     assert '"bronze_quote_rows": 2' in bronze_output.out
     assert '"concurrency": 2' in bronze_output.out
@@ -274,7 +275,7 @@ def test_cli_bronze_live_defaults_to_gap_aware_full_history(
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
     ]
     paths = LakePaths(root=root)
-    plan_row = read_rows(paths.fetch_plan("fetch-live"))[0]
+    plan_row = read_rows(paths.bronze_plan("bronze-live"))[0]
     assert plan_row["start_date"] == ""
     assert plan_row["end_date"] == "2026-07-12"
     assert plan_row["window_reason"] == "full_history"
@@ -293,7 +294,7 @@ def test_cli_bronze_live_defaults_to_gap_aware_full_history(
         {
             "date": "2025-12-15",
             "value": 0.12,
-            "run_id": "fetch-live",
+            "run_id": "bronze-live",
             "isin": "IE0000000001",
             "code": "EXAMPLE",
             "exchange": "XETRA",
@@ -345,11 +346,11 @@ def test_cli_bronze_manual_start_date_bypasses_gap_aware_planning(
     capsys.readouterr()
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-current-day",
+            "bronze-current-day",
             "--start-date",
             "2026-07-12",
             "--end-date",
@@ -361,11 +362,11 @@ def test_cli_bronze_manual_start_date_bypasses_gap_aware_planning(
     FakeEodhdClient.requests = []
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-manual",
+            "bronze-manual",
             "--start-date",
             "2026-07-01",
             "--end-date",
@@ -421,7 +422,7 @@ def test_cli_bronze_defaults_to_gap_aware_windows(
         ]
     )
     capsys.readouterr()
-    main(["fetch", "--root", str(root), "--run-id", "fetch-full"])
+    main(["bronze", "--root", str(root), "--run-id", "bronze-full"])
     capsys.readouterr()
     main(["silver", "--root", str(root)])
     capsys.readouterr()
@@ -429,11 +430,11 @@ def test_cli_bronze_defaults_to_gap_aware_windows(
     FakeEodhdClient.requests = []
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-gap-aware",
+            "bronze-gap-aware",
             "--run-date",
             "2026-07-13",
         ]
@@ -446,7 +447,7 @@ def test_cli_bronze_defaults_to_gap_aware_windows(
         ("/div/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-13"}),
         ("/splits/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-13"}),
     ]
-    plan_rows = read_rows(LakePaths(root=root).fetch_plan("fetch-gap-aware"))
+    plan_rows = read_rows(LakePaths(root=root).bronze_plan("bronze-gap-aware"))
     assert [row["window_reason"] for row in plan_rows] == ["gap_backfill"]
     assert [(row["start_date"], row["end_date"]) for row in plan_rows] == [
         ("2020-01-03", "2026-07-13"),
@@ -496,11 +497,11 @@ def test_cli_bronze_skips_non_quote_data_when_quote_plan_is_empty(
     capsys.readouterr()
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-current-day",
+            "bronze-current-day",
             "--start-date",
             "2026-07-10",
             "--end-date",
@@ -514,18 +515,18 @@ def test_cli_bronze_skips_non_quote_data_when_quote_plan_is_empty(
     FakeEodhdClient.requests = []
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--run-id",
-            "fetch-no-quote-gaps",
+            "bronze-no-quote-gaps",
             "--run-date",
             "2026-07-10",
         ]
     )
 
     bronze_output = capsys.readouterr()
-    assert '"fetch_plan_rows": 0' in bronze_output.out
+    assert '"bronze_plan_rows": 0' in bronze_output.out
     assert '"raw_data_payloads": 0' in bronze_output.out
     assert FakeEodhdClient.requests == []
 
@@ -568,7 +569,7 @@ def test_cli_bronze_accepts_concurrency_override(
 
     main(
         [
-            "fetch",
+            "bronze",
             "--root",
             str(root),
             "--mock",
@@ -617,19 +618,19 @@ def test_cli_bronze_rejects_overlapping_run(
         ]
     )
     capsys.readouterr()
-    lock_path = LakePaths(root=root).silver / "runs" / "fetch-lock.lock"
+    lock_path = LakePaths(root=root).silver / "runs" / "bronze-lock.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("active\n", encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="fetch run already active"):
+    with pytest.raises(RuntimeError, match="bronze run already active"):
         main(
             [
-                "fetch",
+                "bronze",
                 "--root",
                 str(root),
                 "--mock",
                 "--run-id",
-                "fetch-lock",
+                "bronze-lock",
                 "--run-date",
                 "2026-07-12",
             ]
@@ -684,7 +685,7 @@ def test_cli_refresh_runs_bronze_silver_and_gold(
     )
 
     output = capsys.readouterr().out
-    assert '"fetch_plan_rows": 1' in output
+    assert '"bronze_plan_rows": 1' in output
     assert '"quote_rows": 2' in output
     assert '"return_rows": 1' in output
     paths = LakePaths(root=root)
@@ -694,4 +695,4 @@ def test_cli_refresh_runs_bronze_silver_and_gold(
 
 def test_cli_bronze_rejects_removed_incremental_flag() -> None:
     with pytest.raises(SystemExit):
-        main(["fetch", "--incremental"])
+        main(["bronze", "--incremental"])

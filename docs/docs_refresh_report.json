@@ -7,29 +7,29 @@
     },
     "ARCHITECTURE.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
     "BACKLOG.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
     "DECISIONS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
     "README.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
     "RISKS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
     "docs/lake_contracts.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-13"
     },
-    "docs/search_fetch_workflow.md": {
+    "docs/search_bronze_workflow.md": {
       "exists": true,
       "review": "Last reviewed: 2026-07-12"
     }

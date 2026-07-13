@@ -39,7 +39,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
      |                     |
 	|                     v
 	|            +--------+---------+
-     +----------->| fetch            |
+     +----------->| bronze            |
 		  | plan and archive |
 		  +--------+---------+
 			   |
@@ -88,19 +88,19 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.__init__` owns the package import surface. It keeps the package importable and exposes the package version without triggering configuration loading, API calls, or lake writes.
 
-`founder.contracts` owns typed cross-module data contracts. It defines validated dataclasses for Search candidates, canonical universe rows, fetch runs, and fetch errors when code needs stronger structure than plain row dictionaries.
+`founder.contracts` owns typed cross-module data contracts. It defines validated dataclasses for Search candidates, canonical universe rows, bronze runs, and bronze errors when code needs stronger structure than plain row dictionaries.
 
-`founder.paths` owns lake artifact locations. It keeps Fetch, Silver, and Gold path construction deterministic so modules do not hard-code filesystem layouts.
+`founder.paths` owns lake artifact locations. It keeps Bronze, Silver, and Gold path construction deterministic so modules do not hard-code filesystem layouts.
 
-`founder.schemas` owns required table fields. It gives Search, Fetch, coverage, and tests one place to check the shape of table contracts before data moves between layers.
+`founder.schemas` owns required table fields. It gives Search, Bronze, coverage, and tests one place to check the shape of table contracts before data moves between layers.
 
 `founder.table_io` owns current table serialization. It reads and writes JSON objects, physical Parquet row tables, and review CSVs behind helper functions so storage details stay out of module logic.
 
-`founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Fetch.
+`founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Bronze.
 
-`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping writes for the same lake root and run id.
+`founder.bronze` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes bronze plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping writes for the same lake root and run id.
 
-`founder.silver` owns Fetch-to-Silver market data builds. It reads archived quote rows, validates schema and merge keys, and writes one Silver quote file per exchange and ISIN without calling EODHD.
+`founder.silver` owns Bronze-to-Silver market data builds. It reads archived quote rows, validates schema and merge keys, and writes one Silver quote file per exchange and ISIN without calling EODHD.
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
@@ -112,7 +112,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
 
-`founder.pipeline` owns the deterministic dry-run workflow. It stitches Search, Fetch, Silver quote building, coverage, and Gold inputs together with sample data so users can verify the architecture without credentials.
+`founder.pipeline` owns the deterministic dry-run workflow. It stitches Search, Bronze, Silver quote building, coverage, and Gold inputs together with sample data so users can verify the architecture without credentials.
 
 `founder.cli` owns command-line entry points. It parses user commands and routes them to repeatable workflows such as `founder dry-run` without embedding business logic in the CLI layer.
 
@@ -123,7 +123,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 ## Current Shape
 
 - **Discovery**: EODHD search and exchange symbol-list enumeration identify ETF and fund universes by ticker, name, ISIN, exchange, and type.
-- **Fetch**: Raw EODHD API responses and quote ingestion outputs.
+- **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
 - **Gold**: Portfolio-ready return, covariance, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
 - **Evaluation**: Portfolio metrics, drawdowns, efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis consume Gold inputs and stay separate from market-data ingestion.
@@ -138,24 +138,24 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 ## Module Boundary
 
 - **Search module**: owns filtered EODHD discovery, candidate normalization, one-row-per-ISIN canonical selection, XETRA preference, review artifacts, and the active universe pointer.
-- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, additional EODHD listing datasets, Fetch writes, operational coverage, and fetch error logging.
-- **Silver module**: owns Fetch-to-Silver quote builds and analytical Silver quote files.
+- **Bronze module**: owns canonical-universe validation, bronze planning, EOD quotes, additional EODHD listing datasets, Bronze writes, operational coverage, and bronze error logging.
+- **Silver module**: owns Bronze-to-Silver quote builds and analytical Silver quote files.
 - **Universe review module**: owns missing-ISIN, currency-exposure, and survivorship-bias review summaries before optimization consumes a universe.
 - **Evaluation module**: owns portfolio analytics and comparison datasets derived from Gold returns, correlation, and covariance.
 - **Portfolio module**: owns explicit optimization constraints and selected target weights.
 - **Trading module**: owns Flatex CSV order preparation from approved target weights and latest prices.
-- **Contract**: Fetch consumes only the Search module's approved `canonical_universe.parquet`; Fetch must not perform fuzzy discovery, and Search must not fetch full quote history.
+- **Contract**: Bronze consumes only the Search module's approved `canonical_universe.parquet`; Bronze must not perform fuzzy discovery, and Search must not bronze full quote history.
 
 ## Simple Lake Layout
 
-- **Fetch**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
+- **Bronze**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
 - **Silver**: normalized candidates, canonical universe, one quote file per exchange and ISIN, and coverage-ready tables.
 - **Gold**: portfolio-ready returns, correlation, covariance, evaluation metrics, frontier points, backtests, risk inputs, and portfolio weights.
-- **Silver operational datasets**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under focused Silver directories.
+- **Silver operational datasets**: active universe pointer, bronze plans, bronze runs, coverage, errors, and dataset version metadata stored under focused Silver directories.
 
 ## Portfolio Analysis And Evaluation
 
-Portfolio evaluation should be reproducible from existing Gold risk inputs and should not require Search, Fetch, EODHD credentials, or broker access. The planned analysis scope is risk-first because the ETF universe is large, return forecasts are noisy, and many UCITS ETF listings are highly correlated.
+Portfolio evaluation should be reproducible from existing Gold risk inputs and should not require Search, Bronze, EODHD credentials, or broker access. The planned analysis scope is risk-first because the ETF universe is large, return forecasts are noisy, and many UCITS ETF listings are highly correlated.
 
 The evaluation layer should compute aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, ulcer index, efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
 
@@ -163,8 +163,8 @@ The portfolio layer should compare equal-weight, constrained minimum variance, m
 
 ## Boundaries
 
-- Discovery, fetch planning, checkpointing, bounded parallelism, cron safety, retries, and completeness reporting belong near ingestion code.
-- Search and Fetch communicate through explicit versioned contracts, not shared mutable state.
+- Discovery, bronze planning, checkpointing, bounded parallelism, cron safety, retries, and completeness reporting belong near ingestion code.
+- Search and Bronze communicate through explicit versioned contracts, not shared mutable state.
 - Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.
 - Evaluation and optimization code should consume Gold return, correlation, covariance, and metric datasets with explicit constraints, not raw API responses.

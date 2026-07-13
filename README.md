@@ -11,7 +11,8 @@ Last reviewed: 2026-07-13
 - [Portfolio Objective](#portfolio-objective)
 - [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
-- [Run Search And Fetch](#run-search-and-fetch)
+- [Run Search And Bronze](#run-search-and-bronze)
+- [Scheduled Refresh Cron](#scheduled-refresh-cron)
 - [Local Dry Run](#local-dry-run)
 - [EODHD Request Safety](#eodhd-request-safety)
 - [Logging And Debugging](#logging-and-debugging)
@@ -29,7 +30,7 @@ New contributors should read the documentation in this order:
 
 1. Start here to understand the goal, data source, current facts, and local commands.
 2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram and one-paragraph purpose of each package module.
-3. Read [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md) before changing Search or Fetch behavior.
+3. Read [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md) before changing Search or Bronze behavior.
 4. Read [docs/lake_contracts.md](docs/lake_contracts.md) before changing paths, schemas, or storage formats.
 5. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
 6. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
@@ -115,7 +116,7 @@ Top canonical exchanges after one-row-per-ISIN selection:
 
 1. Discover ETF and fund instruments from EODHD without committing credentials.
 2. Deduplicate the universe to one canonical listing per ISIN, preferring `XETRA` when available.
-3. Fetch end-of-day quotes for the selected canonical universe.
+3. Bronze end-of-day quotes for the selected canonical universe.
 4. Build Silver quotes into a reproducible local dataset.
 5. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
 6. Estimate return and risk inputs from validated quote history.
@@ -143,7 +144,7 @@ This objective is intentionally risk-first because ETF expected-return estimates
 
 ## Portfolio Analysis And Evaluation Plan
 
-Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer should consume Gold returns, correlation, and covariance inputs; it should not call EODHD or mutate Fetch and Silver market data.
+Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer should consume Gold returns, correlation, and covariance inputs; it should not call EODHD or mutate Bronze and Silver market data.
 
 Planned portfolio analysis and evaluation computations include:
 
@@ -164,28 +165,28 @@ The first trusted portfolio candidates should be constrained minimum variance an
 ## Documentation Map
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains how modules connect and where responsibilities live.
-- [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md) shows how to use Search and Fetch from Python.
+- [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md) shows how to use Search and Bronze from Python.
 - [docs/lake_contracts.md](docs/lake_contracts.md) defines lake layers and table contracts.
 - [DECISIONS.md](DECISIONS.md) records why durable technical choices were made.
 - [RISKS.md](RISKS.md) tracks active project risks and mitigations.
 - [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
 - [AGENTS.md](AGENTS.md) defines agent workflow rules and generated project-history risks.
 
-## Run Search And Fetch
+## Run Search And Bronze
 
-Search and Fetch have separate CLI calls. First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `lake`, generates a search run id, and approves the canonical universe for Fetch:
+Search and Bronze have separate CLI calls. First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `lake`, generates a search run id, and approves the canonical universe for Bronze:
 
 ```bash
 uv run founder search "UCITS ETF"
 ```
 
-Then run Fetch from the approved universe pointer. By default this loads live EODHD quotes with gap-aware planning, writes Fetch quote/dividend/split rows, and writes Silver operational fetch metadata. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Then run Bronze from the approved universe pointer. By default this loads live EODHD quotes with gap-aware planning, writes Bronze quote/dividend/split rows, and writes Silver operational bronze metadata. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
-uv run founder fetch
+uv run founder bronze
 ```
 
-Build Silver quotes and Gold risk inputs explicitly after Fetch:
+Build Silver quotes and Gold risk inputs explicitly after Bronze:
 
 ```bash
 uv run founder silver
@@ -201,29 +202,47 @@ uv run founder refresh
 After a full-history run has written local quotes, later live loads check for per-ISIN quote gaps before downloading. They backfill historical gaps first, then ingest the fresh tail up to the run date:
 
 ```bash
-uv run founder fetch
+uv run founder bronze
 ```
 
-Gap-aware Fetch reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. The resulting windows are used for quotes, dividends, and splits. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
+Gap-aware Bronze reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. The resulting windows are used for quotes, dividends, and splits. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
 
 The gap-aware approach currently discovers windows from quote history, then applies those windows to all supported EODHD time-series datasets. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own strategy, coverage fields, and gap table before being added to automatic gap planning.
 
-Use `--mock` for a local no-token Fetch run that writes deterministic Fetch quote and operational metadata artifacts:
+Use `--mock` for a local no-token Bronze run that writes deterministic Bronze quote and operational metadata artifacts:
 
 ```bash
-uv run founder fetch --mock
+uv run founder bronze --mock
 ```
 
-Limit Fetch to the first `N` approved canonical ISINs, or to one exact ISIN, when testing a small batch. `--limit` and `--isin` are mutually exclusive:
+Limit Bronze to the first `N` approved canonical ISINs, or to one exact ISIN, when testing a small batch. `--limit` and `--isin` are mutually exclusive:
 
 ```bash
-uv run founder fetch --limit 10 --mock
-uv run founder fetch --isin IE0000000001 --mock
+uv run founder bronze --limit 10 --mock
+uv run founder bronze --isin IE0000000001 --mock
 ```
 
 Pass `--start-date` and/or `--end-date` only when you want to restrict the live EODHD history window.
 
-For full input format details and Python usage examples, see [docs/search_fetch_workflow.md](docs/search_fetch_workflow.md#how-to-run-both-modules).
+For full input format details and Python usage examples, see [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md#how-to-run-both-modules).
+
+## Scheduled Refresh Cron
+
+The `vcs` user crontab runs the full lake refresh every day at 18:00 local server time. Keep the job readable by defining absolute paths once and using `flock` so a slow previous refresh prevents overlap:
+
+```cron
+SHELL=/bin/bash
+FOUNDER_PROJECT=/home/vcs/git/founder
+FOUNDER_UV=/home/vcs/.local/bin/uv
+FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
+FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
+
+# Daily lake refresh at 18:00 local server time.
+# Runs Bronze -> Silver -> Gold and skips the run if a previous refresh is still active.
+0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+```
+
+Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
 
 ## Local Dry Run
 
@@ -233,11 +252,11 @@ Run the mocked end-to-end pipeline without credentials:
 uv run founder dry-run --root lake
 ```
 
-The dry run writes search candidates, a canonical universe, fetch plan, quote rows, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
+The dry run writes search candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance inputs under the selected local lake root.
 
 ## EODHD Request Safety
 
-Founder spaces EODHD requests by default and retries transient failures so large loads do not hammer the API. Fetch is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
+Founder spaces EODHD requests by default and retries transient failures so large loads do not hammer the API. Bronze is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
 
 Tune these values in `.env.local` when the subscription limit changes:
 
@@ -258,7 +277,7 @@ All CLI commands support `--debug` for more detailed module logs:
 
 ```bash
 uv run founder search "UCITS ETF" --debug
-uv run founder fetch --mock --debug
+uv run founder bronze --mock --debug
 uv run founder dry-run --debug
 ```
 
