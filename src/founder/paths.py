@@ -82,5 +82,29 @@ class LakePaths:
     def gold_asset_features(self, exchange: str, isin: str) -> Path:
         return self.gold / "features" / exchange / f"{isin}.parquet"
 
+    def gold_return_matrix(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "return_matrices" / f"{evaluation_id}.parquet"
+
+    def gold_asset_metrics(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "asset_metrics" / f"{evaluation_id}.parquet"
+
+    def gold_portfolio_returns(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "portfolio_returns" / f"{evaluation_id}.parquet"
+
+    def gold_drawdowns(self, evaluation_id: str, portfolio_id: str) -> Path:
+        return self.gold / "evaluation" / "drawdowns" / evaluation_id / f"{portfolio_id}.parquet"
+
+    def gold_portfolio_metrics(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "portfolio_metrics" / f"{evaluation_id}.parquet"
+
+    def gold_frontier_points(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "frontier_points" / f"{evaluation_id}.parquet"
+
+    def gold_frontier_weights(self, evaluation_id: str) -> Path:
+        return self.gold / "evaluation" / "frontier_weights" / f"{evaluation_id}.parquet"
+
+    def gold_optimized_weights(self, objective: str, evaluation_id: str) -> Path:
+        return self.gold / "weights" / objective / f"{evaluation_id}.parquet"
+
     def current_universe(self) -> Path:
         return self.silver / "universe" / "current_universe.json"

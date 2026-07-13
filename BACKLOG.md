@@ -197,7 +197,7 @@ Priority policy: For the current UCITS ETF case, prioritize robust risk-first co
 
 ### PR15. Gold Evaluation Dataset Contracts And Paths
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 foundation.
 

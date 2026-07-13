@@ -40,6 +40,30 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_asset_features("XETRA", "IE0000000001") == Path(
         "lake/gold/features/XETRA/IE0000000001.parquet"
     )
+    assert paths.gold_return_matrix("eval-1") == Path(
+        "lake/gold/evaluation/return_matrices/eval-1.parquet"
+    )
+    assert paths.gold_asset_metrics("eval-1") == Path(
+        "lake/gold/evaluation/asset_metrics/eval-1.parquet"
+    )
+    assert paths.gold_portfolio_returns("eval-1") == Path(
+        "lake/gold/evaluation/portfolio_returns/eval-1.parquet"
+    )
+    assert paths.gold_drawdowns("eval-1", "equal-weight") == Path(
+        "lake/gold/evaluation/drawdowns/eval-1/equal-weight.parquet"
+    )
+    assert paths.gold_portfolio_metrics("eval-1") == Path(
+        "lake/gold/evaluation/portfolio_metrics/eval-1.parquet"
+    )
+    assert paths.gold_frontier_points("eval-1") == Path(
+        "lake/gold/evaluation/frontier_points/eval-1.parquet"
+    )
+    assert paths.gold_frontier_weights("eval-1") == Path(
+        "lake/gold/evaluation/frontier_weights/eval-1.parquet"
+    )
+    assert paths.gold_optimized_weights("minimum_variance", "eval-1") == Path(
+        "lake/gold/weights/minimum_variance/eval-1.parquet"
+    )
     assert paths.bronze_plan("bronze-1") == Path("lake/silver/plans/bronze_plans/bronze-1.parquet")
     assert paths.coverage() == Path("lake/silver/coverage/coverage.parquet")
     assert paths.quote_gaps() == Path("lake/silver/coverage/quote_gaps.parquet")

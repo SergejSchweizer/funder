@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from founder.contracts import BronzeError, BronzeRun, CanonicalUniverseRow, SearchCandidate
+from founder.schemas import required_fields, validate_fields
 
 
 def test_search_candidate_accepts_valid_timezone_aware_record() -> None:
@@ -98,3 +99,33 @@ def test_bronze_run_start_uses_timezone_aware_started_at() -> None:
     run = BronzeRun.start("bronze-1", "search-1")
 
     assert run.started_at.tzinfo is not None
+
+
+def test_gold_evaluation_schema_contracts_are_registered() -> None:
+    assert required_fields("return_matrix") == (
+        "evaluation_id",
+        "date",
+        "isin",
+        "exchange",
+        "code",
+        "return",
+    )
+    assert "annualized_volatility" in required_fields("asset_metrics")
+    assert "drawdown_duration" in required_fields("drawdowns")
+    assert "frontier_point_id" in required_fields("frontier_points")
+    assert "weight" in required_fields("frontier_weights")
+    assert "constraints" in required_fields("optimized_weights")
+
+
+def test_gold_evaluation_schema_validation_reports_missing_fields() -> None:
+    with pytest.raises(ValueError, match="return_matrix row missing fields: return"):
+        validate_fields(
+            "return_matrix",
+            {
+                "evaluation_id": "eval-1",
+                "date": "2026-07-13",
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "ETF1",
+            },
+        )

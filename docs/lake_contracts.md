@@ -34,6 +34,14 @@ gold/returns/{exchange}/{ISIN}.parquet
 gold/correlation/{exchange}/{ISIN}.parquet
 gold/covariance/{exchange}/{ISIN}.parquet
 gold/features/{exchange}/{ISIN}.parquet
+gold/evaluation/return_matrices/{evaluation_id}.parquet
+gold/evaluation/asset_metrics/{evaluation_id}.parquet
+gold/evaluation/portfolio_returns/{evaluation_id}.parquet
+gold/evaluation/drawdowns/{evaluation_id}/{portfolio_id}.parquet
+gold/evaluation/portfolio_metrics/{evaluation_id}.parquet
+gold/evaluation/frontier_points/{evaluation_id}.parquet
+gold/evaluation/frontier_weights/{evaluation_id}.parquet
+gold/weights/{objective}/{evaluation_id}.parquet
 ```
 
 Runtime logs are intentionally outside the lake under `.logs/`. They are operational diagnostics, not dataset artifacts.
@@ -70,16 +78,17 @@ Portfolio evaluation datasets belong in Gold because they are derived from valid
 
 Planned Gold evaluation datasets include:
 
-- `evaluation/asset_metrics.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio by listing.
-- `evaluation/portfolio_returns/{run_id}.parquet`: weighted portfolio return series for candidate portfolios.
-- `evaluation/drawdowns/{portfolio_id}.parquet`: cumulative wealth, running peak, drawdown, drawdown duration, and recovery state by date.
-- `evaluation/portfolio_metrics/{run_id}.parquet`: portfolio-level return, volatility, Sharpe, Sortino, maximum drawdown, Calmar ratio, ulcer index, turnover, and post-cost metrics.
-- `evaluation/frontier_points/{run_id}.parquet`: target return, expected return, volatility, Sharpe ratio, feasibility status, and optimizer diagnostics for efficient-frontier points.
-- `evaluation/frontier_weights/{run_id}.parquet`: long-format ISIN, exchange, and weight rows for each efficient-frontier point.
+- `evaluation/return_matrices/{evaluation_id}.parquet`: aligned long-format date, ISIN, exchange, code, and return rows used as the portfolio evaluation base.
+- `evaluation/asset_metrics/{evaluation_id}.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio by listing.
+- `evaluation/portfolio_returns/{evaluation_id}.parquet`: weighted portfolio return and cumulative wealth series for candidate portfolios.
+- `evaluation/drawdowns/{evaluation_id}/{portfolio_id}.parquet`: cumulative wealth, running peak, drawdown, drawdown duration, recovery duration, and recovery state by date.
+- `evaluation/portfolio_metrics/{evaluation_id}.parquet`: portfolio-level return, volatility, Sharpe, Sortino, maximum drawdown, Calmar ratio, ulcer index, turnover, and post-cost metrics.
+- `evaluation/frontier_points/{evaluation_id}.parquet`: target return, expected return, volatility, Sharpe ratio, feasibility status, and optimizer diagnostics for efficient-frontier points.
+- `evaluation/frontier_weights/{evaluation_id}.parquet`: long-format ISIN, exchange, code, and weight rows for each efficient-frontier point.
 - `evaluation/backtests/{run_id}.parquet`: walk-forward train/test windows, fitted objective, realized out-of-sample metrics, and drawdown metrics.
 - `evaluation/rebalance_events/{run_id}.parquet`: rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
 - `evaluation/tail_risk/{run_id}.parquet`: VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
-- `weights/{objective}/{run_id}.parquet`: selected target weights for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
+- `weights/{objective}/{evaluation_id}.parquet`: selected target weights, constraints, and diagnostics for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
 
 Evaluation outputs should include explicit run ids, objective names, annualization settings, risk-free-rate assumptions, constraints, and input dataset identifiers so results can be compared and rebuilt deterministically.
 
