@@ -281,7 +281,7 @@ Idempotency: Re-running the same edge build for a version and metric replaces st
 
 ### PR28. Gold Spearman Correlation Edges
 
-Git status: in progress. PR: local branch `feat/spearman-correlation-edges`.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/30.
 
 Priority: P0 robust correlation foundation.
 
