@@ -68,6 +68,8 @@ def validate_canonical_rows(rows: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
     seen_isins: set[str] = set()
     for row in rows:
         item = dict(row)
+        if "selected_for_bronze" not in item and "selected_for_fetch" in item:
+            item["selected_for_bronze"] = item["selected_for_fetch"]
         for field in required_fields("canonical_universe"):
             if field not in item or str(item[field]).strip() == "":
                 raise ValueError(f"canonical universe row missing {field}")
