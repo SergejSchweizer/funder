@@ -144,7 +144,7 @@ This objective is intentionally risk-first because ETF expected-return estimates
 
 ## Portfolio Analysis And Evaluation Plan
 
-Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer consumes Gold return inputs and should not call EODHD or mutate Bronze and Silver market data.
+Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer consumes Gold daily adjusted-close log returns, `ln(P_t / P_{t-1})`, and should not call EODHD or mutate Bronze and Silver market data.
 
 Portfolio analysis and evaluation computations include:
 

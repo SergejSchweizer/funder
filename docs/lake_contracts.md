@@ -70,7 +70,7 @@ silver/coverage/quote_gaps.parquet
 - `coverage`: first and last quote dates, observed rows, missing periods, and next bronze start used by gap-aware Bronze planning.
 - `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Bronze downloads historical gaps first, then the tail to the selected run date.
 - `errors`: non-secret bronze error records.
-- `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions.
+- `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions. Gold return rows use daily adjusted-close log returns: `ln(P_t / P_{t-1})`.
 - `correlation_edges`: Gold pair-search table for scalable correlation filtering. Rows store one upper-triangle pair where `left_id < right_id`, the listing identifiers, metric name, input version, common date range, common observation count, and correlation value. Supported metrics are `pearson` and `spearman`. Bucket files are grouped by `left_id % bucket_count` so later DuckDB or Polars scans can filter relevant partitions instead of opening a dense matrix.
 - `features`: per-listing Gold asset feature rows with first and last quote dates, quote and return observation counts, total return, mean return, volatility, and maximum drawdown.
 - `gold_runs`: per-listing Gold completion manifest with status, input last quote date, global input snapshot date, listing count, and completion time. Gold uses this to resume the per-ISIN job without reprocessing completed listings when the input snapshot has not changed.

@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import sqrt
+from math import log, sqrt
 from typing import Any
 
 from founder.paths import LakePaths
@@ -50,8 +50,8 @@ def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
                     "code": code,
                     "date": str(current["date"]),
                     "return": 0.0
-                    if previous_close == 0
-                    else (current_close / previous_close) - 1.0,
+                    if previous_close <= 0 or current_close <= 0
+                    else log(current_close / previous_close),
                 }
             )
     return returns

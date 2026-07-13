@@ -1,5 +1,6 @@
 import csv
 from datetime import UTC, date, datetime
+from math import log
 from pathlib import Path
 
 import pytest
@@ -387,7 +388,7 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
         write_gold_inputs(paths, quotes, concurrency=2)
     )
 
-    assert returns[0]["return"] == pytest.approx(0.1)
+    assert returns[0]["return"] == pytest.approx(log(110 / 100))
     assert correlations == written_correlations
     assert covariances == written_covariances
     assert written_features[0]["total_return"] == pytest.approx(0.1)
@@ -399,6 +400,43 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
     assert read_rows(paths.gold_runs())[0]["input_last_quote_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_snapshot_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_listing_count"] == 2
+
+
+def test_gold_returns_use_adjusted_close_log_returns() -> None:
+    returns = build_returns(
+        [
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "date": "2026-07-10",
+                "adjusted_close": 100,
+            },
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "date": "2026-07-11",
+                "adjusted_close": 110,
+            },
+            {
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "date": "2026-07-10",
+                "adjusted_close": 0,
+            },
+            {
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "date": "2026-07-11",
+                "adjusted_close": 50,
+            },
+        ]
+    )
+
+    assert [row["return"] for row in returns] == [pytest.approx(log(110 / 100)), 0.0]
 
 
 def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None:  # type: ignore[no-untyped-def]
