@@ -487,7 +487,7 @@ Priority policy: Treat this stack as the next behavior-preserving hardening pass
 
 ### PR35. Enforce Real Evaluation And Portfolio Package Boundaries
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/46.
 
 Priority: P0 maintainability and architecture enforcement.
 
@@ -501,7 +501,7 @@ Idempotency: This PR only moves code and adds boundary checks. Running evaluatio
 
 ### PR36. Extract Scalable Gold Pair Statistics Engine
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/46.
 
 Priority: P0 scalability for large covariance and correlation workloads.
 
@@ -515,7 +515,7 @@ Idempotency: Re-running Gold with unchanged Silver quotes produces the same retu
 
 ### PR37. Type Critical Dataset Rows And Contract Validation
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/46.
 
 Priority: P1 schema drift prevention.
 
@@ -529,7 +529,7 @@ Idempotency: Contract validation is pure and deterministic. Re-running touched w
 
 ### PR38. Split CLI Parsing From Workflow Execution
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/46.
 
 Priority: P1 operational clarity and reuse.
 
@@ -543,7 +543,7 @@ Idempotency: Re-running CLI commands and direct workflow calls with unchanged in
 
 ### PR39. Add Import-Boundary And Scale-Guard Quality Gates
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/46.
 
 Priority: P1 long-term architecture safety.
 
