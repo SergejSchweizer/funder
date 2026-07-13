@@ -115,7 +115,7 @@ def build_correlation_edges(
     min_abs_correlation: float | None = None,
     top_k_per_left: int | None = None,
 ) -> list[JsonRow]:
-    if metric != "pearson":
+    if metric not in {"pearson", "spearman"}:
         raise ValueError(f"unsupported correlation edge metric: {metric}")
     if min_abs_correlation is not None and not 0 <= min_abs_correlation <= 1:
         raise ValueError("min_abs_correlation must be in [0, 1]")
@@ -131,10 +131,7 @@ def build_correlation_edges(
             dates = sorted(set(returns_by_listing[left]) & set(returns_by_listing[right]))
             left_values = [returns_by_listing[left][item] for item in dates]
             right_values = [returns_by_listing[right][item] for item in dates]
-            left_var = covariance(left_values, left_values)
-            right_var = covariance(right_values, right_values)
-            cov = covariance(left_values, right_values)
-            corr = 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+            corr = _correlation_value(left_values, right_values, metric)
             if min_abs_correlation is not None and abs(corr) < min_abs_correlation:
                 continue
             rows.append(
@@ -164,6 +161,33 @@ def build_correlation_edges(
             int(row["right_id"]),
         ),
     )
+
+
+def _correlation_value(
+    left_values: Sequence[float], right_values: Sequence[float], metric: str
+) -> float:
+    if metric == "spearman":
+        left_values = _midranks(left_values)
+        right_values = _midranks(right_values)
+    left_var = covariance(left_values, left_values)
+    right_var = covariance(right_values, right_values)
+    cov = covariance(left_values, right_values)
+    return 0.0 if left_var == 0 or right_var == 0 else cov / sqrt(left_var * right_var)
+
+
+def _midranks(values: Sequence[float]) -> list[float]:
+    ranks = [0.0] * len(values)
+    ordered = sorted(enumerate(values), key=lambda item: (item[1], item[0]))
+    index = 0
+    while index < len(ordered):
+        end = index + 1
+        while end < len(ordered) and ordered[end][1] == ordered[index][1]:
+            end += 1
+        rank = ((index + 1) + end) / 2
+        for original_index, _ in ordered[index:end]:
+            ranks[original_index] = rank
+        index = end
+    return ranks
 
 
 def _limit_top_correlation_edges(

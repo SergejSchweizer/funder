@@ -279,6 +279,20 @@ Acceptance: Tests cover deterministic edge ordering, threshold filtering, top-k 
 
 Idempotency: Re-running the same edge build for a version and metric replaces stale bucket files and writes the same rows for unchanged returns and options.
 
+### PR28. Gold Spearman Correlation Edges
+
+Git status: in progress. PR: local branch `feat/spearman-correlation-edges`.
+
+Priority: P0 robust correlation foundation.
+
+Depends on: PR27.
+
+Scope: Extend Gold `correlation_edges` with `metric=spearman` by ranking common-date return values per pair and computing Pearson correlation on those ranks. Preserve threshold filtering, top-k limiting, bucketed Parquet output, and the existing edge schema.
+
+Acceptance: Tests cover Spearman edge values, separate metric paths, unchanged Pearson behavior, and deterministic bucketed writes.
+
+Idempotency: Re-running the same Spearman edge build for a version replaces stale Spearman bucket files and does not modify Pearson edge outputs.
+
 ### PR20. Evaluation Module: Walk-Forward Backtesting
 
 Git status: not started. PR: TBD.

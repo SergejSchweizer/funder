@@ -433,6 +433,32 @@ def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None
     assert read_rows(paths.gold_correlation_edges("snapshot-1", "pearson", 0)) == written
 
 
+def test_gold_correlation_edges_support_spearman_metric(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 1.0},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-11", "return": 2.0},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-12", "return": 3.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-10", "return": 1.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-11", "return": 4.0},
+        {"isin": "IE2", "exchange": "AS", "code": "BBB", "date": "2026-07-12", "return": 9.0},
+    ]
+
+    pearson = build_correlation_edges(return_rows, version="snapshot-1", metric="pearson")
+    spearman = write_correlation_edges(
+        paths,
+        return_rows,
+        version="snapshot-1",
+        metric="spearman",
+        bucket_count=2,
+    )
+
+    assert pearson[0]["value"] == pytest.approx(0.989743318610787)
+    assert spearman[0]["metric"] == "spearman"
+    assert spearman[0]["value"] == pytest.approx(1.0)
+    assert read_rows(paths.gold_correlation_edges("snapshot-1", "spearman", 0)) == spearman
+
+
 def test_silver_writes_are_parallelized_by_listing(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     rows = [
