@@ -218,7 +218,6 @@ def test_bronze_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-u
     assert successes[0]["rows"] == 1
     assert errors[0]["message"] == "offline"
     assert read_rows(paths.bronze_quote_file("XETRA", 2026, "IE1"))[0]["symbol"] == "AAA.XETRA"
-
     raw_by_symbol = {
         "AAA.XETRA": [
             {"date": "2026-07-10", "close": 100, "adjusted_close": 100},
@@ -239,6 +238,31 @@ def test_bronze_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-u
     assert read_rows(paths.silver_quote_file("AS", "IE2")) == quotes[2:]
     assert build_coverage(quotes, run_id="bronze-1")[0]["missing_periods"] == 1
     assert read_rows(paths.coverage()) == coverage
+
+
+def test_bronze_plan_accepts_existing_fetch_selection_field(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    plan = build_bronze_plan(
+        [
+            {
+                "search_run_id": "search-1",
+                "isin": "IE1",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "instrument_type": "ETF",
+                "country": "DE",
+                "currency": "EUR",
+                "name": "A",
+                "normalized_name": "a",
+                "selection_reason": "preferred_xetra",
+                "selected_for_fetch": True,
+            }
+        ],
+        run_id="bronze-1",
+        start_date=None,
+        end_date=None,
+    )
+
+    assert plan[0]["symbol"] == "AAA.XETRA"
 
 
 def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None:  # type: ignore[no-untyped-def]
