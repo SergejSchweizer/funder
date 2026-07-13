@@ -28,9 +28,9 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "name",
         "normalized_name",
         "selection_reason",
-        "selected_for_bronze",
+        "selected_for_fetch",
     ),
-    "bronze_plan": ("run_id", "isin", "code", "exchange", "symbol", "start_date", "end_date"),
+    "fetch_plan": ("run_id", "isin", "code", "exchange", "symbol", "start_date", "end_date"),
     "quotes": (
         "run_id",
         "isin",
@@ -44,7 +44,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "adjusted_close",
         "volume",
         "currency",
-        "bronzed_at",
+        "fetched_at",
     ),
     "coverage": (
         "run_id",
@@ -55,7 +55,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "last_quote_date",
         "observed_rows",
         "missing_periods",
-        "next_bronze_start",
+        "next_fetch_start",
     ),
     "quote_gaps": (
         "run_id",

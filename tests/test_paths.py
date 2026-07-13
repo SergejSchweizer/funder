@@ -37,7 +37,7 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_covariance("XETRA", "IE0000000001") == Path(
         "lake/gold/covariance/XETRA/IE0000000001.parquet"
     )
-    assert paths.bronze_plan("bronze-1") == Path("lake/silver/plans/bronze_plans/bronze-1.parquet")
+    assert paths.fetch_plan("fetch-1") == Path("lake/silver/plans/fetch_plans/fetch-1.parquet")
     assert paths.coverage() == Path("lake/silver/coverage/coverage.parquet")
     assert paths.quote_gaps() == Path("lake/silver/coverage/quote_gaps.parquet")
     assert paths.current_universe() == Path("lake/silver/universe/current_universe.json")

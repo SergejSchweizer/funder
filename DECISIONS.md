@@ -11,7 +11,7 @@ Last reviewed: 2026-07-13
 - [D004. Start With Risk-First Portfolio Evaluation](#d004-start-with-risk-first-portfolio-evaluation)
 - [D005. Deduplicate ETF Universe By ISIN And Prefer XETRA](#d005-deduplicate-etf-universe-by-isin-and-prefer-xetra)
 - [D006. Use EODHD For Data And Flatex For Trading](#d006-use-eodhd-for-data-and-flatex-for-trading)
-- [D007. Split Discovery And Data Loading Into Search And Bronze Modules](#d007-split-discovery-and-data-loading-into-search-and-bronze-modules)
+- [D007. Split Discovery And Data Loading Into Search And Fetch Modules](#d007-split-discovery-and-data-loading-into-search-and-fetch-modules)
 - [D008. Use Local And GitHub Quality Gates](#d008-use-local-and-github-quality-gates)
 - [D009. Keep Quality Gates Local And Out Of `.github`](#d009-keep-quality-gates-local-and-out-of-github)
 - [D010. Use Two Quality Gate Layers](#d010-use-two-quality-gate-layers)
@@ -81,7 +81,7 @@ Context: The `UCITS ETF` discovery set contains duplicate listings across exchan
 
 Decision: Use one canonical listing per non-empty ISIN for quote loading and optimization. Prefer the `XETRA` listing when the ISIN is available on XETRA; otherwise select a fallback exchange deterministically from the remaining listings.
 
-Consequences: Bronze planning should target `docs/eodhd_ucits_etf_canonical_isins.csv`, not the raw listing discovery file. Rows without ISIN require a separate review before they can enter the optimization universe.
+Consequences: Fetch planning should target `docs/eodhd_ucits_etf_canonical_isins.csv`, not the raw listing discovery file. Rows without ISIN require a separate review before they can enter the optimization universe.
 
 Update trigger: Revisit if the preferred exchange changes, a primary-listing signal becomes available, or optimization needs multiple currency/listing variants of the same ISIN.
 
@@ -97,17 +97,17 @@ Consequences: Data ingestion should be designed around EODHD symbols, exchanges,
 
 Update trigger: Revisit if the market data subscription changes, Flatex is replaced, or execution constraints require a different canonical listing selection rule.
 
-## D007. Split Discovery And Data Loading Into Search And Bronze Modules
+## D007. Split Discovery And Data Loading Into Search And Fetch Modules
 
 Date: 2026-07-12
 
 Context: The project needs filtered name/ISIN discovery first, then full EODHD data loading for the approved canonical universe.
 
-Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Bronze consumes only the approved canonical-universe contract and writes quote, mapping, coverage, and analytics data into the lake.
+Decision: Implement two clearly separated modules. Search produces versioned candidate and canonical-universe contracts. Fetch consumes only the approved canonical-universe contract and writes quote, mapping, coverage, and analytics data into the lake.
 
-Consequences: The module boundary must be enforced by schema validation and tests. Search must not bronze full histories, and Bronze must not perform fuzzy discovery. All PRs that alter the contract must update architecture, decisions, risks, and backlog entries together.
+Consequences: The module boundary must be enforced by schema validation and tests. Search must not fetch full histories, and Fetch must not perform fuzzy discovery. All PRs that alter the contract must update architecture, decisions, risks, and backlog entries together.
 
-Update trigger: Revisit if discovery and bronze are moved behind a shared orchestration framework or if a new provider requires a different contract boundary.
+Update trigger: Revisit if discovery and fetch are moved behind a shared orchestration framework or if a new provider requires a different contract boundary.
 
 ## D008. Use Local And GitHub Quality Gates
 
@@ -115,7 +115,7 @@ Date: 2026-07-12
 
 Status: Superseded by D009.
 
-Context: The project needs repeatable checks before implementing Search, Bronze, and lake-writing behavior.
+Context: The project needs repeatable checks before implementing Search, Fetch, and lake-writing behavior.
 
 Decision: Use Ruff, Mypy, Pytest, pre-commit, and a GitHub Actions `quality` workflow as the baseline quality gate. Protect `main` with the same workflow once the baseline is merged.
 
@@ -157,7 +157,7 @@ Context: The lake artifacts use `.parquet` table contracts and should open in st
 
 Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. `.parquet` paths are written as physical Apache Parquet files through pyarrow; `.json` and review CSV artifacts keep their native formats.
 
-Consequences: Search, Bronze, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
+Consequences: Search, Fetch, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
 
 Update trigger: Revisit if the project changes Parquet engine, compression, partitioning, or schema evolution policy.
 

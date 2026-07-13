@@ -6,10 +6,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from founder.bronze import (
-    build_bronze_plan,
+from founder.fetch import (
+    build_fetch_plan,
     normalize_quote_rows,
-    write_bronze_manifests,
+    write_fetch_manifests,
     write_silver_quotes,
 )
 from founder.gold import write_gold_inputs
@@ -96,23 +96,23 @@ def run_dry_run(root: Path) -> JsonRow:
     )
     canonical = write_canonical_universe(paths, search_run_id)
     pointer = approve_universe(paths, search_run_id, approved_at=now)
-    plan = build_bronze_plan(
+    plan = build_fetch_plan(
         canonical,
         run_id=run_id,
         start_date=date(2026, 7, 10),
         end_date=date(2026, 7, 12),
     )
-    write_rows(paths.bronze_plan(run_id), plan)
+    write_rows(paths.fetch_plan(run_id), plan)
 
     raw_by_symbol = {str(item["symbol"]): _sample_quotes(str(item["symbol"])) for item in plan}
     currencies = {str(row["isin"]): str(row["currency"]) for row in canonical}
-    quotes = normalize_quote_rows(plan, raw_by_symbol, bronzed_at=now, currency_by_isin=currencies)
+    quotes = normalize_quote_rows(plan, raw_by_symbol, fetched_at=now, currency_by_isin=currencies)
     write_silver_quotes(paths, quotes)
-    coverage = write_bronze_manifests(paths, run_id=run_id, quote_rows=quotes)
+    coverage = write_fetch_manifests(paths, run_id=run_id, quote_rows=quotes)
     returns, correlations, covariances = write_gold_inputs(paths, quotes)
     summary: JsonRow = {
         "search_run_id": search_run_id,
-        "bronze_run_id": run_id,
+        "fetch_run_id": run_id,
         "current_universe": pointer,
         "canonical_rows": len(canonical),
         "plan_rows": len(plan),

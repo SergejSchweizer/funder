@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from founder.bronze import (
-    build_bronze_plan,
+from founder.fetch import (
     build_coverage,
-    build_gap_bronze_plan,
+    build_fetch_plan,
+    build_gap_fetch_plan,
     build_quote_gap_rows,
     normalize_quote_rows,
     read_silver_quotes,
-    write_bronze_manifests,
+    write_fetch_manifests,
     write_quotes_to_bronze,
     write_silver_quotes,
 )
@@ -34,7 +34,7 @@ def test_lake_schemas_and_paths_cover_backlog_tables(tmp_path) -> None:  # type:
 
     assert "isin" in required_fields("canonical_universe")
     validate_fields("coverage", {field: "value" for field in required_fields("coverage")})
-    assert paths.bronze_plan("bronze-1").as_posix().endswith("data") is False
+    assert paths.fetch_plan("fetch-1").as_posix().endswith("data") is False
     assert paths.search_summary("search-1").name == "search_summary.json"
     assert paths.review_csv("search-1").name == "canonical_universe_review.csv"
     assert (
@@ -164,7 +164,7 @@ def test_search_ucits_etf_dataset_finds_expected_fund_counts(tmp_path) -> None: 
     }
 
 
-def test_bronze_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_fetch_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
     canonical = select_canonical(
         [
@@ -192,13 +192,13 @@ def test_bronze_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-u
             },
         ]
     )
-    plan = build_bronze_plan(
-        canonical, run_id="bronze-1", start_date=date(2026, 7, 10), end_date=date(2026, 7, 12)
+    plan = build_fetch_plan(
+        canonical, run_id="fetch-1", start_date=date(2026, 7, 10), end_date=date(2026, 7, 12)
     )
 
     assert plan[0]["symbol"] == "AAA.XETRA"
     with pytest.raises(ValueError, match="duplicate ISIN"):
-        build_bronze_plan(
+        build_fetch_plan(
             [canonical[0], canonical[0]],
             run_id="bad",
             start_date=date(2026, 7, 10),
@@ -228,20 +228,20 @@ def test_bronze_plan_quotes_and_coverage(tmp_path) -> None:  # type: ignore[no-u
     quotes = normalize_quote_rows(
         plan,
         raw_by_symbol,
-        bronzed_at=datetime(2026, 7, 12, tzinfo=UTC),
+        fetched_at=datetime(2026, 7, 12, tzinfo=UTC),
         currency_by_isin={"IE1": "EUR", "IE2": "EUR"},
     )
     write_silver_quotes(paths, quotes)
-    coverage = write_bronze_manifests(paths, run_id="bronze-1", quote_rows=quotes)
+    coverage = write_fetch_manifests(paths, run_id="fetch-1", quote_rows=quotes)
 
     assert read_rows(paths.silver_quote_file("XETRA", "IE1")) == quotes[:2]
     assert read_rows(paths.silver_quote_file("AS", "IE2")) == quotes[2:]
-    assert build_coverage(quotes, run_id="bronze-1")[0]["missing_periods"] == 1
+    assert build_coverage(quotes, run_id="fetch-1")[0]["missing_periods"] == 1
     assert read_rows(paths.coverage()) == coverage
 
 
-def test_bronze_plan_accepts_existing_fetch_selection_field(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    plan = build_bronze_plan(
+def test_fetch_plan_accepts_existing_bronze_selection_field(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    plan = build_fetch_plan(
         [
             {
                 "search_run_id": "search-1",
@@ -254,10 +254,10 @@ def test_bronze_plan_accepts_existing_fetch_selection_field(tmp_path) -> None:  
                 "name": "A",
                 "normalized_name": "a",
                 "selection_reason": "preferred_xetra",
-                "selected_for_fetch": True,
+                "selected_for_bronze": True,
             }
         ],
-        run_id="bronze-1",
+        run_id="fetch-1",
         start_date=None,
         end_date=None,
     )
@@ -267,7 +267,7 @@ def test_bronze_plan_accepts_existing_fetch_selection_field(tmp_path) -> None:  
 
 def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None:  # type: ignore[no-untyped-def]
     paths = LakePaths(root=tmp_path / "lake")
-    plan = build_bronze_plan(
+    plan = build_fetch_plan(
         [
             {
                 "search_run_id": "search-1",
@@ -280,19 +280,19 @@ def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None: 
                 "name": "A",
                 "normalized_name": "a",
                 "selection_reason": "preferred_exchange",
-                "selected_for_bronze": True,
+                "selected_for_fetch": True,
             }
         ],
-        run_id="bronze-2",
+        run_id="fetch-2",
         start_date=None,
         end_date=date(2026, 7, 13),
     )
     first_quotes = normalize_quote_rows(
         plan,
         {"AAA.XETRA": [{"date": "2026-07-01", "close": 100, "adjusted_close": 100}]},
-        bronzed_at=datetime(2026, 7, 12, tzinfo=UTC),
+        fetched_at=datetime(2026, 7, 12, tzinfo=UTC),
     )
-    gap_plan = build_gap_bronze_plan(plan, first_quotes, end_date=date(2026, 7, 13))
+    gap_plan = build_gap_fetch_plan(plan, first_quotes, end_date=date(2026, 7, 13))
 
     assert [(row["window_reason"], row["start_date"], row["end_date"]) for row in gap_plan] == [
         ("tail", "2026-07-02", "2026-07-13")
@@ -301,22 +301,22 @@ def test_gap_plan_and_quote_writes_preserve_existing_history(tmp_path) -> None: 
     delta_quotes = normalize_quote_rows(
         gap_plan,
         {"AAA.XETRA": [{"date": "2026-07-13", "close": 101, "adjusted_close": 101}]},
-        bronzed_at=datetime(2026, 7, 13, tzinfo=UTC),
+        fetched_at=datetime(2026, 7, 13, tzinfo=UTC),
     )
     write_silver_quotes(paths, first_quotes)
     write_silver_quotes(paths, delta_quotes)
 
     accumulated = read_silver_quotes(paths)
     assert [row["date"] for row in accumulated] == ["2026-07-01", "2026-07-13"]
-    coverage = write_bronze_manifests(paths, run_id="bronze-2", quote_rows=accumulated)
+    coverage = write_fetch_manifests(paths, run_id="fetch-2", quote_rows=accumulated)
     assert coverage[0]["first_quote_date"] == "2026-07-01"
     assert coverage[0]["last_quote_date"] == "2026-07-13"
 
 
-def test_gap_bronze_plan_backfills_holes_before_tail_windows() -> None:
+def test_gap_fetch_plan_backfills_holes_before_tail_windows() -> None:
     plan = [
         {
-            "run_id": "bronze-2",
+            "run_id": "fetch-2",
             "isin": "IE1",
             "code": "AAA",
             "exchange": "XETRA",
@@ -330,8 +330,8 @@ def test_gap_bronze_plan_backfills_holes_before_tail_windows() -> None:
         {"isin": "IE1", "code": "AAA", "exchange": "XETRA", "date": "2026-07-14"},
     ]
 
-    gaps = build_quote_gap_rows(plan, quotes, run_id="bronze-2", as_of=date(2026, 7, 17))
-    gap_plan = build_gap_bronze_plan(plan, quotes, end_date=date(2026, 7, 17))
+    gaps = build_quote_gap_rows(plan, quotes, run_id="fetch-2", as_of=date(2026, 7, 17))
+    gap_plan = build_gap_fetch_plan(plan, quotes, end_date=date(2026, 7, 17))
 
     assert [(row["gap_type"], row["gap_start"], row["gap_end"]) for row in gaps] == [
         ("historical_gap", "2026-07-13", "2026-07-13"),

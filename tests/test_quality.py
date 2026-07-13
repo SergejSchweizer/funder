@@ -66,7 +66,7 @@ def test_main_gate_fails_on_dirty_status_output() -> None:
 def test_conventional_commit_subject_validation() -> None:
     assert is_conventional_commit_subject("feat: add search contracts")
     assert is_conventional_commit_subject("fix(http): redact token")
-    assert is_conventional_commit_subject("refactor!: change bronze contract")
+    assert is_conventional_commit_subject("refactor!: change fetch contract")
     assert not is_conventional_commit_subject("Add search contracts")
     assert not is_conventional_commit_subject("feat add search contracts")
 

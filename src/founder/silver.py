@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from founder.bronze import _merge_rows
+from founder.fetch import _merge_rows
 from founder.logging import get_logger
 from founder.paths import LakePaths
 from founder.table_io import JsonRow, read_rows, write_rows
@@ -31,7 +31,7 @@ def build_silver_quote_rows(bronze_rows: Sequence[Mapping[str, Any]]) -> list[Js
         exchange = str(raw["exchange"])
         code = str(raw["code"])
         run_date = str(raw.get("run_date", quote_date))
-        bronzed_at = datetime.fromisoformat(run_date).replace(tzinfo=UTC).isoformat()
+        fetched_at = datetime.fromisoformat(run_date).replace(tzinfo=UTC).isoformat()
         key = (isin, exchange, code, quote_date)
         rows[key] = {
             "run_id": str(raw["run_id"]),
@@ -46,7 +46,7 @@ def build_silver_quote_rows(bronze_rows: Sequence[Mapping[str, Any]]) -> list[Js
             "adjusted_close": float(raw.get("adjusted_close", raw.get("close", 0.0))),
             "volume": int(raw.get("volume", 0)),
             "currency": str(raw.get("currency", "")),
-            "bronzed_at": bronzed_at,
+            "fetched_at": fetched_at,
         }
     silver_rows = [rows[key] for key in sorted(rows)]
     LOGGER.info("silver quote rows built rows=%s", len(silver_rows))

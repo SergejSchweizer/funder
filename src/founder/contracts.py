@@ -1,4 +1,4 @@
-"""Typed contracts shared by Search and Bronze modules."""
+"""Typed contracts shared by Search and Fetch modules."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class SearchCandidate:
 
 @dataclass(frozen=True)
 class CanonicalUniverseRow:
-    """The Search-to-Bronze contract: one approved listing for one ISIN."""
+    """The Search-to-Fetch contract: one approved listing for one ISIN."""
 
     search_run_id: str
     isin: str
@@ -59,7 +59,7 @@ class CanonicalUniverseRow:
     name: str
     normalized_name: str
     selection_reason: str
-    selected_for_bronze: bool
+    selected_for_fetch: bool
 
     def __post_init__(self) -> None:
         require_text(self.search_run_id, "search_run_id")
@@ -68,13 +68,13 @@ class CanonicalUniverseRow:
         require_text(self.exchange, "exchange")
         require_text(self.name, "name")
         require_text(self.selection_reason, "selection_reason")
-        if not self.selected_for_bronze:
-            raise ValueError("canonical rows must be selected for bronze")
+        if not self.selected_for_fetch:
+            raise ValueError("canonical rows must be selected for fetch")
 
 
 @dataclass(frozen=True)
-class BronzeRun:
-    """Operational metadata for one bronze execution."""
+class FetchRun:
+    """Operational metadata for one fetch execution."""
 
     run_id: str
     universe_search_run_id: str
@@ -89,7 +89,7 @@ class BronzeRun:
             raise ValueError("started_at must be timezone-aware")
 
     @classmethod
-    def start(cls, run_id: str, universe_search_run_id: str) -> BronzeRun:
+    def start(cls, run_id: str, universe_search_run_id: str) -> FetchRun:
         return cls(
             run_id=run_id,
             universe_search_run_id=universe_search_run_id,
@@ -98,8 +98,8 @@ class BronzeRun:
 
 
 @dataclass(frozen=True)
-class BronzeError:
-    """A non-secret bronze error record."""
+class FetchError:
+    """A non-secret fetch error record."""
 
     run_id: str
     code: str

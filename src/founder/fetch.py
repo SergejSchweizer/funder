@@ -1,6 +1,6 @@
-"""Bronze planning, Bronze EODHD ingestion, and coverage manifests.
+"""Fetch planning, Fetch EODHD ingestion, and coverage manifests.
 
-The Bronze module starts at Search's approved `canonical_universe` contract. It
+The Fetch module starts at Search's approved `canonical_universe` contract. It
 validates that contract, derives EODHD symbols, records raw or near-raw Bronze
 quote and other EODHD data, logs non-secret errors, and writes metadata manifests
 that show coverage. It does not perform fuzzy instrument discovery or write
@@ -32,7 +32,7 @@ LOGGER = get_logger(__name__)
 
 @dataclass(frozen=True)
 class EodhdDatasetStrategy:
-    """Dataset-specific behavior for the shared EODHD Bronze ingestion pipeline."""
+    """Dataset-specific behavior for the shared EODHD-to-Bronze ingestion pipeline."""
 
     name: str
     endpoint: str
@@ -62,14 +62,14 @@ def validate_canonical_rows(rows: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
 
     Every required canonical field must be present and non-empty, and each ISIN
     may appear only once. The returned rows are plain dictionaries that can be
-    safely passed to planning and bronze helpers.
+    safely passed to planning and fetch helpers.
     """
     validated: list[JsonRow] = []
     seen_isins: set[str] = set()
     for row in rows:
         item = dict(row)
-        if "selected_for_bronze" not in item and "selected_for_fetch" in item:
-            item["selected_for_bronze"] = item["selected_for_fetch"]
+        if "selected_for_fetch" not in item and "selected_for_bronze" in item:
+            item["selected_for_fetch"] = item["selected_for_bronze"]
         for field in required_fields("canonical_universe"):
             if field not in item or str(item[field]).strip() == "":
                 raise ValueError(f"canonical universe row missing {field}")
@@ -82,14 +82,14 @@ def validate_canonical_rows(rows: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
     return validated
 
 
-def build_bronze_plan(
+def build_fetch_plan(
     canonical_rows: Iterable[Mapping[str, Any]],
     *,
     run_id: str,
     start_date: date | None,
     end_date: date | None,
 ) -> list[JsonRow]:
-    """Create deterministic EODHD quote-bronze instructions.
+    """Create deterministic EODHD quote-fetch instructions.
 
     Each plan row contains the canonical identifiers plus the EODHD symbol in
     `CODE.EXCHANGE` form and the requested date window. Planning is pure: it
@@ -112,11 +112,11 @@ def build_bronze_plan(
                 "end_date": end_date.isoformat() if end_date is not None else "",
             }
         )
-    LOGGER.info("bronze plan built run_id=%s rows=%s", run_id, len(plan))
+    LOGGER.info("fetch plan built run_id=%s rows=%s", run_id, len(plan))
     return plan
 
 
-def write_bronze_plan(
+def write_fetch_plan(
     paths: LakePaths,
     canonical_path: Path,
     *,
@@ -127,7 +127,7 @@ def write_bronze_plan(
     isin: str | None = None,
     gap_aware: bool = False,
 ) -> list[JsonRow]:
-    """Read a canonical universe, write a bronze plan, and return it."""
+    """Read a canonical universe, write a fetch plan, and return it."""
     rows = read_rows(canonical_path)
     if isin is not None:
         normalized_isin = isin.casefold()
@@ -136,20 +136,20 @@ def write_bronze_plan(
             raise ValueError(f"approved canonical universe does not contain ISIN: {isin}")
     if limit is not None:
         rows = rows[:limit]
-    plan = build_bronze_plan(
+    plan = build_fetch_plan(
         rows,
         run_id=run_id,
         start_date=start_date,
         end_date=end_date,
     )
     if gap_aware:
-        plan = build_gap_bronze_plan(plan, read_silver_quotes(paths), end_date=end_date)
-    write_rows(paths.bronze_plan(run_id), plan)
-    LOGGER.info("bronze plan written run_id=%s path=%s", run_id, paths.bronze_plan(run_id))
+        plan = build_gap_fetch_plan(plan, read_silver_quotes(paths), end_date=end_date)
+    write_rows(paths.fetch_plan(run_id), plan)
+    LOGGER.info("fetch plan written run_id=%s path=%s", run_id, paths.fetch_plan(run_id))
     return plan
 
 
-def build_gap_bronze_plan(
+def build_gap_fetch_plan(
     plan: Sequence[Mapping[str, Any]],
     quote_rows: Sequence[Mapping[str, Any]],
     *,
@@ -197,7 +197,7 @@ def build_gap_bronze_plan(
                 else "gap_backfill",
             }
         )
-    LOGGER.info("gap bronze plan built input_rows=%s gap_rows=%s", len(plan), len(gap_plan))
+    LOGGER.info("gap fetch plan built input_rows=%s gap_rows=%s", len(plan), len(gap_plan))
     return gap_plan
 
 
@@ -372,7 +372,7 @@ def write_quotes_to_bronze(
     loader: QuoteLoader,
     concurrency: int = 2,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
-    """Write planned EOD quote payloads into Bronze.
+    """Write planned EOD quote payloads into Fetch.
 
     The supplied `loader` performs the actual API call, which keeps this helper
     easy to test with recorded or mocked responses. Per-symbol failures are
@@ -397,7 +397,7 @@ def write_eodhd_dataset_to_bronze(
     loader: QuoteLoader,
     concurrency: int = 2,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
-    """Write one EODHD dataset into Bronze using its dataset strategy."""
+    """Write one EODHD dataset into Fetch using its dataset strategy."""
     worker_count = max(1, concurrency)
 
     def load_one(item: Mapping[str, Any]) -> tuple[JsonRow | None, JsonRow | None]:
@@ -450,7 +450,7 @@ def write_eodhd_dataset_to_bronze(
                 "message": str(error),
             }
             LOGGER.warning(
-                "EODHD bronze failed symbol=%s dataset=%s elapsed_seconds=%.3f error=%s",
+                "EODHD fetch failed symbol=%s dataset=%s elapsed_seconds=%.3f error=%s",
                 item["symbol"],
                 strategy.name,
                 elapsed_seconds,
@@ -481,7 +481,7 @@ def write_eodhd_dataset_to_bronze(
     successes = [successes_by_index[index] for index in sorted(successes_by_index)]
     errors = [errors_by_index[index] for index in sorted(errors_by_index)]
     LOGGER.info(
-        "bronze EODHD ingestion complete dataset=%s successes=%s errors=%s concurrency=%s",
+        "fetch EODHD ingestion complete dataset=%s successes=%s errors=%s concurrency=%s",
         strategy.name,
         len(successes),
         len(errors),
@@ -499,7 +499,7 @@ def eodhd_quote_loader(client: EodhdClient) -> QuoteLoader:
 def eodhd_dataset_loader(client: EodhdClient, strategy: EodhdDatasetStrategy) -> QuoteLoader:
     """Wrap `EodhdClient` for one strategy-driven EODHD dataset."""
 
-    def bronze(item: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    def fetch(item: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
         params: dict[str, str] = {"fmt": "json"}
         start_date = str(item.get("start_date", ""))
         end_date = str(item.get("end_date", ""))
@@ -512,7 +512,7 @@ def eodhd_dataset_loader(client: EodhdClient, strategy: EodhdDatasetStrategy) ->
             raise ValueError(f"expected EODHD {strategy.name} list")
         return [row for row in payload if isinstance(row, dict)]
 
-    return bronze
+    return fetch
 
 
 def eodhd_raw_data_loader(client: EodhdClient, endpoint: str) -> RawDataLoader:
@@ -588,7 +588,7 @@ def normalize_quote_rows(
     plan: Sequence[Mapping[str, Any]],
     raw_by_symbol: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
-    bronzed_at: datetime,
+    fetched_at: datetime,
     currency_by_isin: Mapping[str, str] | None = None,
 ) -> list[JsonRow]:
     """Normalize raw EOD quote payloads into Silver quote rows.
@@ -621,7 +621,7 @@ def normalize_quote_rows(
                 ),
                 "volume": int(raw.get("volume", 0)),
                 "currency": currencies.get(isin, ""),
-                "bronzed_at": bronzed_at.astimezone(UTC).isoformat(),
+                "fetched_at": fetched_at.astimezone(UTC).isoformat(),
             }
     normalized = [rows[key] for key in sorted(rows)]
     LOGGER.info("quote rows normalized rows=%s", len(normalized))
@@ -660,10 +660,10 @@ def read_silver_quotes(paths: LakePaths) -> list[JsonRow]:
 def build_coverage(
     quote_rows: Sequence[Mapping[str, Any]], *, run_id: str, overlap_days: int = 5
 ) -> list[JsonRow]:
-    """Summarize quote completeness and the next incremental bronze start.
+    """Summarize quote completeness and the next incremental fetch start.
 
     Coverage is calculated per `(isin, code, exchange)`. `missing_periods` is a
-    simple calendar-day gap count, and `next_bronze_start` backs up from the last
+    simple calendar-day gap count, and `next_fetch_start` backs up from the last
     quote date by `overlap_days` so later runs can safely deduplicate overlap.
     """
     grouped: dict[tuple[str, str, str], list[str]] = {}
@@ -688,14 +688,14 @@ def build_coverage(
                 "last_quote_date": dates[-1],
                 "observed_rows": len(dates),
                 "missing_periods": missing,
-                "next_bronze_start": (last - timedelta(days=overlap_days)).isoformat(),
+                "next_fetch_start": (last - timedelta(days=overlap_days)).isoformat(),
             }
         )
     LOGGER.debug("coverage built run_id=%s rows=%s", run_id, len(coverage))
     return coverage
 
 
-def write_bronze_manifests(
+def write_fetch_manifests(
     paths: LakePaths,
     *,
     run_id: str,
@@ -703,7 +703,7 @@ def write_bronze_manifests(
     plan: Sequence[Mapping[str, Any]] = (),
     as_of: date | None = None,
 ) -> list[JsonRow]:
-    """Write coverage, bronze-run metadata, and review CSV manifests."""
+    """Write coverage, fetch-run metadata, and review CSV manifests."""
     coverage = build_coverage(quote_rows, run_id=run_id)
     write_rows(
         paths.quote_gaps(),
@@ -711,7 +711,7 @@ def write_bronze_manifests(
     )
     write_rows(paths.coverage(), coverage)
     write_rows(
-        paths.bronze_runs(),
+        paths.fetch_runs(),
         [
             {
                 "run_id": run_id,
@@ -721,12 +721,12 @@ def write_bronze_manifests(
         ],
     )
     write_csv(paths.coverage().with_suffix(".csv"), coverage, required_fields("coverage"))
-    LOGGER.info("bronze manifests written run_id=%s coverage_rows=%s", run_id, len(coverage))
+    LOGGER.info("fetch manifests written run_id=%s coverage_rows=%s", run_id, len(coverage))
     return coverage
 
 
 @contextmanager
-def bronze_run_lock(paths: LakePaths, run_id: str) -> Iterator[Path]:
+def fetch_run_lock(paths: LakePaths, run_id: str) -> Iterator[Path]:
     """Create a simple lock file so cron runs do not overlap for one run id."""
     lock_path = paths.silver / "runs" / f"{run_id}.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -734,7 +734,7 @@ def bronze_run_lock(paths: LakePaths, run_id: str) -> Iterator[Path]:
         with lock_path.open("x", encoding="utf-8") as lock_file:
             lock_file.write(datetime.now(UTC).replace(microsecond=0).isoformat() + "\n")
     except FileExistsError as error:
-        raise RuntimeError(f"bronze run already active: {run_id}") from error
+        raise RuntimeError(f"fetch run already active: {run_id}") from error
     try:
         yield lock_path
     finally:

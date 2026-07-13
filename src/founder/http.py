@@ -1,4 +1,4 @@
-"""Small EODHD HTTP client used by Search and Bronze."""
+"""Small EODHD HTTP client used by Search and Fetch."""
 
 from __future__ import annotations
 

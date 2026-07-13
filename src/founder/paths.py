@@ -46,8 +46,8 @@ class LakePaths:
     def review_csv(self, search_run_id: str) -> Path:
         return self.silver_search_run(search_run_id) / "canonical_universe_review.csv"
 
-    def bronze_plan(self, run_id: str) -> Path:
-        return self.silver / "plans" / "bronze_plans" / f"{run_id}.parquet"
+    def fetch_plan(self, run_id: str) -> Path:
+        return self.silver / "plans" / "fetch_plans" / f"{run_id}.parquet"
 
     def bronze_quote_file(self, exchange: str, year: int, isin: str) -> Path:
         return self.bronze / "quotes" / exchange / str(year) / f"{isin}.parquet"
@@ -58,8 +58,8 @@ class LakePaths:
     def silver_quote_file(self, exchange: str, isin: str) -> Path:
         return self.silver / "quotes" / exchange / f"{isin}.parquet"
 
-    def bronze_runs(self) -> Path:
-        return self.silver / "runs" / "bronze_runs.parquet"
+    def fetch_runs(self) -> Path:
+        return self.silver / "runs" / "fetch_runs.parquet"
 
     def coverage(self) -> Path:
         return self.silver / "coverage" / "coverage.parquet"
