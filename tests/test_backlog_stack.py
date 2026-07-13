@@ -13,7 +13,6 @@ from founder.bronze import (
     read_silver_quotes,
     write_bronze_manifests,
     write_quotes_to_bronze,
-    write_silver_quotes,
 )
 from founder.gold import build_correlation_and_covariance, build_returns, write_gold_inputs
 from founder.paths import LakePaths
@@ -26,6 +25,7 @@ from founder.search import (
     write_canonical_universe,
     write_search_run,
 )
+from founder.silver import write_silver_quotes
 from founder.table_io import read_json, read_rows, write_rows
 
 
@@ -393,6 +393,51 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
     assert read_rows(paths.gold_runs())[0]["input_last_quote_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_snapshot_date"] == "2026-07-11"
     assert read_rows(paths.gold_runs())[0]["input_listing_count"] == 2
+
+
+def test_silver_writes_are_parallelized_by_listing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    paths = LakePaths(root=tmp_path / "lake")
+    rows = [
+        {
+            "run_id": "bronze-1",
+            "isin": "IE1",
+            "code": "AAA",
+            "exchange": "XETRA",
+            "date": "2026-07-10",
+            "open": 100.0,
+            "high": 100.0,
+            "low": 100.0,
+            "close": 100.0,
+            "adjusted_close": 100.0,
+            "volume": 0,
+            "currency": "EUR",
+            "bronzed_at": "2026-07-10T00:00:00+00:00",
+        },
+        {
+            "run_id": "bronze-1",
+            "isin": "IE2",
+            "code": "BBB",
+            "exchange": "AS",
+            "date": "2026-07-10",
+            "open": 50.0,
+            "high": 50.0,
+            "low": 50.0,
+            "close": 50.0,
+            "adjusted_close": 50.0,
+            "volume": 0,
+            "currency": "EUR",
+            "bronzed_at": "2026-07-10T00:00:00+00:00",
+        },
+    ]
+
+    summary = write_silver_quotes(paths, rows, concurrency=2)
+
+    assert summary == [
+        {"exchange": "AS", "isin": "IE2", "rows": 1},
+        {"exchange": "XETRA", "isin": "IE1", "rows": 1},
+    ]
+    assert read_rows(paths.silver_quote_file("XETRA", "IE1")) == [rows[0]]
+    assert read_rows(paths.silver_quote_file("AS", "IE2")) == [rows[1]]
 
 
 def test_gold_inputs_resume_completed_listings_by_last_quote_date(tmp_path) -> None:  # type: ignore[no-untyped-def]

@@ -187,6 +187,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write verbose DEBUG logs.",
     )
     silver.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
+    silver.add_argument(
+        "--concurrency",
+        type=_positive_int,
+        default=2,
+        help="Maximum parallel Silver workers. Defaults to 2 for 4-core hosts.",
+    )
     gold = subparsers.add_parser("gold", help="Build Gold risk inputs from Silver quotes.")
     gold.add_argument(
         "--debug",
@@ -232,7 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--concurrency",
         type=_positive_int,
         default=2,
-        help="Maximum parallel EODHD bronze workers. Defaults to 2 for cron-safe runs.",
+        help="Maximum parallel Bronze, Silver, and Gold workers. Defaults to 2.",
     )
     refresh_selector = refresh.add_mutually_exclusive_group()
     refresh_selector.add_argument(
@@ -303,7 +309,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "silver":
-        summary = _run_silver_command(Path(args.root))
+        summary = _run_silver_command(Path(args.root), concurrency=args.concurrency)
         print(json.dumps(summary, sort_keys=True))
         return
     if args.command == "gold":
@@ -312,7 +318,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
     if args.command == "refresh":
         bronze_summary = _run_bronze_command(args)
-        silver_summary = _run_silver_command(Path(args.root))
+        silver_summary = _run_silver_command(Path(args.root), concurrency=args.concurrency)
         gold_summary = _run_gold_command(Path(args.root), concurrency=args.concurrency)
         print(
             json.dumps(
@@ -447,12 +453,12 @@ def _run_bronze_command(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
-def _run_silver_command(root: Path) -> dict[str, Any]:
+def _run_silver_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:
     paths = LakePaths(root=root)
-    LOGGER.info("running silver build root=%s", root)
-    quote_rows = build_silver_quotes(paths)
+    LOGGER.info("running silver build root=%s concurrency=%s", root, concurrency)
+    quote_rows = build_silver_quotes(paths, concurrency=concurrency)
     LOGGER.info("silver build complete root=%s rows=%s", root, len(quote_rows))
-    return {"quote_rows": len(quote_rows)}
+    return {"concurrency": concurrency, "quote_rows": len(quote_rows)}
 
 
 def _run_gold_command(root: Path, *, concurrency: int = 2) -> dict[str, Any]:

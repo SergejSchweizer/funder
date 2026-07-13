@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
@@ -53,25 +54,39 @@ def build_silver_quote_rows(bronze_rows: Sequence[Mapping[str, Any]]) -> list[Js
     return silver_rows
 
 
-def write_silver_quotes(paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]]) -> None:
+def _write_silver_listing(args: tuple[LakePaths, str, str, list[Mapping[str, Any]]]) -> JsonRow:
+    paths, exchange, isin, rows = args
+    quote_path = paths.silver_quote_file(exchange, isin)
+    merged_rows = _merge_rows(
+        read_rows(quote_path),
+        rows,
+        key_fields=("isin", "exchange", "code", "date"),
+    )
+    write_rows(quote_path, merged_rows)
+    LOGGER.info(
+        "silver quote rows written exchange=%s isin=%s rows=%s",
+        exchange,
+        isin,
+        len(merged_rows),
+    )
+    return {"exchange": exchange, "isin": isin, "rows": len(merged_rows)}
+
+
+def write_silver_quotes(
+    paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]], *, concurrency: int = 2
+) -> list[JsonRow]:
     """Write Silver quote rows to one file per exchange and ISIN."""
     by_listing: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     for row in quote_rows:
         by_listing.setdefault((str(row["exchange"]), str(row["isin"])), []).append(row)
-    for (exchange, isin), rows in by_listing.items():
-        quote_path = paths.silver_quote_file(exchange, isin)
-        merged_rows = _merge_rows(
-            read_rows(quote_path),
-            rows,
-            key_fields=("isin", "exchange", "code", "date"),
-        )
-        write_rows(quote_path, merged_rows)
-        LOGGER.info(
-            "silver quote rows written exchange=%s isin=%s rows=%s",
-            exchange,
-            isin,
-            len(merged_rows),
-        )
+    listing_args = [
+        (paths, exchange, isin, rows) for (exchange, isin), rows in sorted(by_listing.items())
+    ]
+    workers = max(1, concurrency)
+    if workers == 1 or len(listing_args) <= 1:
+        return [_write_silver_listing(args) for args in listing_args]
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(_write_silver_listing, listing_args))
 
 
 def read_silver_quotes(paths: LakePaths) -> list[JsonRow]:
@@ -82,8 +97,8 @@ def read_silver_quotes(paths: LakePaths) -> list[JsonRow]:
     return rows
 
 
-def build_silver_quotes(paths: LakePaths) -> list[JsonRow]:
+def build_silver_quotes(paths: LakePaths, *, concurrency: int = 2) -> list[JsonRow]:
     """Build Silver quotes from all available Bronze quote rows."""
     quote_rows = build_silver_quote_rows(read_bronze_quote_rows(paths))
-    write_silver_quotes(paths, quote_rows)
+    write_silver_quotes(paths, quote_rows, concurrency=concurrency)
     return read_silver_quotes(paths)

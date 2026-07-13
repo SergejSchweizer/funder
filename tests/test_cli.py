@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,7 @@ def test_cli_runs_search_and_bronze_modules(
 
     main(["silver", "--root", str(root)])
     silver_output = capsys.readouterr()
+    assert '"concurrency": 2' in silver_output.out
     assert '"quote_rows": 2' in silver_output.out
 
     main(["gold", "--root", str(root)])
@@ -685,7 +687,11 @@ def test_cli_refresh_runs_bronze_silver_and_gold(
     )
 
     output = capsys.readouterr().out
+    summary = json.loads(output)
     assert '"bronze_plan_rows": 1' in output
+    assert summary["bronze"]["concurrency"] == 2
+    assert summary["silver"]["concurrency"] == 2
+    assert summary["gold"]["concurrency"] == 2
     assert '"quote_rows": 2' in output
     assert '"return_rows": 1' in output
     paths = LakePaths(root=root)
@@ -696,3 +702,11 @@ def test_cli_refresh_runs_bronze_silver_and_gold(
 def test_cli_bronze_rejects_removed_incremental_flag() -> None:
     with pytest.raises(SystemExit):
         main(["bronze", "--incremental"])
+
+
+def test_cli_silver_accepts_concurrency_override(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["silver", "--root", str(tmp_path / "lake"), "--concurrency", "1"])
+
+    assert '"concurrency": 1' in capsys.readouterr().out

@@ -10,11 +10,11 @@ from founder.bronze import (
     build_bronze_plan,
     normalize_quote_rows,
     write_bronze_manifests,
-    write_silver_quotes,
 )
 from founder.gold import write_gold_inputs
 from founder.paths import LakePaths
 from founder.search import approve_universe, write_canonical_universe, write_search_run
+from founder.silver import write_silver_quotes
 from founder.table_io import JsonRow, write_json, write_rows
 
 SAMPLE_CANDIDATES: tuple[dict[str, str], ...] = (
@@ -107,7 +107,7 @@ def run_dry_run(root: Path) -> JsonRow:
     raw_by_symbol = {str(item["symbol"]): _sample_quotes(str(item["symbol"])) for item in plan}
     currencies = {str(row["isin"]): str(row["currency"]) for row in canonical}
     quotes = normalize_quote_rows(plan, raw_by_symbol, bronzed_at=now, currency_by_isin=currencies)
-    write_silver_quotes(paths, quotes)
+    write_silver_quotes(paths, quotes, concurrency=2)
     coverage = write_bronze_manifests(paths, run_id=run_id, quote_rows=quotes)
     returns, correlations, covariances, features = write_gold_inputs(paths, quotes)
     summary: JsonRow = {
