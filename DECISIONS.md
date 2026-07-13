@@ -1,6 +1,6 @@
 # Decisions
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Table Of Contents
 
@@ -8,7 +8,7 @@ Last reviewed: 2026-07-12
 - [D001. Keep Local Secrets Out of Git](#d001-keep-local-secrets-out-of-git)
 - [D002. Track Architecture, Risks, Backlog, and Decisions as First-Class Docs](#d002-track-architecture-risks-backlog-and-decisions-as-first-class-docs)
 - [D003. Use EODHD as the First ETF Quote Source](#d003-use-eodhd-as-the-first-etf-quote-source)
-- [D004. Start With Minimum-Risk Portfolio Optimization](#d004-start-with-minimum-risk-portfolio-optimization)
+- [D004. Start With Risk-First Portfolio Evaluation](#d004-start-with-risk-first-portfolio-evaluation)
 - [D005. Deduplicate ETF Universe By ISIN And Prefer XETRA](#d005-deduplicate-etf-universe-by-isin-and-prefer-xetra)
 - [D006. Use EODHD For Data And Flatex For Trading](#d006-use-eodhd-for-data-and-flatex-for-trading)
 - [D007. Split Discovery And Data Loading Into Search And Fetch Modules](#d007-split-discovery-and-data-loading-into-search-and-fetch-modules)
@@ -53,7 +53,7 @@ Update trigger: Revisit if these docs move into generated documentation or a dif
 
 Date: 2026-07-12
 
-Context: The project goal is to analyze end-of-day quotes for multiple thousands of ETFs and build minimum-risk portfolio weights.
+Context: The project goal is to analyze end-of-day quotes for multiple thousands of ETFs and build risk-aware portfolio weights.
 
 Decision: Use EODHD EOD Historical Data as the first data source for ETF discovery and quote ingestion. Use exchange symbol-list enumeration for broad universe discovery because the Search API is capped at 500 results.
 
@@ -61,17 +61,17 @@ Consequences: Discovery code must handle multiple exchanges, duplicate listings,
 
 Update trigger: Revisit if another provider becomes primary, EODHD endpoint behavior changes, or the universe definition moves away from ETF/fund instruments.
 
-## D004. Start With Minimum-Risk Portfolio Optimization
+## D004. Start With Risk-First Portfolio Evaluation
 
 Date: 2026-07-12
 
-Context: The first product goal is optimal portfolio weighting based on minimal risk.
+Context: The first product goal is optimal portfolio weighting based on robust risk analysis. ETF expected-return estimates are noisy, and many UCITS ETF candidates are highly correlated.
 
-Decision: Start with minimum-variance portfolio optimization over validated ETF return histories, then add constraints explicitly as project requirements mature.
+Decision: Start with constrained minimum-variance optimization over validated ETF return histories, then evaluate risk parity, hierarchical risk parity, maximum diversification, walk-forward backtesting, rebalancing simulations, drawdown metrics, and CVaR before trusting target weights.
 
-Consequences: The implementation needs clean return series, covariance estimation, duplicate instrument handling, and documented constraints before weights are trusted.
+Consequences: The implementation needs clean return series, covariance estimation, duplicate instrument handling, drawdown and tail-risk metrics, out-of-sample checks, transaction-cost-aware rebalancing simulations, and documented constraints before weights are trusted.
 
-Update trigger: Revisit if the objective changes to risk parity, target return, maximum Sharpe ratio, drawdown minimization, or multi-objective optimization.
+Update trigger: Revisit if a return forecast model becomes reliable enough to make maximum Sharpe or target-return optimization a production objective rather than a comparison result.
 
 ## D005. Deduplicate ETF Universe By ISIN And Prefer XETRA
 

@@ -1,6 +1,6 @@
 # Founder
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Table Of Contents
 
@@ -9,6 +9,7 @@ Last reviewed: 2026-07-12
 - [ETF Discovery Statistics](#etf-discovery-statistics)
 - [Intended Workflow](#intended-workflow)
 - [Portfolio Objective](#portfolio-objective)
+- [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
 - [Run Search And Fetch](#run-search-and-fetch)
 - [Local Dry Run](#local-dry-run)
@@ -18,7 +19,7 @@ Last reviewed: 2026-07-12
 - [Documentation Refresh](#documentation-refresh)
 - [Keep This README Up To Date](#keep-this-readme-up-to-date)
 
-Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build minimum-risk fund portfolio weights.
+Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build risk-aware fund portfolio weights.
 
 The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
 
@@ -115,16 +116,16 @@ Top canonical exchanges after one-row-per-ISIN selection:
 1. Discover ETF and fund instruments from EODHD without committing credentials.
 2. Deduplicate the universe to one canonical listing per ISIN, preferring `XETRA` when available.
 3. Fetch end-of-day quotes for the selected canonical universe.
-4. Normalize quotes into a reproducible local dataset.
+4. Build Silver quotes into a reproducible local dataset.
 5. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
 6. Estimate return and risk inputs from validated quote history.
-7. Build minimum-risk portfolio weights under explicit constraints.
+7. Compare risk-aware portfolio candidates and build selected target weights under explicit constraints.
 8. Report weights, assumptions, coverage gaps, and validation results.
 9. Export approved target weights into Flatex trade-preparation rows.
 
 ## Portfolio Objective
 
-The initial optimization objective is minimum portfolio variance:
+The initial production optimization objective is constrained minimum portfolio variance:
 
 $$
 \min_w \; w^T \Sigma w
@@ -137,6 +138,28 @@ Subject to constraints that will be made explicit before implementation, such as
 - maximum concentration per ETF, issuer, currency, country, or asset class;
 - minimum quote-history coverage;
 - duplicate listing and duplicate ISIN handling.
+
+This objective is intentionally risk-first because ETF expected-return estimates are noisy and many UCITS ETF candidates are highly correlated.
+
+## Portfolio Analysis And Evaluation Plan
+
+Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer should consume Gold returns, correlation, and covariance inputs; it should not call EODHD or mutate Bronze and Silver market data.
+
+Planned portfolio analysis and evaluation computations include:
+
+- aligned return matrices by date and listing;
+- asset metrics such as observation count, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio;
+- portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index;
+- efficient-frontier points and long-format frontier weights;
+- constrained minimum-variance, maximum-Sharpe comparison, and target-return minimum-variance weights;
+- risk parity and equal-risk-contribution diagnostics;
+- hierarchical risk parity clusters, ordering, and weights;
+- maximum-diversification ratio and target weights;
+- walk-forward backtests with rolling or expanding train/test windows;
+- rebalancing simulations with turnover, transaction-cost estimates, and post-cost returns;
+- historical VaR, CVaR, tail scenario diagnostics, and optional CVaR-minimizing weights.
+
+The first trusted portfolio candidates should be constrained minimum variance and risk parity, with hierarchical risk parity and maximum diversification as robust alternatives for larger ETF universes. Maximum Sharpe should be treated as a comparison technique until the expected-return model is deliberately chosen and tested out of sample.
 
 ## Documentation Map
 
@@ -201,7 +224,9 @@ The dry run writes search candidates, a canonical universe, fetch plan, quote ro
 
 ## EODHD Request Safety
 
-Founder spaces EODHD requests by default and retries transient failures so large fetches do not hammer the API. Tune these values in `.env.local` when the subscription limit changes:
+Founder spaces EODHD requests by default and retries transient failures so large fetches do not hammer the API. The planned Bronze-only Fetch refactor will make Fetch safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs must preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
+
+Tune these values in `.env.local` when the subscription limit changes:
 
 ```text
 EODHD_TIMEOUT_SECONDS=30

@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Table Of Contents
 
@@ -9,13 +9,14 @@ Last reviewed: 2026-07-12
 - [Current Shape](#current-shape)
 - [Module Boundary](#module-boundary)
 - [Simple Lake Layout](#simple-lake-layout)
+- [Portfolio Analysis And Evaluation](#portfolio-analysis-and-evaluation)
 - [Boundaries](#boundaries)
 - [Validation Boundary](#validation-boundary)
 - [Update Rules](#update-rules)
 
 ## Purpose
 
-This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund portfolio weights. The architecture should keep instrument discovery, quote ingestion, storage contracts, transformation logic, optimization, and validation gates separated so changes can be tested locally and reviewed safely.
+This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund portfolio weights. The architecture should keep instrument discovery, quote ingestion, storage contracts, transformation logic, portfolio evaluation, optimization, and validation gates separated so changes can be tested locally and reviewed safely.
 
 ## Module Overview
 
@@ -36,11 +37,16 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 | table_io |      | approve universe |      | identifiers    |
 +----+-----+      +--------+---------+      +----------------+
      |                     |
-     |                     v
-     |            +--------+---------+
+	|                     v
+	|            +--------+---------+
      +----------->| fetch            |
-		  | plan, archive,   |
-		  | normalize quotes |
+		  | plan and archive |
+		  +--------+---------+
+			   |
+			   v
+		  +--------+---------+
+		  | silver           |
+		  | quote build      |
 		  +--------+---------+
 			   |
 			   v
@@ -51,10 +57,17 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 		  +--------+---------+
 			   |
 			   v
+		  +--------+---------+
+		  | evaluation       |
+		  | frontier,        |
+		  | drawdown, tests  |
+		  +--------+---------+
+			   |
+			   v
 		  +--------+---------+      +----------------+
 		  | portfolio        |----->| trading        |
 		  | constraints and  |      | Flatex export  |
-		  | baseline weights |      | preparation    |
+		  | target weights   |      | preparation    |
 		  +--------+---------+      +----------------+
 			   |
 			   v
@@ -85,17 +98,21 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 
 `founder.search` owns discovery normalization and universe approval. It writes raw candidate payloads, normalizes Search rows, selects one canonical listing per non-empty ISIN, exports review artifacts, and writes the active universe pointer for Fetch.
 
-`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, dividends, and splits payloads, normalizes quote rows, logs non-secret errors, and writes coverage manifests.
+`founder.fetch` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes fetch plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping writes for the same lake root and run id.
+
+`founder.silver` owns Bronze-to-Silver market data builds. It reads archived quote rows, validates schema and merge keys, and writes one Silver quote file per exchange and ISIN without calling EODHD.
 
 `founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
 
 `founder.gold` owns portfolio-ready risk inputs. It builds adjusted-close returns, correlations, and covariance rows from validated Silver quote history.
 
-`founder.portfolio` owns optimization constraints and deterministic baseline weights. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and simple seed allocations before a full optimizer is introduced.
+`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold risk inputs and writes Gold metrics such as aligned return matrices, asset metrics, drawdowns, efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD.
+
+`founder.portfolio` owns optimization constraints and target weights. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers.
 
 `founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
 
-`founder.pipeline` owns the deterministic dry-run workflow. It stitches Search, Fetch, Silver normalization, coverage, and Gold inputs together with sample data so users can verify the architecture without credentials.
+`founder.pipeline` owns the deterministic dry-run workflow. It stitches Search, Fetch, Silver quote building, coverage, and Gold inputs together with sample data so users can verify the architecture without credentials.
 
 `founder.cli` owns command-line entry points. It parses user commands and routes them to repeatable workflows such as `founder dry-run` without embedding business logic in the CLI layer.
 
@@ -108,8 +125,9 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 - **Discovery**: EODHD search and exchange symbol-list enumeration identify ETF and fund universes by ticker, name, ISIN, exchange, and type.
 - **Bronze**: Raw EODHD API responses and quote ingestion outputs.
 - **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
-- **Gold**: Portfolio-ready return, covariance, risk, and optimized-weight datasets derived from validated Silver inputs.
-- **Portfolio**: Constraint validation and deterministic seed weights consume Gold risk inputs and stay separate from market-data ingestion.
+- **Gold**: Portfolio-ready return, covariance, evaluation, risk, and optimized-weight datasets derived from validated Silver inputs.
+- **Evaluation**: Portfolio metrics, drawdowns, efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis consume Gold inputs and stay separate from market-data ingestion.
+- **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
 - **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.
 - **Validation**: Focused tests first, followed by full quality gates for behavior, typing, formatting, architecture boundaries, and at least 95% test coverage before main merges.
 - **Configuration**: Secrets and local credentials live in ignored local environment files such as `.env.local`.
@@ -120,9 +138,11 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 ## Module Boundary
 
 - **Search module**: owns filtered EODHD discovery, candidate normalization, one-row-per-ISIN canonical selection, XETRA preference, review artifacts, and the active universe pointer.
-- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, additional EODHD listing datasets, lake writes, coverage, and fetch error logging.
+- **Fetch module**: owns canonical-universe validation, fetch planning, EOD quotes, additional EODHD listing datasets, Bronze writes, operational coverage, and fetch error logging.
+- **Silver module**: owns Bronze-to-Silver quote builds and analytical Silver quote files.
 - **Universe review module**: owns missing-ISIN, currency-exposure, and survivorship-bias review summaries before optimization consumes a universe.
-- **Portfolio module**: owns explicit optimization constraints and deterministic baseline weight validation.
+- **Evaluation module**: owns portfolio analytics and comparison datasets derived from Gold returns, correlation, and covariance.
+- **Portfolio module**: owns explicit optimization constraints and selected target weights.
 - **Trading module**: owns Flatex CSV order preparation from approved target weights and latest prices.
 - **Contract**: Fetch consumes only the Search module's approved `canonical_universe.parquet`; Fetch must not perform fuzzy discovery, and Search must not fetch full quote history.
 
@@ -130,16 +150,24 @@ This project analyzes EODHD end-of-day ETF quotes and builds minimum-risk fund p
 
 - **Bronze**: raw or near-raw EODHD search, quote, dividends, splits, and mapping payloads.
 - **Silver**: normalized candidates, canonical universe, one quote file per exchange and ISIN, and coverage-ready tables.
-- **Gold**: portfolio-ready returns, correlation, covariance, risk inputs, and later portfolio weights.
+- **Gold**: portfolio-ready returns, correlation, covariance, evaluation metrics, frontier points, backtests, risk inputs, and portfolio weights.
 - **Silver operational datasets**: active universe pointer, fetch plans, fetch runs, coverage, errors, and dataset version metadata stored under focused Silver directories.
+
+## Portfolio Analysis And Evaluation
+
+Portfolio evaluation should be reproducible from existing Gold risk inputs and should not require Search, Fetch, EODHD credentials, or broker access. The planned analysis scope is risk-first because the ETF universe is large, return forecasts are noisy, and many UCITS ETF listings are highly correlated.
+
+The evaluation layer should compute aligned return matrices, asset-level metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, ulcer index, efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, VaR, CVaR, and tail scenario diagnostics.
+
+The portfolio layer should compare equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR-aware target weights. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
 
 ## Boundaries
 
-- Discovery, fetch planning, checkpointing, retries, and completeness reporting belong near ingestion code.
+- Discovery, fetch planning, checkpointing, bounded parallelism, cron safety, retries, and completeness reporting belong near ingestion code.
 - Search and Fetch communicate through explicit versioned contracts, not shared mutable state.
 - Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
 - Transformation code should depend on explicit inputs and contracts, not hidden global state.
-- Optimization code should consume validated quote history and explicit constraints, not raw API responses.
+- Evaluation and optimization code should consume Gold return, correlation, covariance, and metric datasets with explicit constraints, not raw API responses.
 - Trade-preparation code should consume approved weights, prices, and canonical listing metadata; it must not decide the optimization objective.
 - Documentation snapshots must state their review date or be regenerated from source data.
 - Table serialization is isolated behind `founder.table_io` so modules write physical Parquet tables without embedding storage-engine details.

@@ -123,6 +123,8 @@ Run Fetch against the approved universe. By default, `founder fetch` calls EODHD
 uv run founder fetch
 ```
 
+The planned Bronze-only Fetch refactor will make Fetch safe for unattended cron execution. Live EODHD fetching should use bounded parallelism with default concurrency `2`, while still honoring shared request pacing, retry backoff, and `Retry-After`. Cron execution should use stable run ids, be resumable after partial failures, and prevent or clearly report overlapping runs for the same lake root and run id.
+
 `--mock` writes deterministic local quote, Silver, Gold, and coverage outputs without using an EODHD token:
 
 ```bash
@@ -372,7 +374,7 @@ successes, errors = fetch_quotes_to_bronze(
 
 For tests or dry runs, pass a local function instead of `eodhd_quote_fetcher(client)`. Failed symbols are written as non-secret error rows and do not stop the whole batch.
 
-### Normalize Quotes And Write Coverage
+### Build Silver Quotes And Write Coverage
 
 ```python
 from datetime import UTC, datetime
@@ -396,7 +398,7 @@ write_silver_quotes(paths, quotes)
 coverage = write_fetch_manifests(paths, run_id="fetch-2026-07-12", quote_rows=quotes)
 ```
 
-Normalization deduplicates by `(isin, exchange, code, date)`, defaults missing OHLC values from `close`, and writes UTC timestamps. Coverage records first and last quote dates, observed rows, missing calendar periods, and the next fetch start with an overlap window.
+The Silver quote build deduplicates by `(isin, exchange, code, date)`, defaults missing OHLC values from `close`, and writes UTC timestamps. Coverage records first and last quote dates, observed rows, missing calendar periods, and the next fetch start with an overlap window.
 
 ## End-To-End Example
 

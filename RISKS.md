@@ -1,6 +1,6 @@
 # Risks
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Table Of Contents
 
@@ -11,7 +11,7 @@ Last reviewed: 2026-07-12
 - [R004. Coverage and Strict Typing Can Drift After Broad Edits](#r004-coverage-and-strict-typing-can-drift-after-broad-edits)
 - [R005. Documentation Snapshots Can Become Stale Relative to the Lake](#r005-documentation-snapshots-can-become-stale-relative-to-the-lake)
 - [R006. ETF Universe Discovery Can Be Incomplete or Duplicated](#r006-etf-universe-discovery-can-be-incomplete-or-duplicated)
-- [R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs](#r007-minimum-risk-weights-can-be-misleading-without-clean-quote-inputs)
+- [R007. Risk-Aware Weights Can Be Misleading Without Clean Inputs And Evaluation](#r007-risk-aware-weights-can-be-misleading-without-clean-inputs-and-evaluation)
 - [R008. Search And Fetch Contract Drift Can Corrupt The Lake](#r008-search-and-fetch-contract-drift-can-corrupt-the-lake)
 - [Update Rules](#update-rules)
 
@@ -27,7 +27,7 @@ Status: Active
 
 Signal: External API route errors, retry behavior, rate limits, and long-running trade backfills appear repeatedly in project history.
 
-Mitigation: Keep debug logs, checkpoint keys, deterministic windows, request pacing, `Retry-After` aware retries, and completeness reports aligned before changing fetch execution.
+Mitigation: Keep debug logs, checkpoint keys, deterministic windows, bounded fetch concurrency, request pacing, `Retry-After` aware retries, cron no-overlap behavior, and completeness reports aligned before changing fetch execution.
 
 ## R002. Dataset Naming Drift Can Break Bronze, Silver, and Gold Joins
 
@@ -69,13 +69,13 @@ Signal: EODHD Search API is capped at 500 results, while exchange symbol-list en
 
 Mitigation: Use exchange enumeration for broad discovery, record the checked exchange count, deduplicate to one canonical listing per ISIN, prefer XETRA when available, validate outputs before quote ingestion, and keep the deterministic dry run green.
 
-## R007. Minimum-Risk Weights Can Be Misleading Without Clean Quote Inputs
+## R007. Risk-Aware Weights Can Be Misleading Without Clean Inputs And Evaluation
 
 Status: Active
 
-Signal: The project goal depends on covariance estimates from thousands of ETF EOD quote histories.
+Signal: The project goal depends on covariance, drawdown, tail-risk, and backtest estimates from thousands of ETF EOD quote histories.
 
-Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, explicit optimization constraints, and Flatex export assumptions before publishing portfolio weights.
+Mitigation: Validate quote-history coverage, missing dates, duplicate listings, currency effects, stale prices, Gold return/covariance inputs, drawdowns, CVaR, walk-forward behavior, rebalancing turnover, transaction-cost assumptions, explicit optimization constraints, and Flatex export assumptions before publishing portfolio weights.
 
 ## R008. Search And Fetch Contract Drift Can Corrupt The Lake
 

@@ -1,11 +1,12 @@
 # Lake Contracts
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 ## Table Of Contents
 
 - [Layers](#layers)
 - [Core Tables](#core-tables)
+- [Portfolio Evaluation Outputs](#portfolio-evaluation-outputs)
 - [How This Fits The Onboarding Flow](#how-this-fits-the-onboarding-flow)
 
 Founder uses deterministic local lake artifacts under a `LakePaths` root. Table paths ending in `.parquet` are physical Apache Parquet files written through `founder.table_io`; JSON and CSV artifacts keep their native formats.
@@ -16,7 +17,7 @@ Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search
 
 - Bronze stores raw or near-raw EODHD search, quote, dividends, and splits payloads.
 - Silver stores normalized search candidates, canonical universe rows, and quote rows with one file per exchange and ISIN.
-- Gold stores adjusted-close returns, correlation, and covariance rows with one file per exchange and ISIN.
+- Gold stores adjusted-close returns, correlation, covariance, portfolio evaluation, and target-weight rows.
 - Silver also stores operational datasets for active universe pointers, fetch plans, fetch runs, coverage, errors, and dry-run summaries.
 
 Bronze quote rows are partitioned by exchange and quote year, with one file per ISIN:
@@ -60,6 +61,25 @@ silver/coverage/quote_gaps.parquet
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions.
 
 Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Fetch applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
+
+## Portfolio Evaluation Outputs
+
+Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They should be reproducible without EODHD credentials and should not mutate Bronze or Silver market data.
+
+Planned Gold evaluation datasets include:
+
+- `evaluation/asset_metrics.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio by listing.
+- `evaluation/portfolio_returns/{run_id}.parquet`: weighted portfolio return series for candidate portfolios.
+- `evaluation/drawdowns/{portfolio_id}.parquet`: cumulative wealth, running peak, drawdown, drawdown duration, and recovery state by date.
+- `evaluation/portfolio_metrics/{run_id}.parquet`: portfolio-level return, volatility, Sharpe, Sortino, maximum drawdown, Calmar ratio, ulcer index, turnover, and post-cost metrics.
+- `evaluation/frontier_points/{run_id}.parquet`: target return, expected return, volatility, Sharpe ratio, feasibility status, and optimizer diagnostics for efficient-frontier points.
+- `evaluation/frontier_weights/{run_id}.parquet`: long-format ISIN, exchange, and weight rows for each efficient-frontier point.
+- `evaluation/backtests/{run_id}.parquet`: walk-forward train/test windows, fitted objective, realized out-of-sample metrics, and drawdown metrics.
+- `evaluation/rebalance_events/{run_id}.parquet`: rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
+- `evaluation/tail_risk/{run_id}.parquet`: VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
+- `weights/{objective}/{run_id}.parquet`: selected target weights for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
+
+Evaluation outputs should include explicit run ids, objective names, annualization settings, risk-free-rate assumptions, constraints, and input dataset identifiers so results can be compared and rebuilt deterministically.
 
 ## How This Fits The Onboarding Flow
 

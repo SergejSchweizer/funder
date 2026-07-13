@@ -177,7 +177,18 @@ def test_cli_fetch_can_select_one_isin(
     )
     capsys.readouterr()
 
-    main(["fetch", "--root", str(root), "--mock", "--isin", "IE0000000002"])
+    main(
+        [
+            "fetch",
+            "--root",
+            str(root),
+            "--mock",
+            "--isin",
+            "IE0000000002",
+            "--run-date",
+            "2026-07-12",
+        ]
+    )
 
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 1' in fetch_output.out
@@ -229,7 +240,17 @@ def test_cli_fetch_live_defaults_to_gap_aware_full_history(
     )
     capsys.readouterr()
 
-    main(["fetch", "--root", str(root), "--run-id", "fetch-live"])
+    main(
+        [
+            "fetch",
+            "--root",
+            str(root),
+            "--run-id",
+            "fetch-live",
+            "--run-date",
+            "2026-07-12",
+        ]
+    )
 
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 1' in fetch_output.out
@@ -471,7 +492,17 @@ def test_cli_fetch_skips_non_quote_data_when_quote_plan_is_empty(
     capsys.readouterr()
 
     FakeEodhdClient.requests = []
-    main(["fetch", "--root", str(root), "--run-id", "fetch-no-quote-gaps"])
+    main(
+        [
+            "fetch",
+            "--root",
+            str(root),
+            "--run-id",
+            "fetch-no-quote-gaps",
+            "--run-date",
+            "2026-07-10",
+        ]
+    )
 
     fetch_output = capsys.readouterr()
     assert '"fetch_plan_rows": 0' in fetch_output.out
