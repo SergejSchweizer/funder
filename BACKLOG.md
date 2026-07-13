@@ -211,7 +211,7 @@ Idempotency: Path and schema helpers are pure and deterministic; adding contract
 
 ### PR16. Evaluation Module: Return Matrix And Asset Metrics
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 foundation.
 

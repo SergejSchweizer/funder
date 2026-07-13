@@ -74,9 +74,9 @@ Gap-aware planning discovers missing windows from the `quotes` data type because
 
 ## Portfolio Evaluation Outputs
 
-Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They should be reproducible without EODHD credentials and should not mutate Bronze or Silver market data.
+Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They are reproducible without EODHD credentials and do not mutate Bronze or Silver market data.
 
-Planned Gold evaluation datasets include:
+Gold evaluation datasets include:
 
 - `evaluation/return_matrices/{evaluation_id}.parquet`: aligned long-format date, ISIN, exchange, code, and return rows used as the portfolio evaluation base.
 - `evaluation/asset_metrics/{evaluation_id}.parquet`: observation counts, first and last return dates, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio by listing.
@@ -85,9 +85,9 @@ Planned Gold evaluation datasets include:
 - `evaluation/portfolio_metrics/{evaluation_id}.parquet`: portfolio-level return, volatility, Sharpe, Sortino, maximum drawdown, Calmar ratio, ulcer index, turnover, and post-cost metrics.
 - `evaluation/frontier_points/{evaluation_id}.parquet`: target return, expected return, volatility, Sharpe ratio, feasibility status, and optimizer diagnostics for efficient-frontier points.
 - `evaluation/frontier_weights/{evaluation_id}.parquet`: long-format ISIN, exchange, code, and weight rows for each efficient-frontier point.
-- `evaluation/backtests/{run_id}.parquet`: walk-forward train/test windows, fitted objective, realized out-of-sample metrics, and drawdown metrics.
-- `evaluation/rebalance_events/{run_id}.parquet`: rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
-- `evaluation/tail_risk/{run_id}.parquet`: VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
+- `evaluation/backtests/{run_id}.parquet`: planned walk-forward train/test windows, fitted objective, realized out-of-sample metrics, and drawdown metrics.
+- `evaluation/rebalance_events/{run_id}.parquet`: planned rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
+- `evaluation/tail_risk/{run_id}.parquet`: planned VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
 - `weights/{objective}/{evaluation_id}.parquet`: selected target weights, constraints, and diagnostics for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
 
 Evaluation outputs should include explicit run ids, objective names, annualization settings, risk-free-rate assumptions, constraints, and input dataset identifiers so results can be compared and rebuilt deterministically.

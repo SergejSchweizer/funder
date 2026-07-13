@@ -144,12 +144,12 @@ This objective is intentionally risk-first because ETF expected-return estimates
 
 ## Portfolio Analysis And Evaluation Plan
 
-Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer should consume Gold returns, correlation, and covariance inputs; it should not call EODHD or mutate Bronze and Silver market data.
+Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer consumes Gold return inputs and should not call EODHD or mutate Bronze and Silver market data.
 
-Planned portfolio analysis and evaluation computations include:
+Portfolio analysis and evaluation computations include:
 
 - aligned return matrices by date and listing;
-- asset metrics such as observation count, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio;
+- asset metrics such as observation count, mean return, annualized return, annualized volatility, downside deviation, Sharpe ratio, and Sortino ratio;
 - portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, and ulcer index;
 - efficient-frontier points and long-format frontier weights;
 - constrained minimum-variance, maximum-Sharpe comparison, and target-return minimum-variance weights;
