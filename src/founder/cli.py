@@ -453,10 +453,16 @@ def _run_gold_command(root: Path) -> dict[str, Any]:
     paths = LakePaths(root=root)
     LOGGER.info("running gold build root=%s", root)
     quotes = read_silver_quotes(paths)
-    returns, correlations, covariances = write_gold_inputs(paths, quotes)
-    LOGGER.info("gold build complete root=%s returns=%s", root, len(returns))
+    returns, correlations, covariances, features = write_gold_inputs(paths, quotes)
+    LOGGER.info(
+        "gold build complete root=%s returns=%s features=%s",
+        root,
+        len(returns),
+        len(features),
+    )
     return {
         "correlation_rows": len(correlations),
         "covariance_rows": len(covariances),
+        "feature_rows": len(features),
         "return_rows": len(returns),
     }

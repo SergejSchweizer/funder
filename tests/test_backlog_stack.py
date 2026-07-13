@@ -377,14 +377,19 @@ def test_gold_inputs_are_deterministic(tmp_path) -> None:  # type: ignore[no-unt
 
     returns = build_returns(quotes)
     correlations, covariances = build_correlation_and_covariance(returns)
-    written_returns, written_correlations, written_covariances = write_gold_inputs(paths, quotes)
+    written_returns, written_correlations, written_covariances, written_features = (
+        write_gold_inputs(paths, quotes)
+    )
 
     assert returns[0]["return"] == pytest.approx(0.1)
     assert correlations == written_correlations
     assert covariances == written_covariances
+    assert written_features[0]["total_return"] == pytest.approx(0.1)
+    assert written_features[0]["max_drawdown"] == 0.0
     assert read_rows(paths.gold_returns("XETRA", "IE1")) == written_returns[:1]
     assert read_rows(paths.gold_correlation("XETRA", "IE1")) == written_correlations[:2]
     assert read_rows(paths.gold_covariance("XETRA", "IE1")) == written_covariances[:2]
+    assert read_rows(paths.gold_asset_features("XETRA", "IE1")) == written_features[:1]
 
 
 def test_dry_run_pipeline_is_repeatable(tmp_path) -> None:  # type: ignore[no-untyped-def]
