@@ -4,7 +4,92 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
+
+GoldReturnRow = TypedDict(
+    "GoldReturnRow",
+    {
+        "isin": str,
+        "exchange": str,
+        "code": str,
+        "date": str,
+        "return": float,
+    },
+)
+
+
+class PairValueRow(TypedDict):
+    left_isin: str
+    left_exchange: str
+    left_code: str
+    right_isin: str
+    right_exchange: str
+    right_code: str
+
+
+class CovarianceRow(PairValueRow):
+    covariance: float
+
+
+class CorrelationEdgeRow(TypedDict):
+    version: str
+    metric: str
+    left_id: int
+    right_id: int
+    left_isin: str
+    left_exchange: str
+    left_code: str
+    right_isin: str
+    right_exchange: str
+    right_code: str
+    date_start: str
+    date_end: str
+    n_observations: int
+    value: float
+
+
+class BucketedCorrelationEdgeRow(CorrelationEdgeRow):
+    bucket: int
+
+
+ReturnMatrixRow = TypedDict(
+    "ReturnMatrixRow",
+    {
+        "evaluation_id": str,
+        "date": str,
+        "isin": str,
+        "exchange": str,
+        "code": str,
+        "return": float,
+    },
+)
+
+
+class OptimizedWeightRow(TypedDict):
+    evaluation_id: str
+    objective: str
+    portfolio_id: str
+    isin: str
+    exchange: str
+    code: str
+    weight: float
+    constraints: str
+    diagnostics: str
+
+
+class JobManifestRow(TypedDict):
+    job_id: str
+    job_type: str
+    run_id: str
+    status: str
+    started_at: str
+    finished_at: str
+    input_paths: str
+    output_paths: str
+    row_counts: str
+    concurrency: int
+    resume_marker: str
+    error_summary: str
 
 
 @dataclass(frozen=True)
@@ -103,6 +188,23 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "right_exchange",
         "right_code",
         "covariance",
+    ),
+    "correlation_edges": (
+        "version",
+        "metric",
+        "left_id",
+        "right_id",
+        "left_isin",
+        "left_exchange",
+        "left_code",
+        "right_isin",
+        "right_exchange",
+        "right_code",
+        "date_start",
+        "date_end",
+        "n_observations",
+        "value",
+        "bucket",
     ),
     "gold_runs": (
         "status",
@@ -288,6 +390,7 @@ DATASET_OWNERS: dict[str, str] = {
     "returns": "gold",
     "correlation": "gold",
     "covariance": "gold",
+    "correlation_edges": "gold",
     "gold_runs": "gold",
     "job_manifests": "operations",
     "return_matrix": "evaluation",
@@ -316,6 +419,7 @@ DATASET_SORT_KEYS: dict[str, tuple[str, ...]] = {
     "returns": ("isin", "exchange", "code", "date"),
     "correlation": ("left_isin", "left_exchange", "left_code", "right_isin"),
     "covariance": ("left_isin", "left_exchange", "left_code", "right_isin"),
+    "correlation_edges": ("version", "metric", "bucket", "left_id", "right_id"),
     "gold_runs": ("isin", "exchange", "code"),
     "job_manifests": ("job_type", "run_id"),
     "return_matrix": ("evaluation_id", "date", "isin"),

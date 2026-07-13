@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
-from founder.bronze import _merge_rows
+from founder.bronze import merge_rows
 from founder.logging import get_logger
 from founder.paths import LakePaths
 from founder.table_io import JsonRow, read_rows, write_rows
@@ -57,7 +57,7 @@ def build_silver_quote_rows(bronze_rows: Sequence[Mapping[str, Any]]) -> list[Js
 def _write_silver_listing(args: tuple[LakePaths, str, str, list[Mapping[str, Any]]]) -> JsonRow:
     paths, exchange, isin, rows = args
     quote_path = paths.silver_quote_file(exchange, isin)
-    merged_rows = _merge_rows(
+    merged_rows = merge_rows(
         read_rows(quote_path),
         rows,
         key_fields=("isin", "exchange", "code", "date"),

@@ -9,6 +9,7 @@ Last reviewed: 2026-07-13
 - [Bronze Process Refactor PR Queue](#bronze-process-refactor-pr-queue)
 - [Portfolio Evaluation And Optimization PR Stack](#portfolio-evaluation-and-optimization-pr-stack)
 - [Architecture Refactor PR Stack](#architecture-refactor-pr-stack)
+- [Refactor Hardening PR Stack](#refactor-hardening-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -479,6 +480,80 @@ Scope: Separate deterministic baseline optimizers from future production solver-
 Acceptance: Tests cover identical target weights for existing deterministic optimizers, deterministic diagnostics for feasible and infeasible cases, covariance warning thresholds, missing-input coverage warnings, allocation-bound violations, and CLI summaries that distinguish baseline results from production-ready solver results. Docs state that baseline objectives are deterministic decision-support outputs, not execution approval.
 
 Idempotency: Optimizer diagnostics are deterministic for unchanged inputs and constraints. Re-running an optimization id overwrites or validates the same target-weight and diagnostic outputs without changing Search, Bronze, Silver, Gold return, or Evaluation datasets.
+
+## Refactor Hardening PR Stack
+
+Priority policy: Treat this stack as the next behavior-preserving hardening pass after PR30-PR34. Each PR must be based on the previous PR in this section, preserve public imports and existing CLI commands, keep current lake paths and schemas stable unless explicitly stated, and add architecture tests before moving code across boundaries.
+
+### PR35. Enforce Real Evaluation And Portfolio Package Boundaries
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+
+Priority: P0 maintainability and architecture enforcement.
+
+Depends on: PR34.
+
+Scope: Replace the current `evaluation_parts` and `portfolio_parts` re-export shells with real internal modules that own implementation code. Move matrix, metrics, portfolio-return, drawdown, walk-forward, rebalance, frontier, tail-risk, constraint, objective, risk-parity, HRP, and maximum-diversification functions into their focused modules while keeping `founder.evaluation` and `founder.portfolio` as compatibility facades. Add import-boundary tests that prevent internal Evaluation and Portfolio modules from importing Search, Bronze, Silver, CLI, config, or HTTP modules.
+
+Acceptance: Existing public imports from `founder.evaluation` and `founder.portfolio` still work. Existing CLI evaluation behavior, dry-run behavior, optimizer outputs, and Gold writer paths remain unchanged. Tests fail if a package boundary module is only a re-export wrapper or if a forbidden dependency direction is introduced.
+
+Idempotency: This PR only moves code and adds boundary checks. Running evaluation, portfolio optimization, dry-run, and existing tests with unchanged inputs produces byte-equivalent rows, paths, and JSON summaries compared with the pre-refactor behavior.
+
+### PR36. Extract Scalable Gold Pair Statistics Engine
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+
+Priority: P0 scalability for large covariance and correlation workloads.
+
+Depends on: PR35.
+
+Scope: Move Gold pair-statistics code into a focused engine that owns return indexing, common-date intersection, pair iteration, online covariance, incremental Pearson, approximate online Spearman, observation metadata, upper-triangle generation, same-ISIN filtering, threshold filtering, top-k limiting, and deterministic bucket assignment. Keep existing dense per-ISIN correlation and covariance outputs as compatibility outputs, but make `correlation_edges` the primary scalable pair-search path.
+
+Acceptance: Tests prove dense covariance/correlation rows, Pearson edges, Spearman edges, common-date metadata, same-ISIN skipping, top-k limiting, threshold filtering, bucket ordering, and worker outputs are unchanged for existing fixtures. New tests prove the engine streams pair records without materializing unnecessary symmetric duplicate pairs and exposes one shared observation contract for dense and edge outputs.
+
+Idempotency: Re-running Gold with unchanged Silver quotes produces the same return, covariance, correlation, feature, edge, run-manifest, and job-manifest rows as before this PR. The PR must not rename lake folders, change schema fields, or rewrite existing local lake data during tests.
+
+### PR37. Type Critical Dataset Rows And Contract Validation
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+
+Priority: P1 schema drift prevention.
+
+Depends on: PR36.
+
+Scope: Introduce typed row contracts for the highest-risk datasets: Gold returns, covariance rows, correlation edge rows, evaluation return matrix rows, portfolio target weights, optimizer diagnostics, and job manifests. Keep `JsonRow` as the serialization boundary but convert high-risk internal functions to accept and return typed DTOs or `TypedDict`s before writing rows. Route writer validation through the dataset contract registry for touched outputs.
+
+Acceptance: Mypy remains strict. Tests prove missing required fields fail before writes for the typed datasets, optional fields stay backward-compatible, stable sort keys are respected, and existing serialized rows are unchanged. Documentation states which datasets are now typed internally and which remain generic row dictionaries.
+
+Idempotency: Contract validation is pure and deterministic. Re-running touched writers with unchanged inputs produces the same files and row ordering; invalid rows fail before any partial write happens.
+
+### PR38. Split CLI Parsing From Workflow Execution
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+
+Priority: P1 operational clarity and reuse.
+
+Depends on: PR37.
+
+Scope: Introduce workflow modules for Search, Bronze, Silver, Gold, Refresh, and Evaluate. Keep `founder.cli` responsible for parser construction, argument normalization, logging setup, and printing summaries only. Move live/mock Bronze execution, layer-lock orchestration, refresh phase sequencing, Gold build invocation, and Evaluation option routing into workflow functions with typed summary results.
+
+Acceptance: CLI tests prove every existing command, flag, default, error, and JSON summary remains compatible. Unit tests can call each workflow without parsing argv. Refresh tests prove Bronze, Silver, and Gold phase summaries and failure behavior are deterministic. No workflow module imports `argparse`.
+
+Idempotency: Re-running CLI commands and direct workflow calls with unchanged inputs produces the same lake writes and summaries. The refactor must not add hidden network calls, change default concurrency, or alter lock paths.
+
+### PR39. Add Import-Boundary And Scale-Guard Quality Gates
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/46.
+
+Priority: P1 long-term architecture safety.
+
+Depends on: PR38.
+
+Scope: Add automated architecture checks for forbidden dependency directions, package boundary ownership, private-helper imports across layers, and accidental dependency-heavy shared utilities. Add scale-guard tests for pair-statistics generation and optimizer candidate generation so large-universe code paths fail fast with explicit limits or streaming behavior instead of silently materializing unbounded dense structures.
+
+Acceptance: The PR quality gate includes the new architecture checks. Tests fail if Silver imports private Bronze helpers, Evaluation imports ingestion layers, Portfolio core math reads lake files directly, CLI is imported from business modules, or shared modules start importing heavy layer-specific dependencies. Scale-guard tests cover Gold pair generation and Portfolio candidate generation with deterministic thresholds.
+
+Idempotency: New gates are read-only and deterministic. Running the gate multiple times does not create or modify lake files, docs, or generated artifacts beyond existing test temp directories.
 
 ## Future Work After Finalization
 

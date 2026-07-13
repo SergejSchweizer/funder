@@ -22,6 +22,7 @@ def test_pr_gate_has_simple_checks() -> None:
     assert commands_for_layer("pr") == (
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
+        ("python", "-m", "founder.architecture_checks"),
         ("mypy", "src", "tests"),
         ("pytest",),
     )
@@ -30,8 +31,8 @@ def test_pr_gate_has_simple_checks() -> None:
 def test_main_gate_extends_pr_gate_with_clean_tree_checks() -> None:
     commands = commands_for_layer("main")
 
-    assert commands[:3] == commands_for_layer("pr")[:3]
-    assert commands[3] == (
+    assert commands[:4] == commands_for_layer("pr")[:4]
+    assert commands[4] == (
         "pytest",
         "--cov=founder",
         "--cov-report=term-missing",
@@ -99,7 +100,7 @@ def test_quality_gate_runs_commands_before_commit_validation() -> None:
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     assert run_quality_gate("pr", runner=runner) == 0
-    assert calls[:4] == list(commands_for_layer("pr"))
+    assert calls[:5] == list(commands_for_layer("pr"))
     assert calls[-2:] == [
         ("git", "merge-base", "HEAD", "origin/main"),
         ("git", "log", "--format=%s", "abc123..HEAD"),

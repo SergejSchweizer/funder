@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import log, sqrt
 from typing import Any
 
+from founder.gold_pair_stats import (
+    bucket_correlation_edges,
+    correlation_value,
+    incremental_pearson,
+    index_returns,
+    iter_pair_observations,
+    limit_top_correlation_edges,
+    sample_covariance,
+    sort_pair_rows,
+    symmetric_pair_rows,
+)
 from founder.paths import LakePaths
 from founder.run_state import build_job_manifest, write_job_manifest
+from founder.schemas import validate_rows
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ListingKey = tuple[str, str, str]
@@ -29,17 +41,6 @@ class GoldListingResult:
     covariances: list[JsonRow]
     features: list[JsonRow]
     manifest: JsonRow
-
-
-@dataclass(frozen=True)
-class PairObservation:
-    left: ListingKey
-    right: ListingKey
-    left_id: int
-    right_id: int
-    dates: tuple[str, ...]
-    left_values: tuple[float, ...]
-    right_values: tuple[float, ...]
 
 
 def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
@@ -68,43 +69,22 @@ def build_returns(quote_rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:
     return returns
 
 
-def _paired_values(
-    rows: Sequence[Mapping[str, Any]], left: tuple[str, str, str], right: tuple[str, str, str]
-) -> tuple[list[float], list[float]]:
-    by_key = {
-        (str(row["isin"]), str(row["exchange"]), str(row["code"]), str(row["date"])): float(
-            row["return"]
-        )
-        for row in rows
-    }
-    dates = sorted(
-        {date for isin, exchange, code, date in by_key if (isin, exchange, code) == left}
-        & {date for isin, exchange, code, date in by_key if (isin, exchange, code) == right}
-    )
-    return [by_key[(*left, item)] for item in dates], [by_key[(*right, item)] for item in dates]
-
-
 def covariance(left_values: Sequence[float], right_values: Sequence[float]) -> float:
-    if len(left_values) < 2 or len(left_values) != len(right_values):
-        return 0.0
-    state = _OnlineCorrelation()
-    for left, right in zip(left_values, right_values, strict=True):
-        state.update(left, right)
-    return state.sample_covariance()
+    return sample_covariance(left_values, right_values)
 
 
 def build_correlation_and_covariance(
     return_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[JsonRow], list[JsonRow]]:
-    returns_by_listing = _index_returns(return_rows)
+    returns_by_listing = index_returns(return_rows)
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
-    for pair in _iter_pair_observations(returns_by_listing, include_self=True):
+    for pair in iter_pair_observations(returns_by_listing, include_self=True):
         cov = covariance(pair.left_values, pair.right_values)
-        corr = _incremental_pearson(pair.left_values, pair.right_values)
-        correlations.extend(_symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
-        covariances.extend(_symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
-    return _sort_pair_rows(correlations), _sort_pair_rows(covariances)
+        corr = incremental_pearson(pair.left_values, pair.right_values)
+        correlations.extend(symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
+        covariances.extend(symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
+    return sort_pair_rows(correlations), sort_pair_rows(covariances)
 
 
 def build_correlation_edges(
@@ -122,14 +102,14 @@ def build_correlation_edges(
     if top_k_per_left is not None and top_k_per_left < 1:
         raise ValueError("top_k_per_left must be positive")
 
-    returns_by_listing = _index_returns(return_rows)
+    returns_by_listing = index_returns(return_rows)
     rows: list[JsonRow] = []
-    for pair in _iter_pair_observations(
+    for pair in iter_pair_observations(
         returns_by_listing,
         include_self=False,
         skip_same_isin=True,
     ):
-        corr = _correlation_value(pair.left_values, pair.right_values, metric)
+        corr = correlation_value(pair.left_values, pair.right_values, metric)
         if min_abs_correlation is not None and abs(corr) < min_abs_correlation:
             continue
         rows.append(
@@ -150,7 +130,7 @@ def build_correlation_edges(
                 "value": corr,
             }
         )
-    rows = _limit_top_correlation_edges(rows, top_k_per_left)
+    rows = limit_top_correlation_edges(rows, top_k_per_left)
     return sorted(
         rows,
         key=lambda row: (
@@ -159,107 +139,6 @@ def build_correlation_edges(
             int(row["right_id"]),
         ),
     )
-
-
-def _correlation_value(
-    left_values: Sequence[float], right_values: Sequence[float], metric: str
-) -> float:
-    if metric == "spearman":
-        return _approximate_online_spearman(left_values, right_values)
-    return _incremental_pearson(left_values, right_values)
-
-
-def _incremental_pearson(left_values: Sequence[float], right_values: Sequence[float]) -> float:
-    if len(left_values) < 2 or len(left_values) != len(right_values):
-        return 0.0
-    state = _OnlineCorrelation()
-    for left, right in zip(left_values, right_values, strict=True):
-        state.update(left, right)
-    return state.value()
-
-
-def _approximate_online_spearman(
-    left_values: Sequence[float], right_values: Sequence[float]
-) -> float:
-    if len(left_values) < 2 or len(left_values) != len(right_values):
-        return 0.0
-    left_state = _OnlineMoments()
-    right_state = _OnlineMoments()
-    correlation = _OnlineCorrelation()
-    for left, right in zip(left_values, right_values, strict=True):
-        correlation.update(left_state.score(left), right_state.score(right))
-        left_state.update(left)
-        right_state.update(right)
-    return correlation.value()
-
-
-@dataclass
-class _OnlineMoments:
-    count: int = 0
-    mean: float = 0.0
-    m2: float = 0.0
-
-    def score(self, value: float) -> float:
-        if self.count < 2 or self.m2 == 0:
-            return 0.0
-        variance = self.m2 / (self.count - 1)
-        return 0.0 if variance <= 0 else (value - self.mean) / sqrt(variance)
-
-    def update(self, value: float) -> None:
-        self.count += 1
-        delta = value - self.mean
-        self.mean += delta / self.count
-        self.m2 += delta * (value - self.mean)
-
-
-@dataclass
-class _OnlineCorrelation:
-    count: int = 0
-    left_mean: float = 0.0
-    right_mean: float = 0.0
-    left_m2: float = 0.0
-    right_m2: float = 0.0
-    comoment: float = 0.0
-
-    def update(self, left: float, right: float) -> None:
-        self.count += 1
-        left_delta = left - self.left_mean
-        right_delta = right - self.right_mean
-        self.left_mean += left_delta / self.count
-        self.right_mean += right_delta / self.count
-        self.comoment += left_delta * (right - self.right_mean)
-        self.left_m2 += left_delta * (left - self.left_mean)
-        self.right_m2 += right_delta * (right - self.right_mean)
-
-    def value(self) -> float:
-        if self.count < 2:
-            return 0.0
-        denominator = sqrt(self.left_m2 * self.right_m2)
-        return 0.0 if denominator == 0 else self.comoment / denominator
-
-    def sample_covariance(self) -> float:
-        if self.count < 2:
-            return 0.0
-        return self.comoment / (self.count - 1)
-
-
-def _limit_top_correlation_edges(
-    rows: Sequence[JsonRow], top_k_per_left: int | None
-) -> list[JsonRow]:
-    if top_k_per_left is None:
-        return list(rows)
-    by_left: dict[int, list[JsonRow]] = {}
-    for row in rows:
-        by_left.setdefault(int(row["left_id"]), []).append(row)
-    limited: list[JsonRow] = []
-    for left_id in sorted(by_left):
-        limited.extend(
-            sorted(
-                by_left[left_id],
-                key=lambda row: (-abs(float(row["value"])), int(row["right_id"])),
-            )[:top_k_per_left]
-        )
-    return limited
 
 
 def write_correlation_edges(
@@ -285,23 +164,11 @@ def write_correlation_edges(
     if base.exists():
         for stale_path in base.glob("bucket=*.parquet"):
             stale_path.unlink()
-    by_bucket: dict[int, list[JsonRow]] = {}
-    for row in rows:
-        bucket = int(row["left_id"]) % bucket_count
-        row_with_bucket = dict(row)
-        row_with_bucket["bucket"] = bucket
-        by_bucket.setdefault(bucket, []).append(row_with_bucket)
+    by_bucket = bucket_correlation_edges(rows, bucket_count)
     for bucket, bucket_rows in sorted(by_bucket.items()):
+        validate_rows("correlation_edges", bucket_rows)
         write_rows(paths.gold_correlation_edges(version, metric, bucket), bucket_rows)
     return [row for bucket in sorted(by_bucket) for row in by_bucket[bucket]]
-
-
-def _index_returns(return_rows: Sequence[Mapping[str, Any]]) -> ReturnsByListing:
-    indexed: ReturnsByListing = {}
-    for row in return_rows:
-        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
-        indexed.setdefault(key, {})[str(row["date"])] = float(row["return"])
-    return indexed
 
 
 def _index_quotes(quote_rows: Sequence[Mapping[str, Any]]) -> QuotesByListing:
@@ -310,76 +177,6 @@ def _index_quotes(quote_rows: Sequence[Mapping[str, Any]]) -> QuotesByListing:
         key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
         indexed.setdefault(key, []).append(dict(row))
     return indexed
-
-
-def _iter_pair_observations(
-    returns_by_listing: ReturnsByListing,
-    *,
-    include_self: bool,
-    skip_same_isin: bool = False,
-) -> Iterator[PairObservation]:
-    listings = tuple(sorted(returns_by_listing))
-    for left_id, left in enumerate(listings):
-        right_start = left_id if include_self else left_id + 1
-        for right_id, right in enumerate(listings[right_start:], start=right_start):
-            if skip_same_isin and left[0] == right[0]:
-                continue
-            left_rows = returns_by_listing[left]
-            right_rows = returns_by_listing[right]
-            dates = tuple(sorted(set(left_rows) & set(right_rows)))
-            yield PairObservation(
-                left=left,
-                right=right,
-                left_id=left_id,
-                right_id=right_id,
-                dates=dates,
-                left_values=tuple(left_rows[item] for item in dates),
-                right_values=tuple(right_rows[item] for item in dates),
-            )
-
-
-def _paired_indexed_values(
-    returns_by_listing: ReturnsByListing, left: ListingKey, right: ListingKey
-) -> tuple[list[float], list[float]]:
-    left_rows = returns_by_listing.get(left, {})
-    right_rows = returns_by_listing.get(right, {})
-    dates = sorted(set(left_rows) & set(right_rows))
-    return [left_rows[item] for item in dates], [right_rows[item] for item in dates]
-
-
-def _symmetric_pair_rows(
-    left: ListingKey, right: ListingKey, value_field: str, value: float
-) -> list[JsonRow]:
-    rows = [_pair_row(left, right, value_field, value)]
-    if left != right:
-        rows.append(_pair_row(right, left, value_field, value))
-    return rows
-
-
-def _pair_row(left: ListingKey, right: ListingKey, value_field: str, value: float) -> JsonRow:
-    return {
-        "left_isin": left[0],
-        "left_exchange": left[1],
-        "left_code": left[2],
-        "right_isin": right[0],
-        "right_exchange": right[1],
-        "right_code": right[2],
-        value_field: value,
-    }
-
-
-def _sort_pair_rows(rows: Sequence[JsonRow]) -> list[JsonRow]:
-    return sorted(
-        rows,
-        key=lambda row: (
-            str(row["left_isin"]),
-            str(row["left_exchange"]),
-            str(row["left_code"]),
-            str(row["right_isin"]),
-            str(row["right_exchange"]),
-            str(row["right_code"]),
-        ),
-    )
 
 
 def _max_drawdown(ordered_quotes: Sequence[Mapping[str, Any]]) -> float:
@@ -466,21 +263,21 @@ def _gold_listing_worker(args: tuple[LakePaths, ListingKey, str, str, int]) -> G
     )
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
-    for pair in _iter_pair_observations(_WORKER_RETURNS_BY_LISTING, include_self=True):
+    for pair in iter_pair_observations(_WORKER_RETURNS_BY_LISTING, include_self=True):
         if pair.left != left:
             continue
         cov = covariance(pair.left_values, pair.right_values)
-        corr = _incremental_pearson(pair.left_values, pair.right_values)
-        correlations.extend(_symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
-        covariances.extend(_symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
+        corr = incremental_pearson(pair.left_values, pair.right_values)
+        correlations.extend(symmetric_pair_rows(pair.left, pair.right, "correlation", corr))
+        covariances.extend(symmetric_pair_rows(pair.left, pair.right, "covariance", cov))
 
     write_rows(paths.gold_returns(left[1], left[0]), return_rows)
     if feature_rows:
         write_rows(paths.gold_asset_features(left[1], left[0]), feature_rows)
     return GoldListingResult(
         returns=return_rows,
-        correlations=_sort_pair_rows(correlations),
-        covariances=_sort_pair_rows(covariances),
+        correlations=sort_pair_rows(correlations),
+        covariances=sort_pair_rows(covariances),
         features=feature_rows,
         manifest={
             "status": "completed",
@@ -547,7 +344,7 @@ def write_gold_inputs(
     paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]], *, concurrency: int = 2
 ) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow], list[JsonRow]]:
     returns = build_returns(quote_rows)
-    returns_by_listing = _index_returns(returns)
+    returns_by_listing = index_returns(returns)
     quotes_by_listing = _index_quotes(quote_rows)
     listings = tuple(sorted(quotes_by_listing))
     completed_at = datetime.now(UTC).isoformat()
@@ -597,10 +394,10 @@ def write_gold_inputs(
         ): result
         for result in processed
     }
-    processed_correlations = _sort_pair_rows(
+    processed_correlations = sort_pair_rows(
         [row for result in processed for row in result.correlations]
     )
-    processed_covariances = _sort_pair_rows(
+    processed_covariances = sort_pair_rows(
         [row for result in processed for row in result.covariances]
     )
     for listing in pending:
@@ -640,7 +437,7 @@ def write_gold_inputs(
     )
     return (
         [row for result in results for row in result.returns],
-        _sort_pair_rows([row for result in results for row in result.correlations]),
-        _sort_pair_rows([row for result in results for row in result.covariances]),
+        sort_pair_rows([row for result in results for row in result.correlations]),
+        sort_pair_rows([row for result in results for row in result.covariances]),
         [row for result in results for row in result.features],
     )

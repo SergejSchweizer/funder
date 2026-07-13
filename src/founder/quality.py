@@ -19,6 +19,7 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 PR_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "."),
     ("ruff", "format", "--check", "."),
+    ("python", "-m", "founder.architecture_checks"),
     ("mypy", "src", "tests"),
     ("pytest",),
 )
