@@ -121,6 +121,8 @@ def build_correlation_edges(
     rows: list[JsonRow] = []
     for left_index, left in enumerate(listings):
         for right in listings[left_index + 1 :]:
+            if left[0] == right[0]:
+                continue
             dates = sorted(set(returns_by_listing[left]) & set(returns_by_listing[right]))
             left_values = [returns_by_listing[left][item] for item in dates]
             right_values = [returns_by_listing[right][item] for item in dates]

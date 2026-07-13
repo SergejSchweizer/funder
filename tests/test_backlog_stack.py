@@ -471,6 +471,22 @@ def test_gold_correlation_edges_store_upper_triangle_by_bucket(tmp_path) -> None
     assert read_rows(paths.gold_correlation_edges("snapshot-1", "pearson", 0)) == written
 
 
+def test_gold_correlation_edges_skip_same_isin_across_listings() -> None:
+    return_rows = [
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 0.01},
+        {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-11", "return": 0.02},
+        {"isin": "IE1", "exchange": "AS", "code": "AAA2", "date": "2026-07-10", "return": 0.01},
+        {"isin": "IE1", "exchange": "AS", "code": "AAA2", "date": "2026-07-11", "return": 0.02},
+        {"isin": "IE2", "exchange": "LSE", "code": "BBB", "date": "2026-07-10", "return": 0.02},
+        {"isin": "IE2", "exchange": "LSE", "code": "BBB", "date": "2026-07-11", "return": 0.01},
+    ]
+
+    edges = build_correlation_edges(return_rows, version="snapshot-1", metric="pearson")
+
+    assert {(row["left_isin"], row["right_isin"]) for row in edges} == {("IE1", "IE2")}
+    assert all(row["left_isin"] != row["right_isin"] for row in edges)
+
+
 def test_gold_pearson_correlation_uses_incremental_calculation() -> None:
     return_rows = [
         {"isin": "IE1", "exchange": "XETRA", "code": "AAA", "date": "2026-07-10", "return": 1e9},
