@@ -54,5 +54,6 @@ def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
 
     assert "uv run founder-quality main" in main_workflow
     assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in main_workflow
+    assert "is still a draft; skipping auto-merge" in merge_workflow
     assert "Invalid squash subject" in merge_workflow
     assert '--squash --delete-branch --subject "$PR_TITLE"' in merge_workflow
