@@ -10,7 +10,7 @@ Last reviewed: 2026-07-14
 - [Portfolio Evaluation And Optimization PR Stack](#portfolio-evaluation-and-optimization-pr-stack)
 - [Architecture Refactor PR Stack](#architecture-refactor-pr-stack)
 - [Refactor Hardening PR Stack](#refactor-hardening-pr-stack)
-- [Selection-Driven Catalog And Metric Cache PR Stack](#selection-driven-catalog-and-metric-cache-pr-stack)
+- [Refresh, Selection, And Update Module PR Stack](#refresh-selection-and-update-module-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -556,227 +556,279 @@ Acceptance: The PR quality gate includes the new architecture checks. Tests fail
 
 Idempotency: New gates are read-only and deterministic. Running the gate multiple times does not create or modify lake files, docs, or generated artifacts beyond existing test temp directories.
 
-## Selection-Driven Catalog And Metric Cache PR Stack
+## Refresh, Selection, And Update Module PR Stack
 
-Priority policy: This stack changes Founder from an approved-search-universe pipeline into a global instrument catalog with selection-driven analytics. Market-data refreshes must cover every active catalog ISIN through one deterministic canonical listing, while Gold asset, pair, and portfolio calculations must run only when an active Selection requests them. A Selection first applies catalog predicates, then computes reusable per-ISIN and benchmark-relative screening metrics only for those candidates, and finally applies conjunctive raw-metric and classification predicates to produce its final membership. Shared metric artifacts are populated lazily by Selections and referenced rather than copied. PR40 through PR52 are a strict stack: base each branch on the preceding branch until it merges, then restack all downstream branches. Preserve the existing `search`, `current_universe`, `gold`, `evaluate`, and `refresh` behavior as compatibility paths until PR52 performs the documented cutover.
+Priority policy: Replace the technical-layer workflow surface with three domain modules and three CLI namespaces: `refresh` discovers every provider-visible ISIN and maintains catalog plus market-data snapshots; `selection` defines, persists, and activates deterministic conjunctive selections without network or metric computation; `update` computes and reuses metrics only for the current Selection, asks `selection` to finalize metric predicates, and publishes analyses. Each module owns its contracts, application service, ports, adapters, CLI parser, locks, manifests, and current pointer. Dependency direction is strict: `refresh` imports neither other domain module; `selection` may consume only public Refresh contracts/read ports; `update` consumes public Refresh and Selection contracts/services; no reverse imports are allowed. Standalone entry points `founder-refresh`, `founder-selection`, and `founder-update` and equivalent `founder refresh`, `founder selection`, and `founder update` namespaces delegate to the same module-owned parsers. PR40 through PR55 are a strict stack: base each branch on the preceding branch until it merges, then restack all downstream branches. Preserve current commands through explicit compatibility adapters until PR55 performs the documented cutover.
 
-### PR40. Global Instrument Catalog Contracts And Stable Identities
+### PR40. Three-Module Boundaries And Public Contract Skeleton
 
 Git status: not started. PR: TBD.
 
-Priority: P0 data-model foundation.
+Priority: P0 architecture foundation.
 
 Depends on: PR39.
 
-Scope: Add typed, versioned contracts and deterministic lake paths for provider catalog snapshots, one-row-per-ISIN instrument records, one-row-per-provider-listing records, catalog field metadata, canonical-listing policy metadata, snapshot manifests, and missing-ISIN review rows. Define `instrument_id` as the normalized non-empty ISIN and define `listing_id` from a versioned hash of normalized provider, exchange, and code values. Preserve all listings for an ISIN; keep listing country, trading currency, and exchange separate from instrument domicile and fund-level metadata. Include typed declared-distribution-frequency metadata and source provenance when the provider supplies it, and distinguish declared frequency from the later observed payout-frequency metric. Add a versioned canonical-listing policy contract without changing the current approved-universe consumer.
+Scope: Create package boundaries `founder.refresh`, `founder.selection`, and `founder.update`, each with public `contracts`, `ports`, `service`, and `cli` modules plus private infrastructure adapters where required. Define public import surfaces and forbid consumers from importing another module's adapters, repositories, private helpers, or CLI implementation. Keep existing `config`, `http`, `logging`, `paths`, `schemas`, `table_io`, `run_locks`, and `run_state` as infrastructure shared by ports rather than a fourth business module. Make `founder.cli` a dispatcher that delegates parser registration and execution to module-owned CLI adapters; it must contain no Refresh, Selection, or Update business decisions. Keep legacy Search, Bronze, Silver, Gold, Evaluation, and Portfolio facades operational behind compatibility adapters during the stack.
 
-Acceptance: Contract and path tests cover duplicate listings, conflicting metadata, multiple exchanges and currencies for one ISIN, declared payout metadata, empty ISINs, normalized identifiers, schema versions, sort keys, and canonical-listing policy metadata. Existing Search, Bronze, Silver, Gold, Evaluate, and Refresh tests remain unchanged. Documentation distinguishes instruments from listings, instrument domicile from listing country, and declared payout metadata from observed payouts.
+Acceptance: Import and architecture tests prove the dependency direction `refresh <- selection <- update`, prove no reverse or circular import, prove domain services do not import `argparse`, EODHD, or filesystem implementations, and prove CLI modules do not own business logic. Each package imports without reading configuration, opening the network, acquiring locks, or touching the lake. Existing command behavior and public facades remain unchanged in this PR. A contract-version policy defines additive versus breaking changes, canonical serialization, and migration ownership.
 
-Determinism: Input row order, provider response order, and dictionary key order do not affect `instrument_id`, `listing_id`, snapshot content hashes, canonical sort order, or conflict-resolution results. Hash payloads use canonical JSON with an explicit contract version.
+Determinism: Public DTO equality and hashes use typed canonical payloads with explicit schema versions; adapters, process time, filesystem paths, and dictionary order cannot affect domain identities. Architecture checks enumerate allowed dependency directions explicitly and return stable diagnostics.
 
-Idempotency: Rebuilding contracts and paths from the same normalized rows produces identical logical rows and hashes, creates no duplicate snapshot members, and does not rewrite or move existing Search or universe artifacts.
+Idempotency: Importing modules, constructing services, registering parsers, and running architecture checks are read-only. Repeating package setup creates no lake artifacts, pointers, locks, network requests, or compatibility-state changes.
 
-### PR41. Complete EODHD Catalog Synchronization And Metadata Capture
+### PR41. Refresh Catalog Contracts And Stable Instrument Identities
 
 Git status: not started. PR: TBD.
 
-Priority: P0 complete discovery input.
+Priority: P0 Refresh data-model foundation.
 
 Depends on: PR40.
 
-Scope: Add `founder catalog sync` and a focused catalog workflow that enumerates the configured EODHD exchange universe, downloads every exchange symbol list without a name query, archives raw responses per exchange in Bronze, and normalizes all provider-visible listings into a Silver catalog snapshot. Add resumable, bounded metadata enrichment for fields not present in bulk symbol lists, including declared distribution policy and historical-NAV capability metadata when available; retain raw provider payloads and promote typed filter fields through the catalog-field registry. Record expected, completed, failed, and skipped exchanges or enrichment items, metadata completeness, `first_seen`, `last_seen`, and active state. Rows without an ISIN remain reviewable but cannot enter the ISIN market-data universe. Activate a new current-catalog pointer only after its completeness policy passes.
+Scope: In `founder.refresh.contracts`, add immutable, versioned DTOs for `InstrumentRecord`, `ListingRecord`, `CatalogSnapshot`, `CatalogCompleteness`, `CanonicalListingPolicy`, `MarketDatasetVersion`, `MarketDataVersionSet`, `RefreshSnapshotRef`, and missing-ISIN or unsupported-listing review rows. Define `instrument_id` as the normalized non-empty ISIN and `listing_id` from a versioned hash of normalized provider, exchange, and code. Preserve every listing for an ISIN; keep listing country, exchange, and trading currency separate from domicile and fund metadata. Include provider-declared distribution frequency and provenance, historical-NAV capability, active state, `first_seen`, and `last_seen`. Define producer-owned Refresh read ports that Selection and Update can consume without importing Refresh adapters. Add deterministic lake paths, schemas, sort keys, and atomic current-Refresh-pointer semantics without changing runtime ingestion.
 
-Acceptance: Mocked CLI and workflow tests cover multiple exchanges, duplicate symbols, one ISIN on multiple exchanges, declared payout frequencies, NAV-capability present and absent, partial provider failure, retry and rate-limit handling, resume after interruption, missing ISINs, disappeared listings, incomplete enrichment, token redaction, and rejection of an incomplete snapshot as current. The command summary reports listing, unique-ISIN, missing-ISIN, exchange, enrichment, NAV-capability, and error counts.
+Acceptance: Contract and path tests cover duplicate listings, conflicting metadata, one ISIN across exchanges and currencies, empty or invalid ISINs, disappeared listings, declared payout metadata, NAV capability present or absent, schema migration, and canonical-listing-policy metadata. A `RefreshSnapshotRef` pins exactly one catalog snapshot and one immutable market-data version set; partial or incompatible references fail validation. Documentation distinguishes instrument, listing, catalog snapshot, market-data version, provider metadata, and derived metrics.
 
-Determinism: Equivalent provider payloads produce the same normalized snapshot and snapshot id regardless of exchange completion order, worker scheduling, or payload order. Operational timestamps and attempt counters are excluded from content hashes.
+Determinism: Canonical JSON, normalized identifiers, explicit contract versions, and stable sorting make instrument, listing, catalog, version-set, and pointer ids independent of input order, Parquet encoding, process time, locale, and worker scheduling. Operational timestamps and retry counters are excluded from content identities.
 
-Idempotency: Re-running the same catalog run against unchanged mocked responses reuses or validates completed exchange and enrichment artifacts, writes the same snapshot membership, and leaves the current pointer unchanged. A resumed run requests only unfinished work and never duplicates raw or normalized rows.
+Idempotency: Rebuilding contracts and paths from identical normalized records produces the same immutable ids and logical rows without duplicate members or pointer churn. Contract validation and read-port access never mutate Refresh, Selection, or Update state.
 
-### PR42. Typed Conjunctive Selection Filter Engine
+### PR42. Refresh Complete EODHD Catalog Synchronization
 
 Git status: not started. PR: TBD.
 
-Priority: P0 reproducible Selection semantics.
+Priority: P0 complete all-ISIN discovery.
 
 Depends on: PR41.
 
-Scope: Add a typed Selection filter model and a strict compiler over the catalog field registry. Support repeatable predicates with `eq`, `ne`, `in`, `not-in`, `contains`, `starts-with`, `regex`, `lt`, `lte`, `gt`, `gte`, `between`, `is-null`, and `not-null` where valid for each field type. Combine every predicate with logical AND; values inside one `in` predicate are alternatives. Tag predicates with the catalog, raw-metric, or classification phase so one canonical Selection definition can later contain all phases without accepting raw SQL. Apply instrument predicates and listing predicates at their declared scopes; an exchange predicate such as `--filter exchange eq XETRA` restricts eligible listings before choosing at most one listing per ISIN through the versioned canonical-listing policy. Add rebuildable DuckDB views over authoritative catalog Parquet files and parameterized query execution. This PR executes catalog predicates; PR47 activates raw-metric predicates and PR48 activates classification and benchmark-relative predicates after their candidate metrics exist.
+Scope: Implement the Refresh catalog service and EODHD adapter to enumerate every configured exchange symbol list without a name query, archive raw responses per exchange in Bronze, normalize all provider-visible listings, and publish an immutable Silver catalog snapshot. Add bounded, resumable metadata enrichment for fields absent from bulk lists, including declared distribution policy and historical-NAV capability when the provider exposes them. Record expected, completed, failed, and skipped exchanges and enrichments plus completeness policy results. Keep rows without an ISIN in review output, but exclude them from the market-data universe. Do not create Selections, compute metrics, or depend on Selection criteria.
 
-Acceptance: Tests exercise every operator and supported scalar type, repeated predicates for one field, null semantics, case normalization, exact and `in` exchange filters, declared payout-frequency filters, invalid values, unknown and non-filterable fields, injection-like input, all filter phases, instrument-versus-listing scope, deterministic one-listing-per-ISIN resolution, empty results, and catalog snapshots with missing optional fields. A field-listing API exposes name, type, scope, phase, nullability, and allowed operators.
+Acceptance: Mocked provider and service tests cover all configured exchanges, duplicate symbols, multiple listings per ISIN, partial provider failure, retries and `Retry-After`, resume after interruption, missing ISINs, disappeared listings, incomplete enrichment, token redaction, and rejection of an incomplete snapshot. Summaries report listing, unique-ISIN, missing-ISIN, exchange, enrichment, NAV-capability, and error counts. No Search query or active Selection can restrict catalog synchronization.
 
-Determinism: Canonical predicate JSON sorts normalized predicates by field, operator, and typed value, so CLI argument order does not change the filter hash or selected member order. DuckDB query results are explicitly ordered by stable listing identity.
+Determinism: Equivalent provider payloads produce the same normalized snapshot, conflicts, and snapshot id regardless of response order, exchange completion order, worker scheduling, or retry history. Provider raw artifacts are keyed by provider, exchange, and response content rather than completion time.
 
-Idempotency: Filter evaluation is read-only. Rebuilding the DuckDB database or views from unchanged Parquet snapshots yields the same members and does not modify catalog, Search, Bronze, Silver quote, or Gold files.
+Idempotency: Repeating or resuming a catalog run reuses completed raw and normalized artifacts, requests only missing work, and publishes no duplicate snapshot or pointer update. A failed completeness check leaves the prior current Refresh pointer unchanged.
 
-### PR43. Selection Identity, Persistence, Membership Versions, And CLI
+### PR43. Refresh All-ISIN Market Data And Versioned Inputs
+
+Git status: not started. PR: TBD.
+
+Priority: P0 catalog-wide data completeness.
+
+Depends on: PR42.
+
+Scope: Implement Refresh market-data planning for every active eligible unique ISIN in the current catalog, independent of every Selection. Resolve one deterministic canonical listing per ISIN and record explicit exclusions for missing, invalid, inactive, or provider-unsupported listings. Fetch gap-aware EOD quotes, dividends, splits, and historical NAV when supported with bounded concurrency, retries, partial-failure isolation, and full-history first load. Normalize Silver quote rows containing raw `close` and `adjusted_close`, dividend payment date with ex-date fallback, split ratios, and genuine split-adjusted NAV without substituting market price. Publish immutable per-listing dataset versions with parent ids, content fingerprints, date coverage, and `added`, `corrected`, and `deleted` change sets; group them into a `MarketDataVersionSet` only after atomic validation.
+
+Acceptance: Tests prove every eligible catalog ISIN is planned exactly once, duplicate listings resolve consistently, Selection membership has no effect, and exclusions have stable reason codes. Fixtures cover full-history load, appended tails, historical gaps, raw-close and adjusted-close corrections, dividends, payment-date fallback, splits, NAV present or unavailable, deletions, duplicate provider rows, interrupted writes, and a correction with unchanged row count and last date. Failed validation cannot expose partial Bronze, Silver, version-manifest, or version-set state.
+
+Determinism: Canonical listing choice, plan ordering, exclusion reasons, gap windows, normalized rows, fingerprints, change classifications, and version-set ids depend only on catalog policy, provider observations, prior immutable versions, and requested as-of date. Row order, task completion order, file encoding, locale, and process count cannot change logical outputs.
+
+Idempotency: Repeating Refresh with unchanged provider data performs no duplicate downloads where content-addressed raw data is reusable, writes no new logical Silver versions or version set, and leaves pointers stable. Resume consumes only unfinished plan items; corrections rebuild only affected listing datasets and never mutate prior versions.
+
+### PR44. Refresh Service, Standalone CLI, And Atomic Publication
+
+Git status: not started. PR: TBD.
+
+Priority: P0 operable Refresh module.
+
+Depends on: PR43.
+
+Scope: Add module-owned `RefreshRequest`, `RefreshPlan`, `RefreshRunManifest`, `RefreshResult`, and compare-and-swap `CurrentRefreshPointer` contracts. Implement `founder.refresh.service` orchestration and the standalone `founder-refresh` CLI with `plan`, `run`, and `status`; register equivalent `founder refresh` routing without duplicating parser or handler logic. `run` defaults to all configured exchanges and every eligible catalog ISIN and supports explicit `--as-of`, `--run-id`, `--concurrency`, `--resume`, `--dry-run`, and `--debug`. It may synchronize the catalog and update Bronze/Silver market data, but it must never read the current Selection, compute Gold metrics, or invoke Update. Acquire one Refresh run lock per lake root, retain per-request retry limits, write resumable manifests, and publish the current Refresh snapshot atomically only when configured completeness requirements pass.
+
+Acceptance: Dedicated CLI tests cover each command, argument, default, JSON result, `--debug`, dry-run with no writes, invalid dates, lock contention, partial provider failure, incomplete snapshots, resume, and successful current-pointer publication. Service tests call the same application API without parsing argv. An end-to-end mocked Refresh discovers ISINs, updates every eligible listing's required datasets, reports exclusions and coverage, and produces no Selection or metric artifacts. Existing legacy commands remain available through the compatibility route until PR55.
+
+Determinism: `RefreshPlan` and content ids depend on normalized request fields, prior Refresh snapshot, provider content, and explicit as-of date; generated run ids and operational timestamps are metadata only. CLI argument order and standalone versus umbrella invocation produce identical requests and logical outputs.
+
+Idempotency: Re-running `founder-refresh run` with unchanged data resolves to the existing immutable snapshot and leaves the current pointer unchanged. Interrupted runs resume incomplete plan items, and pointer publication uses compare-and-swap so an older run cannot overwrite a newer successful Refresh.
+
+### PR45. Selection Predicate And Metric-Requirement Contracts
+
+Git status: not started. PR: TBD.
+
+Priority: P0 deterministic Selection semantics.
+
+Depends on: PR44.
+
+Scope: In `founder.selection.contracts`, define typed `Predicate`, `PredicateValue`, `FilterPhase`, `FieldDefinition`, `MetricRequirement`, `MetricEvidence`, `ClassificationProfileRef`, and `BenchmarkRef` contracts. Build a strict field registry and compiler supporting `eq`, `ne`, `in`, `not-in`, `contains`, `starts-with`, `regex`, `lt`, `lte`, `gt`, `gte`, `between`, `is-null`, and `not-null` only where valid for the field type. Combine predicates conjunctively; values inside one `in` predicate are alternatives. Separate catalog predicates, raw-metric predicates, and classification predicates. Catalog fields come from public Refresh contracts; Selection itself owns the names, types, operators, availability rules, and evidence requirements for metric fields, while Update later produces that evidence. Use parameterized DuckDB reads over immutable Refresh catalog Parquet files; reject raw SQL, unknown metadata paths, implicit casts, and unavailable-value-as-zero behavior.
+
+Acceptance: Tests cover every operator and scalar type, repeated predicates, null and availability semantics, case normalization, injection-like input, invalid values, unknown fields, instrument-versus-listing scope, exact and `in` exchange filters, declared payout frequency, every planned raw metric and classification field, and deterministic canonical listing resolution. The public field-listing API exposes field name, type, scope, phase, nullability, allowed operators, metric requirement, and benchmark requirement. Selection tests use supplied metric evidence only and prove no EODHD, Bronze, Silver, Gold, or Update import or side effect.
+
+Determinism: Canonical predicate JSON sorts normalized predicates by phase, field, operator, and typed value. CLI ordering, catalog row order, dictionary order, locale, and DuckDB scan order cannot change definition hashes, required metric sets, candidate ordering, or predicate outcomes.
+
+Idempotency: Predicate compilation and evaluation are pure and read-only. Rebuilding views or evaluating identical catalog rows and metric evidence produces the same result without changing Refresh snapshots, metric artifacts, Selection pointers, or lake data.
+
+### PR46. Selection Identity, Candidate And Final Membership Contracts
 
 Git status: not started. PR: TBD.
 
 Priority: P0 durable Selection lifecycle.
 
-Depends on: PR42.
-
-Scope: Add immutable Selection-definition, candidate-membership, and final-membership contracts plus `founder selection fields`, `create`, `list`, `show`, `refresh`, and `diff` commands. Derive `selection_id` from the canonical catalog, raw-metric, and classification predicate sets, canonical-listing policy version, classification-profile reference, and optional benchmark listing id. Derive `candidate_membership_id` from the sorted listing ids after catalog predicates and derive `membership_id` from the sorted listing ids after raw-metric and classification predicates, retaining the source catalog and metric artifact versions separately. Generate a readable Selection name from all normalized `field_operator_value` fragments joined by underscores, truncate only at fragment boundaries, and append a short `selection_id` suffix. Store active, paused, and archived lifecycle state, default metric-profile reference, creation provenance, immutable membership snapshots, and pointers to current candidate and final membership. In this PR, catalog-only Selections resolve fully; definitions containing raw-metric predicates remain explicitly pending until PR47, and classification or benchmark-relative predicates remain pending until PR48. Pending definitions do not trigger premature Gold work.
-
-Acceptance: CLI tests cover identical catalog, raw-metric, and classification filters in different argument orders; classification profile and benchmark identity; name normalization and truncation; hash collisions guarded by the full hash; repeated creation; candidate and final membership ids; pending filter-phase states; changed catalog membership; unchanged membership across newer catalog snapshots; empty Selections; lifecycle transitions; member diffs; invalid status changes; and one canonical listing per ISIN. Existing `founder search` remains available and unchanged.
-
-Determinism: Selection names, ids, candidate and final member ids, member ordering, current-membership decisions, and diffs depend only on versioned normalized inputs. User locale, process time, catalog row order, and CLI predicate order cannot change them.
-
-Idempotency: Creating or refreshing the same Selection against unchanged catalog and metric inputs resolves to the existing definition, candidate membership, and final membership artifacts without duplicate rows or pointer churn. A changed candidate or final membership writes a new immutable version and never mutates prior membership content.
-
-### PR44. Catalog-Wide Canonical ISIN Market-Data Planning
-
-Git status: not started. PR: TBD.
-
-Priority: P0 market-data completeness.
-
-Depends on: PR43.
-
-Scope: Add a Bronze planning source that reads every active non-empty ISIN from the current catalog and resolves one deterministic listing through the catalog canonical-listing policy. Exclude missing-ISIN, inactive, invalid, and explicitly unsupported listings with reason rows. Add an explicit compatibility selector so existing approved `current_universe` planning remains the default until PR52, while catalog planning can be exercised independently. Ensure Selection filters never restrict catalog market-data planning. Preserve gap-aware quote, dividend, and split behavior, and add a versioned historical-NAV dataset strategy when the provider capability is available. Record NAV as unavailable when it cannot be sourced; never infer NAV from exchange price. Preserve bounded concurrency, per-layer locks, partial-failure behavior, coverage, and resume manifests.
-
-Acceptance: Tests prove catalog planning covers every eligible unique ISIN exactly once, is independent of all saved Selections, chooses the same canonical listing for duplicate ISINs, reports all exclusions, keeps first-time full-history behavior, and produces stable quote, dividend, and available-NAV gap plans. Tests cover missing NAV capability without synthetic fallback. Compatibility tests prove approved-universe Bronze and current CLI defaults remain unchanged before cutover.
-
-Determinism: Canonical listing selection, exclusion reasons, plan ordering, run-independent symbol mapping, and date-window coalescing are stable for the same catalog, policy version, coverage state, and requested end date.
-
-Idempotency: Re-running a catalog-wide plan or Bronze load with unchanged catalog and Silver coverage produces the same logical plan, requests only remaining gaps, and merges provider rows without duplicates. It does not create Gold metrics for unselected ISINs.
-
-### PR45. Versioned Silver Analytical Inputs And Change Manifests
-
-Git status: not started. PR: TBD.
-
-Priority: P0 correctness prerequisite for delta metrics.
-
-Depends on: PR44.
-
-Scope: Add per-listing Silver input-version contracts for quote rows containing raw `close` and `adjusted_close`, normalized dividend and split events, and historical NAV observations. Each version records its parent, deterministic content fingerprint, schema and analytical-input version, date and row coverage, and explicit `added_dates`, `corrected_dates`, and `deleted_dates` or equivalent partition-level change sets. Normalize dividend payment date with a documented fallback to ex-date, preserve amount and currency, normalize split ratios, and normalize split-adjusted NAV per share without substituting market price. Make writes atomic and emit change manifests only after validated data is durable. Add a pure delta classifier with `unchanged`, `append_only`, `historical_backfill`, `historical_correction`, and `deletion` outcomes. Continue writing the existing Silver quote path and schema for compatibility.
-
-Acceptance: Tests cover append-only quote, dividend, split, and NAV tails; historical gap fills; raw-close, adjusted-close, dividend, split, and NAV corrections; deleted rows; duplicate provider rows; payment-date fallback; currency preservation; split normalization; unavailable NAV; reordered input; unchanged rewrites; interrupted writes; schema-version changes; and changes that keep the same last date. A historical correction must change the affected input version even when row count and maximum date are unchanged.
-
-Determinism: Quote, dividend, split, and NAV fingerprints and change sets are derived from normalized, sorted analytical columns and exclude run ids, write timestamps, file metadata, and Parquet encoding details. The same logical observations produce the same input versions across machines and worker counts.
-
-Idempotency: Reprocessing unchanged Bronze rows writes no new logical input version and leaves each current-version pointer stable. Failed validation or interrupted writes cannot expose partial quote, dividend, split, NAV, or manifest state.
-
-### PR46. Selection-Demanded Incremental Asset Metric Cache
-
-Git status: not started. PR: TBD.
-
-Priority: P0 eliminate repeated per-ISIN work.
-
 Depends on: PR45.
 
-Scope: Add a lazy shared Asset Metric Cache that is invoked only with the union of listing ids in active Selection candidate memberships. Define a versioned metric specification covering adjusted-close daily log-return semantics, date window, annualization, risk-free assumptions, Expected Shortfall confidence, algorithm versions, and output schema. Persist immutable asset artifact versions and online state for return count, mean, second moment, annualized volatility, downside state, Sharpe, Sortino, historical daily-loss VaR/CVaR, the identical positive-loss `expected_shortfall` alias, cumulative wealth, running peak, maximum drawdown, maximum peak-to-recovery duration in trading sessions, ongoing right-censored underwater duration, coverage, and input versions. Use append-only Silver deltas for online updates; rebuild from the earliest correctness-safe point or from full history for backfills, corrections, deletions, or incompatible metric specifications. Selection manifests reference cache artifacts instead of copying their rows.
+Scope: Add immutable `SelectionDefinition`, `CandidateMembership`, `FinalMembership`, `SelectionState`, `CurrentSelectionPointer`, and `MetricEvidenceManifestRef` contracts plus Selection repository ports. Derive `selection_id` from canonical catalog, raw-metric, and classification predicates, canonical-listing policy, metric and classification profile references, and optional benchmark listing id. Derive `candidate_membership_id` from ordered canonical listing ids after catalog predicates and pin its source `catalog_snapshot_id`, not a market-data version set. Finalization is a public pure Selection service that accepts one candidate id plus a complete typed metric-evidence manifest, validates evidence versions and availability, applies remaining predicates, and derives `membership_id`; Update must call this service rather than implementing filter semantics. Catalog-only Selections finalize immediately. Metric-dependent Selections remain `pending_update` until valid evidence arrives. Store active, paused, archived, empty, pending, ready, and stale states and use compare-and-swap current pointers.
 
-Acceptance: Tests prove an ISIN shared by two Selection candidate sets is computed once, an ISIN outside every Selection candidate set creates no Gold asset artifact, unchanged inputs are cache hits, an appended day applies exactly one return delta, and historical corrections invalidate stale state. Sharpe, Sortino, CVaR/Expected Shortfall, annualized volatility, maximum drawdown, completed recovery duration, and right-censored underwater duration match a full deterministic recomputation for append, backfill, correction, and deletion fixtures. Concurrent requests for the same cache key produce one valid artifact.
+Acceptance: Tests cover identical filters in different orders, stable readable names, hash collisions guarded by full hashes, one canonical listing per ISIN, changed and unchanged catalog membership, pending metric requirements, complete and incomplete evidence, unavailable metrics, stale evidence, benchmark mismatch, empty membership, lifecycle transitions, member diffs, repeated finalization, and concurrent pointer updates. A candidate can be current while final membership is pending; only a ready final membership is eligible for pair or portfolio analytics.
 
-Determinism: Asset cache keys include listing id, metric-spec hash, and Silver input version. Online and full-rebuild paths produce equivalent values within explicit numerical tolerances and identical logical metadata, independent of Selection order and worker scheduling.
+Determinism: Selection names, ids, candidate and final membership ids, member ordering, required metric sets, states, and diffs depend only on versioned definitions, pinned Refresh catalog snapshot, canonical policy, and evidence identities. Creation time, user locale, process order, and CLI predicate order are metadata only.
 
-Idempotency: Re-evaluating any number of Selections with unchanged memberships, metric specifications, and Silver inputs reuses the same immutable asset artifacts and performs no duplicate computation or row append.
+Idempotency: Creating, refreshing, activating, or finalizing the same Selection against unchanged inputs resolves to existing immutable artifacts without duplicate rows or pointer churn. A changed candidate or final membership writes a new version and never mutates prior membership content; failed compare-and-swap leaves the newer pointer untouched.
 
-### PR47. Selection Asset Screening Metrics And Two-Phase Filtering
+### PR47. Selection Service, Current Pointer, And Standalone CLI
 
 Git status: not started. PR: TBD.
 
-Priority: P0 metric-based Selection semantics.
+Priority: P0 operable Selection module.
 
 Depends on: PR46.
 
-Scope: Extend the shared Asset Metric Cache with deterministic screening metrics and activate the second Selection filter phase. Compute `positive_day_ratio` as positive adjusted-close daily log returns divided by valid daily returns. Compute `positive_month_ratio` and `positive_year_ratio` from positive closed-period log returns between consecutive month-end or year-end adjusted closes; exclude the open current period and store each denominator. Compute bias-adjusted Fisher-Pearson skewness of daily log returns with explicit insufficient-history status below three observations. Compute adjusted-close total-return CAGR, annualized OLS slope of `ln(adjusted_close)` against elapsed calendar years, and trend R-squared. Expose per-ISIN annualized volatility, Expected Shortfall, maximum drawdown, recovery duration, and right-censoring status from PR46. Classify `observed_payout_frequency` from normalized dividend dates, using payment date and then ex-date fallback, over at least two complete calendar years: median 10-13 payments is `monthly`, 3-5 is `quarterly`, 2 is `semiannual`, 1 is `annual`, 0 is `none`, and other patterns are `irregular`; shorter usable history is `insufficient_history`. Preserve provider-declared distribution frequency as a separate catalog field. When historical NAV exists, build a distribution-adjusted NAV total-return index using split-adjusted NAV and cash distributions, store its annualized return, and define `nav_erosion_rate` as `max(0, -nav_total_return_cagr)`; otherwise store explicit `unavailable` or `insufficient_history` status and never proxy NAV with market price.
+Scope: Implement `founder.selection.service` and the standalone `founder-selection` CLI with `fields`, `create`, `list`, `show`, `use`, `refresh`, `diff`, and `status`; register equivalent `founder selection` routing through the module-owned parser. `create` persists an immutable definition and evaluates catalog predicates against a pinned Refresh snapshot. `use` atomically makes exactly one Selection the current Selection for default Update execution and may point to a `pending_update`, `ready`, or empty Selection while exposing that state. `refresh` recomputes candidate membership against an explicitly chosen or current Refresh snapshot but does not download data or compute metrics. Metric-dependent creation and refresh emit exact `MetricRequirement` rows for Update. All commands support structured JSON output and `--debug` without importing Update or provider adapters.
 
-Scope continued: Register the screening outputs as typed raw-metric filter fields. Resolve a Selection in two stages: catalog predicates produce immutable candidate membership, required shared asset metrics are calculated only for those candidates, and all available raw-metric predicates are then applied conjunctively. PR48 extends this second phase with classification and benchmark-relative predicates before final membership is published. Support filters such as `exchange eq XETRA`, `observed_payout_frequency in monthly,annual`, `positive_year_ratio gte 0.7`, `return_skewness gte -0.5`, `log_price_slope_annualized gt 0`, `expected_shortfall lte 0.03`, `max_drawdown gte -0.3`, `recovery_duration_trading_days lte 252`, and `nav_erosion_rate lte 0.02`. Metric availability and minimum-observation predicates must be explicit rather than silently treating unavailable values as zero.
+Scope continued: Generate a readable Selection name from all normalized `field_operator_value` fragments joined by underscores, truncate only at fragment boundaries, and append a short `selection_id` suffix. Require an explicit benchmark when predicates need downside capture or composite risk type. Expose current candidate id, current final membership id if ready, Refresh snapshot id, pending metric requirements, lifecycle state, and stale status in every relevant result. The CLI never silently changes the current Selection during `create` or `refresh`; only `use` changes that pointer.
 
-Acceptance: Formula tests use hand-checkable daily, monthly, annual, dividend, drawdown, trend, skewness, and NAV fixtures. Tests cover positive-return ratios and denominators, current partial-period exclusion, zero returns, skewness with zero variance and insufficient history, adjusted-close CAGR and annualized volatility, Expected Shortfall, completed and right-censored recovery duration, irregular or missing dividends, every payout-frequency category, declared-versus-observed frequency, NAV distributions, missing NAV, NAV corrections, maximum drawdown, slope units and R-squared, and metric availability. Selection tests prove catalog filters run before metric work, only candidate ISINs receive artifacts, every raw-metric predicate is AND-combined, changing a threshold changes final membership but reuses unchanged metric artifacts, and final member ordering is stable for raw-metric-only Selections.
+Acceptance: Dedicated CLI tests cover every command, field and repeated-filter syntax, names, lifecycle transitions, current-pointer changes, pending and ready output, empty results, invalid benchmark requirements, stale Refresh snapshots, diffs, `--debug`, and standalone versus umbrella equivalence. Tests prove only `use` changes the current pointer, catalog-only Selections become ready without Update, metric Selections stay pending, and neither CLI nor service performs a network call or writes metric artifacts.
 
-Determinism: Screening metric keys include listing id, quote, dividend, and NAV input versions, period-close policy, metric algorithm version, and date window. Selection predicate thresholds affect only `selection_id` and final membership, so threshold changes reuse unchanged metric artifacts. Calendar boundaries use an explicit timezone and closed-period policy. Metric values, payout categories, candidate and final membership ids, names, and filter outcomes are independent of input row order, CLI predicate order, locale, and worker scheduling.
+Determinism: Standalone and umbrella invocations normalize to the same typed command requests. The same definition and Refresh snapshot yield the same Selection, candidate membership, requirements, names, ordering, and JSON domain payload regardless of argument order or machine; only explicitly operational fields may differ.
 
-Idempotency: Re-evaluating identical Selection definitions and input versions reuses the same screening artifacts and final membership without duplicate calculation. Append-only daily inputs update online moments, trend state, drawdown state, and only newly closed month or year buckets; dividend or NAV changes update their affected metric state. Historical corrections, deletions, or policy-version changes rebuild only affected ISIN artifacts before reapplying metric predicates.
+Idempotency: Repeating `create`, `refresh`, or `use` with unchanged inputs resolves to existing definitions, memberships, requirements, and pointer values. Interrupted persistence cannot expose a definition without its candidate membership, and compare-and-swap prevents an older command from replacing a newer current Selection.
 
-### PR48. Selection Price, Total-Return, And Risk Classifications
+### PR48. Update Contracts, Pinned Inputs, And Shared Work Planner
 
 Git status: not started. PR: TBD.
 
-Priority: P0 deterministic classification filters.
+Priority: P0 Update execution foundation.
 
 Depends on: PR47.
 
-Scope: Add a typed, versioned `classification_profile` with an explicit as-of date, trailing window, minimum observations, annualization, Expected Shortfall confidence, benchmark listing id, downside-capture minimum observations, and every category threshold. The default profile uses the trailing three years, requires at least 504 valid daily observations spanning two elapsed years, and emits `insufficient_history` or `unavailable` instead of forcing a category. Keep reusable raw metrics separate from profile-dependent labels. Because exchange `close` is not fund NAV, expose the requested close-based behavior as `close_price_path_type`, not `nav_type`: derive split-adjusted-but-not-dividend-adjusted close from raw close and normalized split events, fit annualized OLS slope to its logarithm, and classify slope `> 0.02` as `growing`, `[-0.02, 0.02]` as `stable`, `(-0.10, -0.02)` as `eroding`, and `<= -0.10` as `strong_decline`. Apply the same boundaries to `nav_log_slope_annualized` as a separate `nav_path_type` only when genuine historical NAV exists; never substitute close or adjusted close for NAV.
+Scope: In `founder.update.contracts`, add immutable, versioned `UpdateRequest`, `PinnedUpdateInput`, `MetricSpec`, `MetricCacheKey`, `MetricArtifactRef`, `UpdatePlan`, `UpdateRunManifest`, `UpdateResult`, and `CurrentUpdatePointer` contracts. An Update defaults to the current Selection but pins the exact `selection_id`, `candidate_membership_id`, current `RefreshSnapshotRef`, benchmark, as-of date, metric profile, and classification profile before planning. Require the Refresh snapshot's `catalog_snapshot_id` to equal the candidate's source catalog id; otherwise return `selection_stale` and require an explicit `founder selection refresh` rather than changing membership inside Update. A compatible newer market-data version set for the same catalog is valid. Build a pure work planner from Selection-owned `MetricRequirement` rows. It unions identical asset, benchmark-relative, classification, pair, calendar, and analysis keys across requested work, marks each as hit, append delta, rebuild, missing, blocked, or oversized, and orders dependencies explicitly. Update owns metric artifacts and manifests but does not own Selection predicate semantics, catalog downloads, or current-Selection changes.
 
-Scope continued: Classify `total_return_type` only from adjusted-close-derived metrics. Compute adjusted-close total-return CAGR over the profile window and classify CAGR `< -0.02` as `negative` and `[-0.02, 0.02]` as `sideways`. For CAGR `> 0.02`, classify `steadily_growing` only when adjusted-close log-trend R-squared is at least `0.80`, annualized daily-return volatility is at most `0.20`, and maximum drawdown is at least `-0.20`; otherwise classify `volatile_growing`. Store the CAGR, trend R-squared, volatility, drawdown, observation count, first date, last date, and profile id beside the label so every classification is auditable.
+Scope continued: Define compare-and-swap publication: a completed run may publish final Selection evidence and the current Update pointer only if the current Selection still references the pinned candidate and the current Refresh pointer still equals the pinned Refresh snapshot. If either pointer advances during execution, preserve the immutable completed artifacts but mark the run `stale_not_published`. Add one Update run lock per lake root and selection id plus per-cache-key locks so independent Selections can run concurrently while shared artifacts are computed once. Keep cache repositories behind Update ports and preserve sparse and scale-limit contracts before any dense allocation.
 
-Scope continued: Add benchmark-relative candidate screening and a composite `risk_type` with labels `low`, `moderate`, `high`, and `severe`. Define `expected_shortfall` as the same positive daily-loss CVaR from PR46 at the profile confidence, default `0.975`. Compute `downside_capture_ratio` on exact common adjusted-close return dates where the benchmark daily log return is negative: annualize the candidate and benchmark compounded returns over those dates and divide candidate return by benchmark return; require at least 60 benchmark-down observations and a strictly negative denominator. Compute recovery duration as the maximum number of trading sessions from a prior adjusted-close peak until recovery to that peak, including the elapsed duration of a right-censored episode at the as-of date and preserving its censoring flag.
+Acceptance: Contract and planner tests cover no current Selection, pending and ready Selections, empty candidates, compatible newer market-data versions, mismatched catalog snapshots, missing or stale Refresh versions, missing benchmark, duplicate requirements, overlapping Selections, cache corruption, append-only changes, corrections, deletions, incompatible algorithm versions, pair limits, stale publication, and concurrent identical keys. A plan cannot include pair, calendar, or portfolio work before final membership exists; it schedules candidate asset evidence first and a Selection-finalization barrier before final-member work.
 
-Scope continued: Assign one risk band to each required metric, then define `risk_type` as the worst band so averaging cannot hide one severe tail-risk dimension. Use these default ordered intervals: maximum drawdown `>= -0.10`, `[-0.20, -0.10)`, `[-0.40, -0.20)`, `< -0.40`; Expected Shortfall `<= 0.01`, `(0.01, 0.02]`, `(0.02, 0.04]`, `> 0.04`; return skewness `>= -0.50`, `[-1.00, -0.50)`, `[-2.00, -1.00)`, `< -2.00`; downside capture `<= 0.75`, `(0.75, 1.00]`, `(1.00, 1.25]`, `> 1.25`; and recovery duration `<= 63`, `64-126`, `127-252`, `> 252` trading sessions. The four intervals map to `low`, `moderate`, `high`, and `severe`. If any required component is unavailable, the composite is unavailable and exposes component-level reasons; raw available components remain independently filterable.
+Determinism: Plan ids, cache keys, dependency order, hit decisions, stale decisions, and manifests derive only from pinned contract ids, canonical metric specs, algorithm versions, and immutable input versions. Selection order, filesystem discovery order, worker scheduling, and operational timestamps cannot change logical plans or artifact identities.
 
-Scope continued: Register `close_price_path_type`, `nav_path_type`, `total_return_type`, `risk_type`, all underlying values, availability fields, and right-censoring status as typed conjunctive Selection fields. Support predicates such as `close_price_path_type in growing,stable`, `nav_path_type ne strong_decline`, `total_return_type eq steadily_growing`, `risk_type in low,moderate`, `downside_capture_ratio lte 1.0`, and `recovery_duration_trading_days lte 126`. A benchmark can be outside candidate membership but is an explicit Selection-requested metric dependency and never becomes a final member implicitly. Apply these predicates after PR47 raw metrics and before publishing final membership.
+Idempotency: Replanning unchanged pinned inputs yields the same plan and performs no writes. Executing or resuming a plan computes each missing key once, reuses completed immutable artifacts, and never republishes unchanged evidence or pointers. A failed or stale run cannot roll back newer Selection, Refresh, or Update state.
 
-Acceptance: Hand-checkable fixtures cover all category boundaries, exact-threshold inclusivity, positive and negative close slopes, split events without false decline, distributing assets whose close path erodes while adjusted-close total return grows, genuine NAV versus missing NAV, steady and volatile positive total returns, sideways and negative total returns, completed and right-censored recoveries, every per-component risk band, worst-band aggregation, unavailable components, and a candidate that gains while its benchmark falls. Downside-capture tests prove exact common-date alignment, benchmark-negative-day selection, annualization, the 60-observation minimum, denominator validation, and benchmark changes. CLI tests prove every raw and category field is conjunctively filterable and that unavailable classifications cannot silently pass ordinary comparison predicates.
-
-Determinism: Raw asset metric keys remain independent of Selection thresholds and classification boundaries. Classification artifact keys include the referenced raw artifact ids and full `classification_profile_id`; benchmark-relative keys additionally include candidate and benchmark listing ids, both adjusted-close input versions, exact common-date-set hash, as-of date, and algorithm version. Changing an ordinary filter threshold reuses raw metrics and labels, changing a classification profile recomputes labels without recomputing unchanged raw metrics, and changing the benchmark invalidates only benchmark-relative components and dependent risk labels. Labels and final membership are independent of row order, CLI predicate order, locale, and worker scheduling.
-
-Idempotency: Re-evaluating the same candidates, inputs, benchmark, and classification profile reuses the same raw, benchmark-relative, and label artifacts without duplicate rows. Append-only data updates only affected online raw state, common benchmark dates, recovery state, and labels; close, split, adjusted-close, NAV, or benchmark corrections rebuild only affected candidate artifacts and dependent classifications before final predicates are reapplied.
-
-### PR49. Selection-Demanded Incremental Pair Metric Cache
+### PR49. Update Incremental Per-ISIN Metric Cache
 
 Git status: not started. PR: TBD.
 
-Priority: P0 eliminate repeated pair work.
+Priority: P0 reusable candidate metrics.
 
 Depends on: PR48.
 
-Scope: Add a lazy shared Pair Metric Cache for pairs requested by at least one active Selection final membership. Define `pair_id` from the sorted distinct listing ids so symmetric and same-ISIN pairs cannot be computed twice. Persist pairwise common-date observation metadata and mergeable online state for covariance, incremental Pearson, and approximate online Spearman, including left and right input versions, metric-spec hash, observation count, first and last common dates, and common-date-set hash. Update only newly common observations for verified append-only deltas; rebuild affected pair state for historical corrections, deletions, or incompatible observation sets. Bucket pair artifacts deterministically and preserve sparse threshold and top-k edge modes plus explicit maximum-pair guards.
+Scope: Implement Update's lazy Asset Metric Cache for the union of listing ids in the pinned current Selection candidate membership, plus an explicitly requested benchmark. Define one versioned metric spec for adjusted-close daily log returns `ln(Px_t / Px_t-1)`, date window, annualization, risk-free assumptions, Expected Shortfall confidence, period-close policy, and algorithm versions. Persist immutable values and mergeable online state for observations, mean, second moment, annualized volatility, downside deviation, Sharpe, Sortino, positive-loss VaR and CVaR/`expected_shortfall`, cumulative wealth, running peak, maximum drawdown, completed peak-to-recovery duration, ongoing right-censored underwater duration, positive-day ratio, closed-month and closed-year positive ratios with denominators, bias-adjusted Fisher-Pearson return skewness, adjusted-close total-return CAGR, annualized OLS log-price slope, trend R-squared, observed payout frequency, and NAV erosion inputs. Keep provider-declared payout frequency as catalog metadata.
 
-Acceptance: For Selection A `{A,B,C}` and Selection B `{B,C,D}`, tests prove A/B/C asset artifacts and pair B/C are reused, only D and pairs B/D and C/D are newly computed, and every unordered pair is executed at most once per cache key. Tests cover one-sided appended dates, newly common dates, no-common-date deltas, backfills, corrections, same-ISIN cross-listings, sparse limits, pair-limit failures, cache corruption, and concurrent requests.
+Acceptance: Hand-checkable fixtures cover log-return semantics, zero and invalid prices, Sharpe, Sortino, CVaR/Expected Shortfall, volatility, drawdown, completed and right-censored recovery, skewness with zero variance or insufficient history, positive day/month/year ratios, current partial-period exclusion, CAGR, slope units and R-squared, regular and irregular dividends, every payout category, genuine NAV distributions, missing NAV, and availability reasons. Tests prove a shared ISIN is computed once, catalog ISINs outside the candidate set create no artifacts, append applies each new observation once, and historical corrections match full recomputation.
 
-Determinism: Pair ids, left/right orientation, bucket assignment, common-date ordering, metric state, edge ordering, and cache-hit decisions are independent of Selection order, process count, and input row order. Approximate Spearman state includes an explicit algorithm and sketch version.
+Determinism: Asset keys include listing id, exact quote/dividend/split/NAV input versions, metric-spec hash, date window, and algorithm versions, never ordinary Selection filter thresholds. Online and full rebuilds agree within explicit numeric tolerances and produce identical metadata independent of Selection order, row order, process count, and worker scheduling.
 
-Idempotency: Re-running overlapping Selections with unchanged member inputs and metric specifications references the same pair artifacts without symmetric duplicates or repeated computation. Append-only runs consume each newly common observation exactly once.
+Idempotency: Re-running Update with unchanged candidates and inputs reuses immutable asset artifacts. Verified append-only changes update online state and newly closed periods only; backfills, corrections, deletions, and policy changes rebuild only affected listing artifacts. Concurrent requests for one key publish one valid artifact.
 
-### PR50. Selection-Wide Calendar And Comparable Metric Cache
+### PR50. Update Screening Classifications And Selection Finalization
 
 Git status: not started. PR: TBD.
 
-Priority: P0 portfolio input correctness.
+Priority: P0 metric-based current Selection.
 
 Depends on: PR49.
 
-Scope: Add a Selection calendar contract that derives the exact common return-date intersection for a membership and date policy, plus a `calendar_id` from the ordered dates and policy version. Build aligned long-format return matrices only for Selection members. Add comparable asset, covariance, and correlation artifacts keyed by listing or sorted pair, calendar id, and metric specification. Keep these distinct from reusable pairwise-intersection statistics: pairwise cache values may be reused for search and similarity, but portfolio covariance may be reused only when the exact calendar id matches. Record minimum-observation checks and explicit empty or insufficient-history status instead of emitting plausible zero metrics.
+Scope: Implement Update's candidate screening, benchmark-relative metrics, classification artifacts, and evidence delivery to Selection. The versioned default classification profile uses a trailing three-year window with at least 504 valid daily observations spanning two years and explicit `insufficient_history` or `unavailable` status. Because exchange `close` is not NAV, derive split-adjusted-but-not-dividend-adjusted `close_price_path_type` with log-slope classes `growing` for `> 0.02`, `stable` for `[-0.02, 0.02]`, `eroding` for `(-0.10, -0.02)`, and `strong_decline` for `<= -0.10`. Derive separate `nav_path_type` with the same boundaries only from genuine historical NAV. Build a distribution-adjusted NAV total-return index from true NAV and cash distributions and define `nav_erosion_rate = max(0, -nav_total_return_cagr)`; never proxy NAV with close or adjusted close.
 
-Acceptance: Tests prove every matrix member has exactly the same dates, covariance and correlation use only that Selection calendar, equivalent Selections share calendar-scoped artifacts, and adding a short-history member changes the calendar and invalidates only calendar-dependent results. Tests cover appended dates shared by all members, one-sided dates, backfills, empty intersections, minimum-history failures, stable covariance ordering, and covariance symmetry.
+Scope continued: Classify adjusted-close `total_return_type` as `negative` for CAGR `< -0.02`, `sideways` for `[-0.02, 0.02]`, `steadily_growing` for CAGR `> 0.02` with trend R-squared `>= 0.80`, annualized volatility `<= 0.20`, and maximum drawdown `>= -0.20`, and otherwise `volatile_growing`. Compute `downside_capture_ratio` on exact common dates where an explicit benchmark's adjusted-close log return is negative by dividing annualized compounded candidate return by annualized compounded benchmark return; require at least 60 benchmark-down observations and a negative denominator. A benchmark outside candidate membership is an explicit Update dependency and never becomes a final member implicitly.
 
-Determinism: Calendar ids, aligned row order, observation counts, comparable metric keys, covariance rows, and failure diagnostics are stable for the same member input versions and date policy. Set iteration and filesystem discovery order cannot affect outputs.
+Scope continued: Build `risk_type` from maximum drawdown, positive-loss Expected Shortfall at default confidence `0.975`, return skewness, downside capture, and recovery duration. Assign each component `low`, `moderate`, `high`, or `severe`, then use the worst component band. Default ordered intervals are: drawdown `>= -0.10`, `[-0.20, -0.10)`, `[-0.40, -0.20)`, `< -0.40`; Expected Shortfall `<= 0.01`, `(0.01, 0.02]`, `(0.02, 0.04]`, `> 0.04`; skewness `>= -0.50`, `[-1.00, -0.50)`, `[-2.00, -1.00)`, `< -2.00`; downside capture `<= 0.75`, `(0.75, 1.00]`, `(1.00, 1.25]`, `> 1.25`; recovery duration `<= 63`, `64-126`, `127-252`, `> 252` trading sessions. Missing required components make the composite unavailable while preserving raw available values.
 
-Idempotency: Rebuilding an unchanged Selection calendar and comparable metrics reuses existing immutable artifacts. A changed calendar creates a new version without modifying pairwise cache artifacts or prior Selection analyses.
+Scope continued: Emit a complete Selection-owned `MetricEvidenceManifest` for filters including exchange, declared or observed monthly/annual payout, positive day/month/year ratios, return skewness, log-price slope, Expected Shortfall, maximum drawdown, recovery duration, NAV erosion, close-price path type, NAV path type, total-return type, downside capture, and risk type. Update then calls Selection's public finalization service; it never evaluates predicates itself. Only final members continue to pair and portfolio work.
 
-### PR51. Selection Evaluation, Metric Profiles, And Shared Work Planner
+Acceptance: Formula fixtures cover every exact classification boundary, split events without false decline, distributing assets whose close erodes while adjusted-close total return grows, true and missing NAV, NAV distributions, steady and volatile growth, sideways and negative returns, every risk component band, worst-band aggregation, completed and censored recovery, unavailable components, and a candidate gaining while its benchmark falls. Tests prove exact common-date downside capture, minimum observations, benchmark changes, every conjunctive field, evidence validation, final member ordering, threshold changes reusing raw artifacts, and Selection rather than Update owning predicate outcomes.
+
+Determinism: Raw metric keys remain independent of filter and classification thresholds. Classification keys include raw artifact ids and full classification-profile id; benchmark-relative keys also include candidate and benchmark ids, both input versions, exact common-date-set hash, as-of date, and algorithm version. Evidence, labels, and final membership are independent of row order, CLI predicate order, locale, and scheduling.
+
+Idempotency: Re-evaluating identical candidates, inputs, benchmark, and profiles reuses raw, benchmark-relative, classification, evidence, and final-membership artifacts. Ordinary filter-threshold changes reapply Selection predicates without recomputing unchanged raw metrics; profile or benchmark changes invalidate only dependent labels and evidence.
+
+### PR51. Update Incremental Pair Metric Cache
 
 Git status: not started. PR: TBD.
 
-Priority: P0 Selection-only analytical execution.
+Priority: P0 reusable final-member pair metrics.
 
 Depends on: PR50.
 
-Scope: Add versioned metric profiles, starting with `portfolio-full-v1`, that enumerate the required base and screening asset metrics, benchmark-relative metrics, classifications, pairwise, comparable, portfolio, frontier, optimizer, tail-risk, and backtest outputs plus scale limits. Add `founder selection evaluate` and complete `founder selection refresh`. Build a work planner over all requested active Selections, union identical asset-screening, benchmark-relative, classification, pair, calendar, and analysis cache keys, execute each missing key once, resolve final membership before pair or portfolio work, and then write Selection analysis manifests that reference shared artifacts. Derive `analysis_id` from final membership id, member input versions, benchmark and classification-profile identities, calendar id, metric-profile version, optimizer and date settings, and relevant constraints. Route existing Evaluation and Portfolio functions through selected matrices without allowing them to scan all Gold returns.
+Scope: Add Update's lazy Pair Metric Cache for pairs requested by the ready final membership. Derive `pair_id` from sorted distinct listing ids so symmetric and same-listing pairs are never computed twice. Persist exact pairwise common-date metadata and mergeable online state for sample covariance, incremental Pearson, and approximate online Spearman, including left and right input versions, metric-spec hash, observation count, first and last common dates, and common-date-set hash. Update only newly common observations for verified append-only deltas; rebuild affected pair state for historical corrections, deletions, or incompatible date sets. Bucket artifacts deterministically and preserve sparse threshold and top-k edge modes with explicit maximum-pair and memory guards.
 
-Acceptance: Overlapping-Selection tests report deterministic cache hits, misses, delta updates, rebuilds, filtered candidate counts, final member counts, and skipped outputs; each cache key executes once per plan. Sharpe, Sortino, CVaR/Expected Shortfall, positive-period ratios, return skewness, log-price slope, maximum drawdown, recovery duration, payout frequency, NAV erosion, close-price path type, NAV path type, total-return type, downside capture, risk type, covariance/correlation modes, equal-weight evaluation, optimizers, efficient frontier, tail risk, rebalancing, and walk-forward outputs are either produced or explicitly disabled by the selected metric profile. Empty, insufficient, oversized, paused, and failed Selections have actionable status and never receive misleading outputs.
+Acceptance: For final Selection A `{A,B,C}` and B `{B,C,D}`, tests prove pair B/C is reused, only missing D pairs are new, and each unordered pair executes once per key. Tests cover one-sided appended dates, newly common dates, no-common-date deltas, backfills, corrections, same-ISIN cross-listings, empty intersections, sparse limits, pair-limit failures, cache corruption, concurrent requests, and prohibition of candidate-only or filtered-out pair work.
 
-Determinism: Work-plan order, analysis ids, metric-profile expansion, optimizer inputs, summaries, and Selection manifests depend only on versioned inputs and settings. Running Selections individually or together yields the same artifact identities and analytical rows.
+Determinism: Pair identity, orientation, bucket assignment, common-date order, online state, edge order, and cache decisions are stable across Selection order, process count, input row order, and worker scheduling. Approximate Spearman records an explicit algorithm and sketch version.
 
-Idempotency: Re-running Selection evaluation with unchanged inputs performs no analytical recomputation and resolves to the same analysis manifest. Partial failures can resume missing keys without duplicating completed artifacts or mutating prior analysis versions.
+Idempotency: Re-running overlapping Updates with unchanged final memberships references the same pair artifacts without symmetric duplicates or recomputation. Append-only runs consume each newly common observation once; corrections rebuild only affected pair keys.
 
-### PR52. Refresh Cutover, Compatibility Migration, And Operational Hardening
+### PR52. Update Selection Calendar And Comparable Metric Cache
+
+Git status: not started. PR: TBD.
+
+Priority: P0 comparable portfolio inputs.
+
+Depends on: PR51.
+
+Scope: Add an Update-owned `SelectionCalendar` contract deriving the exact common adjusted-close return-date intersection for a ready final membership and date policy, plus `calendar_id` from ordered dates and policy version. Build aligned long-format return matrices only for final members. Add comparable asset, covariance, and correlation artifacts keyed by listing or sorted pair, exact calendar id, and metric spec. Keep these separate from pairwise-intersection statistics: pair metrics may support similarity search, but portfolio covariance can be reused only when every member uses the identical Selection calendar. Record explicit empty, insufficient-history, and scale-limit outcomes instead of plausible zeros.
+
+Acceptance: Tests prove every matrix member has exactly the same ordered dates, covariance and correlation use only that calendar, equivalent final memberships reuse calendar-scoped artifacts, and adding a short-history member changes the calendar and invalidates only calendar-dependent outputs. Fixtures cover dates appended by all members, one-sided dates, backfills, empty intersections, minimum-history failures, covariance symmetry, stable ordering, and a pairwise value that must not be reused for a different Selection calendar.
+
+Determinism: Calendar ids, aligned row order, counts, comparable keys, matrix rows, covariance rows, and diagnostics are stable for the same final membership, input versions, and date policy. Set iteration, filesystem discovery, and worker scheduling cannot affect them.
+
+Idempotency: Rebuilding an unchanged calendar and comparable metrics reuses immutable artifacts. A changed calendar creates a new version without mutating pairwise cache artifacts, prior calendars, or prior Selection analyses.
+
+### PR53. Update Evaluation Profiles And Selection Analysis Manifests
+
+Git status: not started. PR: TBD.
+
+Priority: P0 current-Selection analytical outputs.
+
+Depends on: PR52.
+
+Scope: Add versioned Update metric profiles, starting with `portfolio-full-v1`, that enumerate required asset screening, classification, benchmark-relative, pairwise, comparable, portfolio, frontier, optimizer, tail-risk, rebalance, and backtest outputs plus scale limits. Adapt existing Evaluation and Portfolio functions behind Update ports so they consume only the ready final membership and its exact Selection calendar. Write immutable Selection analysis manifests referencing shared artifacts rather than copying them. Derive `analysis_id` from selection and final membership ids, pinned market-data versions, benchmark, classification and metric profiles, calendar id, optimizer settings, date settings, and constraints. Never scan all catalog Gold data or call Refresh providers.
+
+Acceptance: Tests produce or explicitly disable Sharpe, Sortino, Expected Shortfall, screening classifications, covariance and correlation modes, equal weight, minimum variance, risk parity, maximum diversification, efficient frontier, drawdown, tail risk, rebalance, and walk-forward outputs. Overlapping Selections report deterministic cache hits and execute each shared key once. Empty, insufficient, oversized, stale, paused, and failed Selections receive actionable status and no misleading portfolio output.
+
+Determinism: Profile expansion, optimizer inputs, analysis ids, output ordering, diagnostics, and manifests depend only on pinned immutable inputs and versioned settings. Running one Selection alone or beside another yields the same artifact identities and analytical rows.
+
+Idempotency: Re-running the same final membership and profile resolves to the same analysis manifest without recomputation. Partial failures resume missing outputs and cannot mutate completed artifacts or prior analyses.
+
+### PR54. Update Service, Standalone CLI, And Atomic Publication
+
+Git status: not started. PR: TBD.
+
+Priority: P0 operable Update module.
+
+Depends on: PR53.
+
+Scope: Implement `founder.update.service` and the standalone `founder-update` CLI with `plan`, `run`, and `status`; register equivalent `founder update` routing through the same module-owned parser. By default, `run` resolves exactly the current Selection, pins its candidate and current Refresh snapshot, computes or reuses candidate asset and benchmark evidence, invokes Selection finalization, computes pair/calendar/analysis outputs only for ready final members, and atomically publishes the Update result. Support explicit `--selection`, `--as-of`, `--metric-profile`, `--classification-profile`, `--concurrency`, `--resume`, `--dry-run`, `--run-id`, and `--debug`. Update must not invoke Refresh, make provider calls, mutate the current Selection definition, or update every saved Selection implicitly.
+
+Scope continued: Write resumable run manifests with pinned inputs, plan id, cache hits, misses, deltas, rebuilds, blocked keys, candidate and final counts, availability reasons, scale diagnostics, output refs, and redacted failures. Acquire the Update and per-key locks defined in PR48. On publication, compare-and-swap against both the pinned current Selection candidate and pinned current Refresh snapshot; mark superseded work `stale_not_published` while retaining reusable immutable artifacts. Expose machine-readable exit status for no current Selection, pending data, empty final membership, stale run, partial failure, and success.
+
+Acceptance: Dedicated CLI and service tests cover every command, option, default, JSON result, `--debug`, no-current-Selection failure, catalog-only and metric-dependent Selections, dry-run, cache reuse, append deltas, corrections, benchmark requirements, finalization, empty membership, lock contention, partial failure, resume, stale publication, and standalone versus umbrella equivalence. An end-to-end mocked flow proves Update computes metrics only for the current Selection candidate set, then pair and portfolio metrics only for its final members, without network calls or artifacts for unrelated catalog ISINs or saved Selections.
+
+Determinism: Standalone and umbrella invocations produce the same typed request, plan, artifacts, final membership, analysis, and domain JSON for identical pinned inputs. Run timestamps, log lines, and worker completion order cannot affect identities or values.
+
+Idempotency: Repeating `founder-update run` with unchanged current Selection and Refresh snapshot performs no duplicate calculation or pointer change. Resume executes incomplete keys only; concurrent or stale runs cannot overwrite newer Selection or Update state.
+
+### PR55. Three-Module Cutover, Legacy Migration, And Documentation
 
 Git status: not started. PR: TBD.
 
 Priority: P0 production cutover.
 
-Depends on: PR51.
+Depends on: PR54.
 
-Scope: Change the default `founder refresh` sequence to optional catalog synchronization, catalog-wide Bronze planning for every active eligible ISIN, Silver quote, dividend, split, and NAV rebuild plus input-version publication, then two-stage evaluation of all active Selections through the shared work planner. Stop eager global Gold metric generation for catalog ISINs that belong to no active Selection candidate set, while allowing an explicit benchmark to be fetched and calculated as a Selection-requested dependency. Add a deterministic importer for the current Search candidates, canonical universe, and approved pointer so existing local data can seed an initial catalog and Selection without redownload. Preserve old `search`, approved-universe, `gold`, and evaluation-id entry points as documented compatibility commands for one migration window, but keep them out of the new default refresh. Add refresh-level locking, cache-key locking, resumable job manifests, cache hit/miss/rebuild counters, candidate-to-final filter diagnostics, input-availability diagnostics, scale diagnostics, dry-run coverage, and complete README, architecture, lake-contract, decision, risk, and migration documentation.
+Scope: Make `founder refresh`, `founder selection`, and `founder update` the canonical operational surface and keep `founder-refresh`, `founder-selection`, and `founder-update` equivalent. Move old `search`, `bronze`, `silver`, `gold`, `evaluate`, and all-in-one `refresh` behavior under documented compatibility adapters for one migration window; no canonical command may invoke another domain module implicitly. Add a deterministic importer that maps current Search candidates, approved universe pointers, Bronze/Silver quotes, and reusable Gold artifacts into Refresh snapshots, one initial Selection, and Update cache references without redownload or data loss. Extend architecture checks to enforce package ownership, public-contract imports, CLI delegation, no network in Selection or Update, and no metric computation in Refresh or Selection.
 
-Acceptance: An end-to-end mocked test proves that Refresh updates every catalog ISIN's available quote, dividend, split, and NAV market data; computes screening, benchmark-relative, and classification metrics only when active Selections request them; applies catalog, raw-metric, and classification filters conjunctively; computes pair and portfolio work only for final members; reuses overlapping asset and pair artifacts; applies append-only deltas; and resumes a partial run. The test filters by exchange, monthly or annual payout frequency, positive day/month/year ratios, skewness, log-price slope, Expected Shortfall, maximum drawdown, recovery duration, NAV erosion, close-price path type, NAV path type, total-return type, downside capture, and risk type, including explicit unavailable NAV and benchmark behavior. Migration tests preserve existing local quote files and produce deterministic catalog and Selection identities. Compatibility tests cover legacy commands. Operational tests cover overlapping refreshes, per-key races, provider partial failure, Selection failure isolation, pair limits, and summaries that distinguish ingestion, candidate screening, final membership, and analytical work.
+Scope continued: Update README, ARCHITECTURE, lake contracts, DECISIONS, RISKS, TIMELINE, operations, cron examples, recovery procedures, and deprecation notes. Document the canonical sequence: `founder refresh run` gets all provider-visible ISINs and updates all eligible market data; `founder selection create ...` and `founder selection use ...` define and activate criteria; `founder update run` computes metrics for the current Selection only. Document snapshot pinning, current pointers, availability states, benchmarks, cache reuse, rollback, and how to reproduce a historical Update with explicit ids.
 
-Determinism: The same catalog snapshot, Silver versions, Selection definitions, memberships, benchmarks, classification profiles, metric profiles, and settings produce the same work plan, artifact ids, analysis ids, and logical outputs before and after process restart. Migration mappings and compatibility warnings are stable and versioned.
+Acceptance: A full mocked integration test runs the three commands as separate processes and proves Refresh is global and Selection-independent, Selection is network-free and metric-free, and Update is current-Selection-scoped. It filters by exchange, payout frequency, positive periods, skewness, price slope, Expected Shortfall, drawdown, recovery, NAV erosion, close/NAV/total-return types, downside capture, and risk type; overlapping Selections reuse artifacts; unrelated ISINs receive no metrics. Migration preserves existing local data and yields deterministic identities. Compatibility, architecture, lock, partial-failure, restart, stale-pointer, and documentation tests pass.
 
-Idempotency: Repeating the full refresh with unchanged provider data performs no duplicate downloads, Silver versions, cache updates, Selection analyses, or pointer changes. A resumed refresh executes only incomplete ingestion or cache keys, and migration can be rerun without creating duplicate catalog snapshots or Selections.
+Determinism: The same provider content, Refresh snapshot, Selection definition, candidate, benchmark, profiles, and Update settings produce the same memberships, plans, artifacts, analyses, migration mapping, and logical CLI results before and after restart. Compatibility warnings and deprecation dates are versioned.
+
+Idempotency: Repeating migration or the full Refresh-Selection-Update cycle with unchanged inputs creates no duplicate snapshots, memberships, metrics, analyses, or pointer changes. A resumed command executes only its own module's incomplete work and never triggers hidden work in another module.
 
 ## Future Work After Finalization
 
