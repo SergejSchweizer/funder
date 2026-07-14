@@ -1,6 +1,6 @@
 # Agent Workflow And Generated Risks
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-14
 
 ## Table Of Contents
 
@@ -16,13 +16,21 @@ This file is the workflow reference for coding agents and maintainers. It should
 
 ## Project Workflow Rules
 
-- Every PR-sized item recorded in `BACKLOG.md` must include a Git status and a PR link.
+- Every non-merged PR-sized item recorded in `BACKLOG.md` must include a branch path, Git status, and PR link. Historical merged entries do not require branch-path backfills.
+- Use branch paths in the form `<type>/<scope>-<short-description>` with lowercase ASCII letters, numbers, and hyphens only after the slash.
+- Allowed branch path types are `feat`, `fix`, `refactor`, `docs`, and `chore`.
+- Use `feat/` for new behavior, `fix/` for defect correction, `refactor/` for behavior-preserving structural or performance work, `docs/` for documentation-only changes, and `chore/` for build, CI, test-only, style, dependency, or repository-maintenance work.
+- The branch path type must reflect the primary PR purpose. The PR title and final squash subject must use the most precise compatible Conventional Commit type.
+- Every open PR series in `BACKLOG.md` must end with an explicit `Series Completion Gate` that lists the final branch, squash-subject rule, and required `main-quality` checks.
+- Use `Branch: <type>/<scope>-<short-description>` until a planned branch is created, then keep the exact published branch path in the backlog entry.
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
 - A PR that has run and passed `main-quality` counts as approved for merge.
 - `pr-quality` is the branch and PR feedback gate. It runs `uv run founder-quality pr`.
-- `main-quality` is the required merge gate. It runs `uv run founder-quality pr` plus `uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95`.
+- `main-quality` is the required merge gate. It must pass Ruff lint and format checks, Pyright strict type checking, Pytest, at least 95% coverage, Import Linter contracts, and dataset schema-registry validation.
+- PR titles must follow `type(optional-scope): subject` because the title becomes the squash-merge commit subject.
+- Squash merges must set the final commit subject to the validated PR title; changing the title requires `main-quality` to pass again.
 - GitHub branch protection should require `main-quality` and should not require a separate approving review when `main-quality` has passed.
 - Same-repository PRs with a passing `main-quality` workflow may be squash-merged automatically and have their branch deleted.
 

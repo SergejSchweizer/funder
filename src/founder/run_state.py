@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from founder.paths import LakePaths
 from founder.table_io import JsonRow, read_json, write_json
@@ -94,7 +94,7 @@ def _redact_mapping(row: Mapping[str, Any]) -> JsonRow:
         if any(part in normalized for part in SECRET_KEY_PARTS):
             redacted[str(key)] = "<redacted>"
         elif isinstance(value, Mapping):
-            redacted[str(key)] = _redact_mapping(value)
+            redacted[str(key)] = _redact_mapping(cast(Mapping[str, Any], value))
         else:
             redacted[str(key)] = value
     return redacted

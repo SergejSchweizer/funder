@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import os
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +34,7 @@ def layer_lock_path(paths: LakePaths, layer: LayerName) -> Path:
 
 
 @contextmanager
-def layer_run_lock(paths: LakePaths, layer: LayerName) -> Iterator[Path]:
+def layer_run_lock(paths: LakePaths, layer: LayerName) -> Generator[Path]:
     """Hold an exclusive non-blocking process lock for one lake layer.
 
     The lock is advisory and process-scoped through `fcntl`, so it prevents

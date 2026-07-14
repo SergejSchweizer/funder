@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 
 from founder.http import EodhdClient
 from founder.logging import get_logger
@@ -509,10 +509,10 @@ def eodhd_dataset_loader(client: EodhdClient, strategy: EodhdDatasetStrategy) ->
             params["from"] = start_date
         if end_date:
             params["to"] = end_date
-        payload = client.get_json(f"/{strategy.endpoint}/{item['symbol']}", params)
+        payload = cast(object, client.get_json(f"/{strategy.endpoint}/{item['symbol']}", params))
         if not isinstance(payload, list):
             raise ValueError(f"expected EODHD {strategy.name} list")
-        return [row for row in payload if isinstance(row, dict)]
+        return [cast(JsonRow, row) for row in cast(list[object], payload) if isinstance(row, dict)]
 
     return bronze
 
@@ -561,7 +561,7 @@ def write_raw_eodhd_datasets_to_bronze(
 def _dataset_rows(
     strategy: EodhdDatasetStrategy,
     item: Mapping[str, Any],
-    payload: Sequence[Mapping[str, Any]],
+    payload: Sequence[object],
     *,
     run_date: date,
 ) -> list[JsonRow]:
@@ -569,7 +569,7 @@ def _dataset_rows(
     for raw_row in payload:
         if not isinstance(raw_row, Mapping):
             raise ValueError(f"expected EODHD {strategy.name} row object")
-        row = dict(raw_row)
+        row = dict(cast(Mapping[str, Any], raw_row))
         if "date" not in row:
             raise ValueError(f"expected EODHD {strategy.name} row date")
         rows.append(

@@ -32,7 +32,10 @@ def build_return_matrix(
     if not by_listing:
         return []
 
-    common_dates = set.intersection(*(set(rows) for rows in by_listing.values()))
+    date_sets: list[set[str]] = [set(rows) for rows in by_listing.values()]
+    common_dates = date_sets[0].copy()
+    for dates in date_sets[1:]:
+        common_dates.intersection_update(dates)
     matrix: list[JsonRow] = []
     for date in sorted(common_dates):
         for isin, exchange, code in sorted(by_listing):

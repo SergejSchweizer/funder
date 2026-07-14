@@ -7,7 +7,7 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from founder.bronze import (
     ADDITIONAL_EODHD_DATASETS,
@@ -430,16 +430,17 @@ def _read_candidate_payload(path: Path) -> list[dict[str, Any]]:
     if path.suffix.casefold() == ".csv":
         with path.open(encoding="utf-8", newline="") as csv_file:
             return [dict(row) for row in csv.DictReader(csv_file)]
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = cast(object, json.loads(path.read_text(encoding="utf-8")))
     if isinstance(payload, dict):
-        payload = payload.get("responses", payload.get("candidates"))
+        payload_by_name = cast(dict[str, object], payload)
+        payload = payload_by_name.get("responses", payload_by_name.get("candidates"))
     if not isinstance(payload, list):
         raise ValueError("search input must be a JSON list or an object with responses/candidates")
     rows: list[dict[str, Any]] = []
-    for item in payload:
+    for item in cast(list[object], payload):
         if not isinstance(item, dict):
             raise ValueError("search input rows must be JSON objects")
-        rows.append(item)
+        rows.append(cast(dict[str, Any], item))
     return rows
 
 

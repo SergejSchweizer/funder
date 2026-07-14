@@ -3,7 +3,7 @@
   "tracked_docs": {
     "AGENTS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-12"
+      "review": "Last reviewed: 2026-07-14"
     },
     "ARCHITECTURE.md": {
       "exists": true,
@@ -11,11 +11,11 @@
     },
     "BACKLOG.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-13"
+      "review": "Last reviewed: 2026-07-14"
     },
     "DECISIONS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-13"
+      "review": "Last reviewed: 2026-07-14"
     },
     "README.md": {
       "exists": true,
@@ -23,7 +23,7 @@
     },
     "RISKS.md": {
       "exists": true,
-      "review": "Last reviewed: 2026-07-13"
+      "review": "Last reviewed: 2026-07-14"
     },
     "docs/lake_contracts.md": {
       "exists": true,

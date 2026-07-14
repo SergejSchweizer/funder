@@ -2,6 +2,7 @@ name: main-quality
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches: [main]
 
@@ -31,8 +32,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run PR quality gate scope
-        run: uv run founder-quality pr
+      - name: Run required main merge gate
+        run: uv run founder-quality main
 
-      - name: Enforce main coverage threshold
-        run: uv run pytest --cov=founder --cov-report=term-missing --cov-fail-under=95
+      - name: Validate squash merge subject
+        if: github.event_name == 'pull_request'
+        env:
+          SQUASH_SUBJECT: ${{ github.event.pull_request.title }}
+        run: uv run founder-quality --squash-subject "$SQUASH_SUBJECT"

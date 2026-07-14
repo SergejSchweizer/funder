@@ -1,6 +1,6 @@
 # Risks
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-14
 
 ## Table Of Contents
 
@@ -52,7 +52,7 @@ Status: Active
 
 Signal: Quality-gate commits show type coverage and test coverage are active project risks.
 
-Mitigation: Run focused tests first, then Ruff, type checks, and pytest with at least 95% coverage before main merges.
+Mitigation: Require the `main-quality` merge gate to pass Ruff lint and format, Pyright strict, Pytest, at least 95% coverage, Import Linter contracts, and dataset schema-registry validation.
 
 ## R005. Documentation Snapshots Can Become Stale Relative to the Lake
 

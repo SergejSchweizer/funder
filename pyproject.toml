@@ -19,8 +19,9 @@ founder-quality = "founder.quality:main"
 
 [dependency-groups]
 dev = [
-    "mypy>=1.17.0",
+    "import-linter>=2.13",
     "pre-commit>=4.2.0",
+    "pyright>=1.1.411",
     "pytest>=8.4.0",
     "pytest-cov>=6.2.0",
     "ruff>=0.12.0",
@@ -40,8 +41,44 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 addopts = "--strict-markers --strict-config"
 testpaths = ["tests"]
 
-[tool.mypy]
-python_version = "3.14"
-strict = true
-warn_unused_configs = true
-files = ["src", "tests"]
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
+[tool.importlinter]
+root_package = "founder"
+
+[[tool.importlinter.contracts]]
+name = "Evaluation does not depend on ingestion"
+type = "forbidden"
+source_modules = ["founder.evaluation", "founder.evaluation_parts"]
+forbidden_modules = [
+    "founder.bronze",
+    "founder.cli",
+    "founder.config",
+    "founder.http",
+    "founder.search",
+    "founder.silver",
+]
+
+[[tool.importlinter.contracts]]
+name = "Shared infrastructure does not depend on workflow modules"
+type = "forbidden"
+source_modules = [
+    "founder.logging",
+    "founder.paths",
+    "founder.run_locks",
+    "founder.run_state",
+    "founder.schemas",
+    "founder.table_io",
+]
+forbidden_modules = [
+    "founder.bronze",
+    "founder.cli",
+    "founder.evaluation",
+    "founder.gold",
+    "founder.portfolio",
+    "founder.search",
+    "founder.silver",
+]

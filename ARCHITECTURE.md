@@ -120,7 +120,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.cli` owns command-line entry points. It parses user commands and routes them to repeatable workflows such as `founder dry-run` without embedding business logic in the CLI layer.
 
-`founder.quality` owns repository validation commands. It runs the local PR and main gates used by GitHub workflows, including formatting, linting, typing, tests, coverage, working-tree checks, and Conventional Commit validation.
+`founder.quality` owns repository validation commands. It runs the local PR and main gates used by GitHub workflows. The required main merge gate covers Ruff lint and format, Pyright strict typing, Pytest, at least 95% coverage, Import Linter contracts, dataset schema-registry validation, working-tree checks, and Conventional Commit validation for branch commits and the final squash subject.
 
 `founder.docs_refresh` owns documentation review reporting. It scans tracked documentation files for review markers and writes `docs/docs_refresh_report.json` so docs-heavy changes can verify that documentation stayed current.
 

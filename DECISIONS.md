@@ -1,6 +1,6 @@
 # Decisions
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-14
 
 ## Table Of Contents
 
@@ -20,6 +20,7 @@ Last reviewed: 2026-07-13
 - [D013. Store Large Correlation Search As Edge Tables](#d013-store-large-correlation-search-as-edge-tables)
 - [D014. Use Per-Layer Process Locks](#d014-use-per-layer-process-locks)
 - [D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries](#d015-use-dataset-contracts-and-job-manifests-for-refactor-boundaries)
+- [D016. Use Typed Branch Paths And A Complete Main Merge Gate](#d016-use-typed-branch-paths-and-a-complete-main-merge-gate)
 - [Update Rules](#update-rules)
 
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
@@ -144,6 +145,8 @@ Update trigger: Revisit if repository-hosted CI is reintroduced or another exter
 
 Date: 2026-07-12
 
+Status: Superseded by D016.
+
 Context: The project needs a simple quality policy that works locally and with GitHub branch protection while `.github/` remains untracked.
 
 Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run founder-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run founder-quality main`. GitHub mirrors these as `pr-quality` and `main-quality`. Branch protection requires the `main-quality` workflow status, conversation resolution, linear history, and disabled force pushes/deletions. Passing `main-quality` is the approval signal for same-repository PRs.
@@ -211,6 +214,18 @@ Decision: Keep dataset ownership, schema versions, required fields, and stable s
 Consequences: Refactors should route new validation through the registry, write shared job manifests for new long-running jobs, and include optimizer diagnostics whenever target weights are written. Existing path strings, lake table names, public imports, and CLI behavior should remain compatible unless a later decision records an explicit migration.
 
 Update trigger: Revisit if dataset schema versions need migrations, job manifests move to a database-backed scheduler, or production solver-backed optimizers replace deterministic baseline objectives.
+
+## D016. Use Typed Branch Paths And A Complete Main Merge Gate
+
+Date: 2026-07-14
+
+Context: Branch purpose, stacked-PR handoff, and the final squash commit were not represented by one enforceable convention. The main merge gate also did not run every architecture and data-contract check required for safe changes.
+
+Decision: Name new branches `<type>/<scope>-<short-description>` with the branch types `feat`, `fix`, `refactor`, `docs`, or `chore`. Record the exact branch path for every non-merged backlog PR and end every open backlog PR series with a `Series Completion Gate`. Require PR titles and squash subjects to use `type(optional-scope): subject`, and use the validated PR title as the squash subject. Require `main-quality` to pass Ruff lint and format, Pyright strict, Pytest, at least 95% coverage, Import Linter, and dataset schema-registry validation before merge.
+
+Consequences: Backlog stacks expose deterministic branch paths and an explicit completion condition. A title change retriggers the main gate. Same-repository auto-merge may proceed only after the complete `main-quality` workflow passes, so type, import-boundary, schema, test, and coverage regressions block `main`.
+
+Update trigger: Revisit if the repository adopts merge queues, changes the squash strategy, replaces a required quality tool, or introduces versioned schema migrations that need a stronger validation command.
 
 ## Update Rules
 

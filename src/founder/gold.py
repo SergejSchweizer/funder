@@ -29,9 +29,8 @@ ListingKey = tuple[str, str, str]
 ReturnsByListing = dict[ListingKey, dict[str, float]]
 QuotesByListing = dict[ListingKey, list[JsonRow]]
 
-_WORKER_LISTINGS: tuple[ListingKey, ...] = ()
-_WORKER_RETURNS_BY_LISTING: ReturnsByListing = {}
-_WORKER_QUOTES_BY_LISTING: QuotesByListing = {}
+_worker_returns_by_listing: ReturnsByListing = {}
+_worker_quotes_by_listing: QuotesByListing = {}
 
 
 @dataclass(frozen=True)
@@ -231,14 +230,13 @@ def build_asset_features(
 
 
 def _init_gold_worker(
-    listings: tuple[ListingKey, ...],
+    _listings: tuple[ListingKey, ...],
     returns_by_listing: ReturnsByListing,
     quotes_by_listing: QuotesByListing,
 ) -> None:
-    global _WORKER_LISTINGS, _WORKER_RETURNS_BY_LISTING, _WORKER_QUOTES_BY_LISTING
-    _WORKER_LISTINGS = listings
-    _WORKER_RETURNS_BY_LISTING = returns_by_listing
-    _WORKER_QUOTES_BY_LISTING = quotes_by_listing
+    global _worker_returns_by_listing, _worker_quotes_by_listing
+    _worker_returns_by_listing = returns_by_listing
+    _worker_quotes_by_listing = quotes_by_listing
 
 
 def _listing_last_quote_date(quotes: Sequence[Mapping[str, Any]]) -> str:
@@ -255,15 +253,15 @@ def _gold_listing_worker(args: tuple[LakePaths, ListingKey, str, str, int]) -> G
             "date": date,
             "return": value,
         }
-        for date, value in sorted(_WORKER_RETURNS_BY_LISTING.get(left, {}).items())
+        for date, value in sorted(_worker_returns_by_listing.get(left, {}).items())
     ]
     feature_rows = build_asset_features(
-        _WORKER_QUOTES_BY_LISTING.get(left, []),
+        _worker_quotes_by_listing.get(left, []),
         return_rows,
     )
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
-    for pair in iter_pair_observations(_WORKER_RETURNS_BY_LISTING, include_self=True):
+    for pair in iter_pair_observations(_worker_returns_by_listing, include_self=True):
         if pair.left != left:
             continue
         cov = covariance(pair.left_values, pair.right_values)
@@ -285,7 +283,7 @@ def _gold_listing_worker(args: tuple[LakePaths, ListingKey, str, str, int]) -> G
             "exchange": left[1],
             "code": left[2],
             "input_last_quote_date": _listing_last_quote_date(
-                _WORKER_QUOTES_BY_LISTING.get(left, [])
+                _worker_quotes_by_listing.get(left, [])
             ),
             "input_snapshot_date": input_snapshot_date,
             "input_listing_count": input_listing_count,
