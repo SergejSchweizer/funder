@@ -1,6 +1,6 @@
 # Backlog
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-14
 
 ## Table Of Contents
 
@@ -10,6 +10,7 @@ Last reviewed: 2026-07-13
 - [Portfolio Evaluation And Optimization PR Stack](#portfolio-evaluation-and-optimization-pr-stack)
 - [Architecture Refactor PR Stack](#architecture-refactor-pr-stack)
 - [Refactor Hardening PR Stack](#refactor-hardening-pr-stack)
+- [Selection-Driven Catalog And Metric Cache PR Stack](#selection-driven-catalog-and-metric-cache-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -554,6 +555,186 @@ Scope: Add automated architecture checks for forbidden dependency directions, pa
 Acceptance: The PR quality gate includes the new architecture checks. Tests fail if Silver imports private Bronze helpers, Evaluation imports ingestion layers, Portfolio core math reads lake files directly, CLI is imported from business modules, or shared modules start importing heavy layer-specific dependencies. Scale-guard tests cover Gold pair generation and Portfolio candidate generation with deterministic thresholds.
 
 Idempotency: New gates are read-only and deterministic. Running the gate multiple times does not create or modify lake files, docs, or generated artifacts beyond existing test temp directories.
+
+## Selection-Driven Catalog And Metric Cache PR Stack
+
+Priority policy: This stack changes Founder from an approved-search-universe pipeline into a global instrument catalog with selection-driven analytics. Market-data refreshes must cover every active catalog ISIN through one deterministic canonical listing, while Gold asset, pair, and portfolio calculations must run only when an active Selection requests them. Shared metric artifacts are populated lazily by Selections and referenced rather than copied. PR40 through PR50 are a strict stack: base each branch on the preceding branch until it merges, then restack all downstream branches. Preserve the existing `search`, `current_universe`, `gold`, `evaluate`, and `refresh` behavior as compatibility paths until PR50 performs the documented cutover.
+
+### PR40. Global Instrument Catalog Contracts And Stable Identities
+
+Git status: not started. PR: TBD.
+
+Priority: P0 data-model foundation.
+
+Depends on: PR39.
+
+Scope: Add typed, versioned contracts and deterministic lake paths for provider catalog snapshots, one-row-per-ISIN instrument records, one-row-per-provider-listing records, catalog field metadata, canonical-listing policy metadata, snapshot manifests, and missing-ISIN review rows. Define `instrument_id` as the normalized non-empty ISIN and define `listing_id` from a versioned hash of normalized provider, exchange, and code values. Preserve all listings for an ISIN; keep listing country, currency, and exchange separate from instrument domicile and fund-level metadata. Add a versioned canonical-listing policy contract without changing the current approved-universe consumer.
+
+Acceptance: Contract and path tests cover duplicate listings, conflicting metadata, multiple listings for one ISIN, empty ISINs, normalized identifiers, schema versions, sort keys, and canonical-listing policy metadata. Existing Search, Bronze, Silver, Gold, Evaluate, and Refresh tests remain unchanged. Documentation distinguishes instruments from listings and states which identifiers are stable.
+
+Determinism: Input row order, provider response order, and dictionary key order do not affect `instrument_id`, `listing_id`, snapshot content hashes, canonical sort order, or conflict-resolution results. Hash payloads use canonical JSON with an explicit contract version.
+
+Idempotency: Rebuilding contracts and paths from the same normalized rows produces identical logical rows and hashes, creates no duplicate snapshot members, and does not rewrite or move existing Search or universe artifacts.
+
+### PR41. Complete EODHD Catalog Synchronization And Metadata Capture
+
+Git status: not started. PR: TBD.
+
+Priority: P0 complete discovery input.
+
+Depends on: PR40.
+
+Scope: Add `founder catalog sync` and a focused catalog workflow that enumerates the configured EODHD exchange universe, downloads every exchange symbol list without a name query, archives raw responses per exchange in Bronze, and normalizes all provider-visible listings into a Silver catalog snapshot. Add resumable, bounded metadata enrichment for fields not present in bulk symbol lists; retain raw provider payloads and promote typed filter fields through the catalog-field registry. Record expected, completed, failed, and skipped exchanges or enrichment items, metadata completeness, `first_seen`, `last_seen`, and active state. Rows without an ISIN remain reviewable but cannot enter the ISIN market-data universe. Activate a new current-catalog pointer only after its completeness policy passes.
+
+Acceptance: Mocked CLI and workflow tests cover multiple exchanges, duplicate symbols, one ISIN on multiple exchanges, partial provider failure, retry and rate-limit handling, resume after interruption, missing ISINs, disappeared listings, incomplete enrichment, token redaction, and rejection of an incomplete snapshot as current. The command summary reports listing, unique-ISIN, missing-ISIN, exchange, enrichment, and error counts.
+
+Determinism: Equivalent provider payloads produce the same normalized snapshot and snapshot id regardless of exchange completion order, worker scheduling, or payload order. Operational timestamps and attempt counters are excluded from content hashes.
+
+Idempotency: Re-running the same catalog run against unchanged mocked responses reuses or validates completed exchange and enrichment artifacts, writes the same snapshot membership, and leaves the current pointer unchanged. A resumed run requests only unfinished work and never duplicates raw or normalized rows.
+
+### PR42. Typed Conjunctive Selection Filter Engine
+
+Git status: not started. PR: TBD.
+
+Priority: P0 reproducible Selection semantics.
+
+Depends on: PR41.
+
+Scope: Add a typed Selection filter model and a strict compiler over the catalog field registry. Support repeatable predicates with `eq`, `ne`, `in`, `not-in`, `contains`, `starts-with`, `regex`, `lt`, `lte`, `gt`, `gte`, `between`, `is-null`, and `not-null` where valid for each field type. Combine every predicate with logical AND; values inside one `in` predicate are alternatives. Apply instrument predicates and listing predicates at their declared scopes, then choose at most one listing per ISIN through the versioned canonical-listing policy. Add rebuildable DuckDB views over authoritative catalog Parquet files and parameterized query execution; do not accept raw SQL or unknown metadata paths.
+
+Acceptance: Tests exercise every operator and supported scalar type, repeated predicates for one field, null semantics, case normalization, invalid values, unknown and non-filterable fields, injection-like input, instrument-versus-listing scope, deterministic one-listing-per-ISIN resolution, empty results, and catalog snapshots with missing optional fields. A field-listing API exposes name, type, scope, nullability, and allowed operators.
+
+Determinism: Canonical predicate JSON sorts normalized predicates by field, operator, and typed value, so CLI argument order does not change the filter hash or selected member order. DuckDB query results are explicitly ordered by stable listing identity.
+
+Idempotency: Filter evaluation is read-only. Rebuilding the DuckDB database or views from unchanged Parquet snapshots yields the same members and does not modify catalog, Search, Bronze, Silver quote, or Gold files.
+
+### PR43. Selection Identity, Persistence, Membership Versions, And CLI
+
+Git status: not started. PR: TBD.
+
+Priority: P0 durable Selection lifecycle.
+
+Depends on: PR42.
+
+Scope: Add immutable Selection-definition and Selection-membership contracts plus `founder selection fields`, `create`, `list`, `show`, `refresh`, and `diff` commands. Derive `selection_id` from the canonical filter definition and canonical-listing policy version. Derive `membership_id` from the sorted selected listing ids, retaining the source catalog snapshot separately. Generate a readable Selection name from normalized `field_operator_value` fragments joined by underscores, truncate only at fragment boundaries, and append a short `selection_id` suffix. Store active, paused, and archived lifecycle state, default metric-profile reference, creation provenance, immutable membership snapshots, and a pointer to the current membership. Do not calculate Gold metrics in this PR.
+
+Acceptance: CLI tests cover identical filters in different argument orders, name normalization and truncation, hash collisions guarded by the full hash, repeated creation, changed catalog membership, unchanged membership across newer catalog snapshots, empty Selections, lifecycle transitions, member diffs, invalid status changes, and one canonical listing per ISIN. Existing `founder search` remains available and unchanged.
+
+Determinism: Selection names, ids, member ids, member ordering, current-membership decisions, and diffs depend only on versioned normalized inputs. User locale, process time, catalog row order, and CLI predicate order cannot change them.
+
+Idempotency: Creating or refreshing the same Selection against unchanged catalog membership resolves to the existing definition and membership artifacts without duplicate rows or pointer churn. A changed membership writes a new immutable version and never mutates prior membership content.
+
+### PR44. Catalog-Wide Canonical ISIN Market-Data Planning
+
+Git status: not started. PR: TBD.
+
+Priority: P0 market-data completeness.
+
+Depends on: PR43.
+
+Scope: Add a Bronze planning source that reads every active non-empty ISIN from the current catalog and resolves one deterministic listing through the catalog canonical-listing policy. Exclude missing-ISIN, inactive, invalid, and explicitly unsupported listings with reason rows. Add an explicit compatibility selector so existing approved `current_universe` planning remains the default until PR50, while catalog planning can be exercised independently. Ensure Selection filters never restrict catalog market-data planning. Preserve gap-aware windows, bounded concurrency, per-layer locks, partial-failure behavior, dividends, splits, coverage, and resume manifests.
+
+Acceptance: Tests prove catalog planning covers every eligible unique ISIN exactly once, is independent of all saved Selections, chooses the same canonical listing for duplicate ISINs, reports all exclusions, keeps first-time full-history behavior, and produces stable gap plans. Compatibility tests prove approved-universe Bronze and current CLI defaults remain unchanged before cutover.
+
+Determinism: Canonical listing selection, exclusion reasons, plan ordering, run-independent symbol mapping, and date-window coalescing are stable for the same catalog, policy version, coverage state, and requested end date.
+
+Idempotency: Re-running a catalog-wide plan or Bronze load with unchanged catalog and Silver coverage produces the same logical plan, requests only remaining gaps, and merges provider rows without duplicates. It does not create Gold metrics for unselected ISINs.
+
+### PR45. Versioned Silver Quote Inputs And Change Manifests
+
+Git status: not started. PR: TBD.
+
+Priority: P0 correctness prerequisite for delta metrics.
+
+Depends on: PR44.
+
+Scope: Add a per-listing Silver input-version contract with a parent version, deterministic content fingerprint, schema and return-input versions, date and row coverage, and explicit `added_dates`, `corrected_dates`, and `deleted_dates` or equivalent partition-level change sets. Make Silver quote writes atomic and emit a change manifest only after validated quote data is durable. Add a pure delta classifier with `unchanged`, `append_only`, `historical_backfill`, `historical_correction`, and `deletion` outcomes. Continue writing the existing Silver quote path and schema for compatibility.
+
+Acceptance: Tests cover append-only tails, historical gap fills, adjusted-close corrections, deleted rows, duplicate provider rows, reordered input, unchanged rewrites, interrupted writes, schema-version changes, and changes that keep the same last quote date. A historical correction must change the input version even when row count and maximum date are unchanged.
+
+Determinism: Quote fingerprints and change sets are derived from normalized, sorted analytical columns and exclude run ids, write timestamps, file metadata, and Parquet encoding details. The same logical quotes produce the same input version across machines and worker counts.
+
+Idempotency: Reprocessing unchanged Bronze rows writes no new logical input version and leaves the current-version pointer stable. Failed validation or interrupted writes cannot expose a partial quote file or manifest.
+
+### PR46. Selection-Demanded Incremental Asset Metric Cache
+
+Git status: not started. PR: TBD.
+
+Priority: P0 eliminate repeated per-ISIN work.
+
+Depends on: PR45.
+
+Scope: Add a lazy shared Asset Metric Cache that is invoked only with the union of listing ids requested by active Selection memberships. Define a versioned metric specification covering adjusted-close log-return semantics, date window, annualization, risk-free assumptions, algorithm versions, and output schema. Persist immutable asset artifact versions and online state for return count, mean, second moment, downside state, cumulative wealth, running peak, maximum drawdown, coverage, and input version. Use append-only Silver deltas for online updates; rebuild from the earliest correctness-safe point or from full history for backfills, corrections, deletions, or incompatible metric specifications. Selection manifests reference cache artifacts instead of copying their rows.
+
+Acceptance: Tests prove an ISIN shared by two Selections is computed once, an unselected catalog ISIN creates no Gold asset artifact, unchanged inputs are cache hits, an appended day applies exactly one return delta, and historical corrections invalidate stale state. Metrics match a full deterministic recomputation for append, backfill, correction, and deletion fixtures. Concurrent requests for the same cache key produce one valid artifact.
+
+Determinism: Asset cache keys include listing id, metric-spec hash, and Silver input version. Online and full-rebuild paths produce equivalent values within explicit numerical tolerances and identical logical metadata, independent of Selection order and worker scheduling.
+
+Idempotency: Re-evaluating any number of Selections with unchanged memberships, metric specifications, and Silver inputs reuses the same immutable asset artifacts and performs no duplicate computation or row append.
+
+### PR47. Selection-Demanded Incremental Pair Metric Cache
+
+Git status: not started. PR: TBD.
+
+Priority: P0 eliminate repeated pair work.
+
+Depends on: PR46.
+
+Scope: Add a lazy shared Pair Metric Cache for pairs requested by at least one active Selection. Define `pair_id` from the sorted distinct listing ids so symmetric and same-ISIN pairs cannot be computed twice. Persist pairwise common-date observation metadata and mergeable online state for covariance, incremental Pearson, and approximate online Spearman, including left and right input versions, metric-spec hash, observation count, first and last common dates, and common-date-set hash. Update only newly common observations for verified append-only deltas; rebuild affected pair state for historical corrections, deletions, or incompatible observation sets. Bucket pair artifacts deterministically and preserve sparse threshold and top-k edge modes plus explicit maximum-pair guards.
+
+Acceptance: For Selection A `{A,B,C}` and Selection B `{B,C,D}`, tests prove A/B/C asset artifacts and pair B/C are reused, only D and pairs B/D and C/D are newly computed, and every unordered pair is executed at most once per cache key. Tests cover one-sided appended dates, newly common dates, no-common-date deltas, backfills, corrections, same-ISIN cross-listings, sparse limits, pair-limit failures, cache corruption, and concurrent requests.
+
+Determinism: Pair ids, left/right orientation, bucket assignment, common-date ordering, metric state, edge ordering, and cache-hit decisions are independent of Selection order, process count, and input row order. Approximate Spearman state includes an explicit algorithm and sketch version.
+
+Idempotency: Re-running overlapping Selections with unchanged member inputs and metric specifications references the same pair artifacts without symmetric duplicates or repeated computation. Append-only runs consume each newly common observation exactly once.
+
+### PR48. Selection-Wide Calendar And Comparable Metric Cache
+
+Git status: not started. PR: TBD.
+
+Priority: P0 portfolio input correctness.
+
+Depends on: PR47.
+
+Scope: Add a Selection calendar contract that derives the exact common return-date intersection for a membership and date policy, plus a `calendar_id` from the ordered dates and policy version. Build aligned long-format return matrices only for Selection members. Add comparable asset, covariance, and correlation artifacts keyed by listing or sorted pair, calendar id, and metric specification. Keep these distinct from reusable pairwise-intersection statistics: pairwise cache values may be reused for search and similarity, but portfolio covariance may be reused only when the exact calendar id matches. Record minimum-observation checks and explicit empty or insufficient-history status instead of emitting plausible zero metrics.
+
+Acceptance: Tests prove every matrix member has exactly the same dates, covariance and correlation use only that Selection calendar, equivalent Selections share calendar-scoped artifacts, and adding a short-history member changes the calendar and invalidates only calendar-dependent results. Tests cover appended dates shared by all members, one-sided dates, backfills, empty intersections, minimum-history failures, stable covariance ordering, and covariance symmetry.
+
+Determinism: Calendar ids, aligned row order, observation counts, comparable metric keys, covariance rows, and failure diagnostics are stable for the same member input versions and date policy. Set iteration and filesystem discovery order cannot affect outputs.
+
+Idempotency: Rebuilding an unchanged Selection calendar and comparable metrics reuses existing immutable artifacts. A changed calendar creates a new version without modifying pairwise cache artifacts or prior Selection analyses.
+
+### PR49. Selection Evaluation, Metric Profiles, And Shared Work Planner
+
+Git status: not started. PR: TBD.
+
+Priority: P0 Selection-only analytical execution.
+
+Depends on: PR48.
+
+Scope: Add versioned metric profiles, starting with `portfolio-full-v1`, that enumerate the required asset, pairwise, comparable, portfolio, frontier, optimizer, tail-risk, and backtest outputs plus scale limits. Add `founder selection evaluate` and complete `founder selection refresh`. Build a work planner over all requested active Selections, union identical asset, pair, calendar, and analysis cache keys, execute each missing key once, and then write Selection analysis manifests that reference shared artifacts. Derive `analysis_id` from membership id, member input versions, calendar id, metric-profile version, optimizer and date settings, and relevant constraints. Route existing Evaluation and Portfolio functions through selected matrices without allowing them to scan all Gold returns.
+
+Acceptance: Overlapping-Selection tests report deterministic cache hits, misses, delta updates, rebuilds, and skipped outputs; each cache key executes once per plan. All current asset metrics, covariance/correlation modes, equal-weight evaluation, optimizers, efficient frontier, drawdowns, tail risk, rebalancing, and walk-forward outputs are either produced or explicitly disabled by the selected metric profile. Empty, insufficient, oversized, paused, and failed Selections have actionable status and never receive misleading outputs.
+
+Determinism: Work-plan order, analysis ids, metric-profile expansion, optimizer inputs, summaries, and Selection manifests depend only on versioned inputs and settings. Running Selections individually or together yields the same artifact identities and analytical rows.
+
+Idempotency: Re-running Selection evaluation with unchanged inputs performs no analytical recomputation and resolves to the same analysis manifest. Partial failures can resume missing keys without duplicating completed artifacts or mutating prior analysis versions.
+
+### PR50. Refresh Cutover, Compatibility Migration, And Operational Hardening
+
+Git status: not started. PR: TBD.
+
+Priority: P0 production cutover.
+
+Depends on: PR49.
+
+Scope: Change the default `founder refresh` sequence to optional catalog synchronization, catalog-wide Bronze planning for every active eligible ISIN, Silver rebuild and input-version publication, then evaluation of all active Selections through the shared work planner. Stop eager global Gold metric generation for catalog ISINs that belong to no active Selection. Add a deterministic importer for the current Search candidates, canonical universe, and approved pointer so existing local data can seed an initial catalog and Selection without redownload. Preserve old `search`, approved-universe, `gold`, and evaluation-id entry points as documented compatibility commands for one migration window, but keep them out of the new default refresh. Add refresh-level locking, cache-key locking, resumable job manifests, cache hit/miss/rebuild counters, scale diagnostics, dry-run coverage, and complete README, architecture, lake-contract, decision, risk, and migration documentation.
+
+Acceptance: An end-to-end mocked test proves that Refresh updates every catalog ISIN's market data, computes metrics only for active Selection members and their required pairs, reuses overlapping asset and pair artifacts, applies append-only deltas, and resumes a partial run. Migration tests preserve existing local quote files and produce deterministic catalog and Selection identities. Compatibility tests cover legacy commands. Operational tests cover overlapping refreshes, per-key races, provider partial failure, Selection failure isolation, pair limits, and summaries that distinguish ingestion from analytical work.
+
+Determinism: The same catalog snapshot, Silver versions, Selection definitions, memberships, metric profiles, and settings produce the same work plan, artifact ids, analysis ids, and logical outputs before and after process restart. Migration mappings and compatibility warnings are stable and versioned.
+
+Idempotency: Repeating the full refresh with unchanged provider data performs no duplicate downloads, Silver versions, cache updates, Selection analyses, or pointer changes. A resumed refresh executes only incomplete ingestion or cache keys, and migration can be rerun without creating duplicate catalog snapshots or Selections.
 
 ## Future Work After Finalization
 
