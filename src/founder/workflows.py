@@ -304,11 +304,16 @@ def run_evaluate_workflow(
             write_rows(paths.gold_asset_metrics(evaluation_id), asset_metrics)
     else:
         matrix, asset_metrics = write_evaluation_outputs(paths, evaluation_id=evaluation_id)
-    portfolio_returns, drawdowns, portfolio_metrics = write_portfolio_evaluation(
-        paths,
-        evaluation_id=evaluation_id,
-        portfolio_id=portfolio_id,
-    )
+    if matrix:
+        portfolio_returns, drawdowns, portfolio_metrics = write_portfolio_evaluation(
+            paths,
+            evaluation_id=evaluation_id,
+            portfolio_id=portfolio_id,
+        )
+    else:
+        portfolio_returns = []
+        drawdowns = []
+        portfolio_metrics = []
     summary: dict[str, Any] = {
         "asset_metric_rows": len(asset_metrics),
         "drawdown_rows": len(drawdowns),

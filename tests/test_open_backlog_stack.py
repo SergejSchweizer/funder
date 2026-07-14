@@ -294,3 +294,26 @@ def test_evaluate_cli_and_dry_run_write_portfolio_outputs(
     dry_run_output = capsys.readouterr().out
     assert '"return_matrix_rows": 4' in dry_run_output
     assert '"optimized_weight_rows": 2' in dry_run_output
+
+
+def test_evaluate_cli_frontier_handles_empty_return_matrix(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    paths = LakePaths(root=tmp_path / "lake")
+
+    main(
+        [
+            "evaluate",
+            "--root",
+            str(paths.root),
+            "--evaluation-id",
+            "default",
+            "--frontier",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert '"return_matrix_rows": 0' in output
+    assert '"portfolio_return_rows": 0' in output
+    assert '"frontier_point_rows": 2' in output
+    assert read_rows(paths.gold_frontier_points("default"))[0]["is_feasible"] is False
