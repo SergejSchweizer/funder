@@ -6,7 +6,7 @@ import logging as py_logging
 import zipfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from time import gmtime
+from time import gmtime, struct_time
 
 LOG_DIR = Path(".logs")
 LOG_FORMAT = "%(asctime)sZ %(levelname)s %(name)s %(message)s"
@@ -18,7 +18,8 @@ ZIP_KEEP_DAYS = 30
 class UtcFormatter(py_logging.Formatter):
     """Logging formatter that renders timestamps in UTC."""
 
-    converter = gmtime
+    def converter(self, timestamp: float | None = None) -> struct_time:
+        return gmtime(timestamp)
 
 
 def get_logger(name: str) -> py_logging.Logger:

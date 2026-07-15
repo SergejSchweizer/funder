@@ -34,6 +34,8 @@ LAYER_HEAVY_MODULES = {
     "founder.search",
     "founder.cli",
 }
+DOMAIN_BOUNDARY_MODULES = {"contracts", "ports", "service"}
+PROVIDER_MODULES = {"founder.http", "founder.config"}
 
 
 def check_architecture(root: Path = SRC_ROOT) -> list[str]:
@@ -90,6 +92,89 @@ def check_architecture(root: Path = SRC_ROOT) -> list[str]:
                 violations.append(
                     f"{module_name} core math imports lake IO modules: {', '.join(forbidden)}"
                 )
+        violations.extend(_domain_boundary_violations(module_name, imported_from))
+    return violations
+
+
+def _domain_boundary_violations(module_name: str, imported_from: set[str]) -> list[str]:
+    violations: list[str] = []
+    if module_name.startswith("founder.refresh"):
+        forbidden = sorted(
+            module
+            for module in imported_from
+            if module == "founder.selection"
+            or module.startswith("founder.selection.")
+            or module == "founder.update"
+            or module.startswith("founder.update.")
+        )
+        if forbidden:
+            violations.append(
+                f"{module_name} refresh imports downstream modules: {', '.join(forbidden)}"
+            )
+    if module_name.startswith("founder.selection"):
+        violations.extend(
+            _forbidden_domain_imports(
+                module_name,
+                imported_from,
+                allowed_prefix="founder.refresh",
+                forbidden_prefix="founder.update",
+                forbidden_label="Update",
+            )
+        )
+        forbidden_provider = sorted(imported_from & PROVIDER_MODULES)
+        if forbidden_provider:
+            violations.append(
+                f"{module_name} selection imports provider modules: {', '.join(forbidden_provider)}"
+            )
+    if module_name.startswith("founder.update"):
+        for prefix in ("founder.refresh", "founder.selection"):
+            forbidden = sorted(
+                module
+                for module in imported_from
+                if module.startswith(f"{prefix}.")
+                and module.rsplit(".", maxsplit=1)[-1] not in DOMAIN_BOUNDARY_MODULES
+            )
+            if forbidden:
+                violations.append(
+                    f"{module_name} update imports private {prefix} modules: {', '.join(forbidden)}"
+                )
+        forbidden_provider = sorted(imported_from & PROVIDER_MODULES)
+        if forbidden_provider:
+            violations.append(
+                f"{module_name} update imports provider modules: {', '.join(forbidden_provider)}"
+            )
+    return violations
+
+
+def _forbidden_domain_imports(
+    module_name: str,
+    imported_from: set[str],
+    *,
+    allowed_prefix: str,
+    forbidden_prefix: str,
+    forbidden_label: str,
+) -> list[str]:
+    violations: list[str] = []
+    forbidden_downstream = sorted(
+        module
+        for module in imported_from
+        if module == forbidden_prefix or module.startswith(f"{forbidden_prefix}.")
+    )
+    if forbidden_downstream:
+        violations.append(
+            f"{module_name} selection imports {forbidden_label}: {', '.join(forbidden_downstream)}"
+        )
+    forbidden_private = sorted(
+        module
+        for module in imported_from
+        if module.startswith(f"{allowed_prefix}.")
+        and module.rsplit(".", maxsplit=1)[-1] not in {"contracts", "ports"}
+    )
+    if forbidden_private:
+        violations.append(
+            f"{module_name} selection imports private Refresh modules: "
+            f"{', '.join(forbidden_private)}"
+        )
     return violations
 
 
