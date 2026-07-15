@@ -209,6 +209,18 @@ class RefreshSnapshotRef:
 
 
 @dataclass(frozen=True, slots=True)
+class CurrentRefreshPointer:
+    refresh_snapshot_id: str
+    catalog_snapshot_id: str
+    market_data_version_set_id: str
+    run_id: str
+
+    def __post_init__(self) -> None:
+        if not self.refresh_snapshot_id:
+            raise ValueError("current Refresh pointer requires a refresh snapshot id")
+
+
+@dataclass(frozen=True, slots=True)
 class MissingIsinReviewRow:
     provider: str
     exchange: str
@@ -310,6 +322,7 @@ __all__ = [
     "CanonicalListingPolicy",
     "CatalogCompleteness",
     "CatalogSnapshot",
+    "CurrentRefreshPointer",
     "InstrumentRecord",
     "ListingRecord",
     "MarketDatasetVersion",

@@ -13,9 +13,11 @@ from founder.selection.contracts import (
     Predicate,
     PredicateValue,
     SelectionDefinition,
+    SelectionMembershipDiff,
     SelectionState,
     field_definition,
 )
+from founder.table_io import JsonRow
 
 
 class SelectionService:
@@ -33,6 +35,8 @@ class SelectionService:
         definition: SelectionDefinition,
         catalog_snapshot: CatalogSnapshot,
     ) -> tuple[CandidateMembership, CurrentSelectionPointer]:
+        if _requires_benchmark(definition) and definition.benchmark is None:
+            raise ValueError("selection requires an explicit benchmark")
         listing_ids = tuple(
             listing.listing_id
             for listing in catalog_snapshot.listings
@@ -60,12 +64,62 @@ class SelectionService:
         )
         return candidate, pointer
 
+    def readable_name(self, definition: SelectionDefinition, *, max_length: int = 96) -> str:
+        fragments: list[str] = []
+        for predicate in definition.predicates.predicates:
+            value = predicate.value
+            if isinstance(value, tuple):
+                value_text = "-".join(str(item).lower() for item in value)
+            else:
+                value_text = str(value).lower()
+            fragments.append(f"{predicate.field}_{predicate.operator}_{value_text}")
+        base = "_".join(fragment.replace(" ", "-") for fragment in fragments) or "all"
+        suffix = definition.selection_id.removeprefix("selection_")[:8]
+        name = base
+        while len(f"{name}_{suffix}") > max_length and "_" in name:
+            name = name.rsplit("_", maxsplit=1)[0]
+        return f"{name}_{suffix}"
+
     def use(self, pointer: CurrentSelectionPointer) -> CurrentSelectionPointer:
         self._current_pointer = pointer
         return pointer
 
     def current_pointer(self) -> CurrentSelectionPointer | None:
         return self._current_pointer
+
+    def status(self) -> JsonRow:
+        if self._current_pointer is None:
+            return {"state": "none"}
+        return {
+            "candidate_membership_id": self._current_pointer.candidate_membership_id,
+            "membership_id": self._current_pointer.membership_id,
+            "selection_id": self._current_pointer.selection_id,
+            "state": self._current_pointer.state.value,
+        }
+
+    def diff_memberships(
+        self,
+        previous: CandidateMembership | FinalMembership,
+        current: CandidateMembership | FinalMembership,
+    ) -> SelectionMembershipDiff:
+        previous_ids = set(previous.listing_ids)
+        current_ids = set(current.listing_ids)
+        previous_id = (
+            previous.candidate_membership_id
+            if isinstance(previous, CandidateMembership)
+            else previous.membership_id
+        )
+        current_id = (
+            current.candidate_membership_id
+            if isinstance(current, CandidateMembership)
+            else current.membership_id
+        )
+        return SelectionMembershipDiff(
+            previous_membership_id=previous_id,
+            current_membership_id=current_id,
+            added_listing_ids=tuple(sorted(current_ids - previous_ids)),
+            removed_listing_ids=tuple(sorted(previous_ids - current_ids)),
+        )
 
     def finalize_membership(
         self,
@@ -88,6 +142,12 @@ def _matches_catalog_predicates(listing: ListingRecord, definition: SelectionDef
         if not _matches_predicate(_catalog_value(listing, predicate.field), predicate):
             return False
     return True
+
+
+def _requires_benchmark(definition: SelectionDefinition) -> bool:
+    return any(
+        requirement.benchmark_required for requirement in definition.predicates.metric_requirements
+    )
 
 
 def _catalog_value(listing: ListingRecord, field: str) -> object:

@@ -296,6 +296,14 @@ class CurrentSelectionPointer:
             raise ValueError("ready selection pointer requires a final membership id")
 
 
+@dataclass(frozen=True, slots=True)
+class SelectionMembershipDiff:
+    previous_membership_id: str
+    current_membership_id: str
+    added_listing_ids: tuple[str, ...]
+    removed_listing_ids: tuple[str, ...]
+
+
 def field_definition(field_name: str) -> FieldDefinition:
     try:
         return FIELD_REGISTRY[field_name]
@@ -365,6 +373,7 @@ __all__ = [
     "PredicateValue",
     "SELECTION_CONTRACT_VERSION",
     "SelectionDefinition",
+    "SelectionMembershipDiff",
     "SelectionState",
     "field_definition",
     "public_field_listing",
