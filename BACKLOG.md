@@ -568,7 +568,7 @@ Delivery order is determined first by dependency and then by unblocking value: P
 
 Branch: `refactor/three-module-boundaries`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/51.
 
 Priority: P0 architecture foundation.
 
@@ -586,7 +586,7 @@ Idempotency: Importing modules, constructing services, registering parsers, and 
 
 Branch: `feat/refresh-catalog-contracts`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/51.
 
 Priority: P0 Refresh data-model foundation.
 
@@ -604,7 +604,7 @@ Idempotency: Rebuilding contracts and paths from identical normalized records pr
 
 Branch: `feat/selection-predicate-contracts`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/51.
 
 Priority: P0 deterministic Selection semantics.
 
@@ -622,7 +622,7 @@ Idempotency: Predicate compilation and evaluation are pure and read-only. Rebuil
 
 Branch: `feat/selection-membership-contracts`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/51.
 
 Priority: P0 durable Selection lifecycle.
 
@@ -640,7 +640,7 @@ Idempotency: Creating, refreshing, activating, or finalizing the same Selection 
 
 Branch: `feat/update-work-planner`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/51.
 
 Priority: P0 Update execution foundation.
 
