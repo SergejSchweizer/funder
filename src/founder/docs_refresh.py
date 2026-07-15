@@ -15,7 +15,6 @@ TRACKED_DOCS: tuple[str, ...] = (
     "BACKLOG.md",
     "AGENTS.md",
     "docs/lake_contracts.md",
-    "docs/search_bronze_workflow.md",
 )
 
 

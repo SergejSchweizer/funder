@@ -1,103 +1,27 @@
 import json
-from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from founder.cli import main
 from founder.paths import LakePaths
-from founder.run_locks import layer_run_lock
-from founder.table_io import read_json, read_rows
+from founder.table_io import read_json, read_rows, write_rows
 
 
-class FakeEodhdClient:
-    requests: list[tuple[str, dict[str, str | int | float] | None]] = []
-
-    def __init__(self, config: object) -> None:
-        self.config = config
-
-    def get_json(self, path: str, params: dict[str, str | int | float] | None = None) -> Any:
-        self.requests.append((path, params))
-        if path.startswith("/div/"):
-            return [{"date": "2025-12-15", "value": 0.12}]
-        if path.startswith("/splits/"):
-            return []
-        if params is not None and "from" in params and "to" in params:
-            start = date.fromisoformat(str(params["from"]))
-            end = date.fromisoformat(str(params["to"]))
-            rows: list[dict[str, Any]] = []
-            current = start
-            while current <= end:
-                if current.weekday() < 5:
-                    rows.append(
-                        {
-                            "date": current.isoformat(),
-                            "close": 10.0,
-                            "adjusted_close": 10.0,
-                        }
-                    )
-                current += timedelta(days=1)
-            return rows
-        return [
-            {"date": "2020-01-02", "close": 10.0, "adjusted_close": 10.0},
-            {"date": "2026-07-12", "close": 12.0, "adjusted_close": 12.0},
-        ]
-
-
-class FakeIsinSyncClient:
-    requests: list[tuple[str, dict[str, str | int | float] | None]] = []
-
-    def __init__(self, config: object) -> None:
-        self.config = config
-
-    def get_json(self, path: str, params: dict[str, str | int | float] | None = None) -> Any:
-        self.requests.append((path, params))
-        if path == "/exchanges-list/":
-            return [{"Code": "US"}, {"Code": "XETRA"}]
-        if path == "/exchange-symbol-list/US":
-            return [
-                {
-                    "Code": "AAA",
-                    "Exchange": "US",
-                    "Type": "ETF",
-                    "Country": "USA",
-                    "Currency": "USD",
-                    "Isin": "US0000000001",
-                    "Name": "AAA ETF",
-                },
-                {
-                    "Code": "NOISIN",
-                    "Exchange": "US",
-                    "Type": "Common Stock",
-                    "Country": "USA",
-                    "Currency": "USD",
-                    "Isin": "",
-                    "Name": "No ISIN",
-                },
-            ]
-        if path == "/exchange-symbol-list/XETRA":
-            return [
-                {
-                    "Code": "AAA",
-                    "Exchange": "XETRA",
-                    "Type": "ETF",
-                    "Country": "Germany",
-                    "Currency": "EUR",
-                    "Isin": "US0000000001",
-                    "Name": "AAA ETF Xetra",
-                },
-                {
-                    "Code": "BBB",
-                    "Exchange": "XETRA",
-                    "Type": "ETF",
-                    "Country": "Germany",
-                    "Currency": "EUR",
-                    "Isin": "IE0000000002",
-                    "Name": "BBB UCITS ETF",
-                },
-            ]
-        raise AssertionError(f"unexpected fake EODHD path: {path}")
+def _quote(isin: str, exchange: str, code: str, date: str, close: float) -> dict[str, object]:
+    return {
+        "isin": isin,
+        "exchange": exchange,
+        "code": code,
+        "date": date,
+        "open": close,
+        "high": close,
+        "low": close,
+        "close": close,
+        "adjusted_close": close,
+        "volume": 100,
+        "currency": "EUR",
+    }
 
 
 def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
@@ -107,714 +31,88 @@ def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
     assert output.out == "founder\n"
 
 
-def test_cli_search_sync_isins_fetches_all_eodhd_isins(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
-    FakeIsinSyncClient.requests = []
-    monkeypatch.setattr("founder.cli.EodhdClient", FakeIsinSyncClient)
+def test_cli_runs_search_module(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "lake"
+    input_path = tmp_path / "candidates.json"
+    input_path.write_text(
+        """
+        [
+          {
+            "Code": "EXAMPLE",
+            "Exchange": "XETRA",
+            "Type": "ETF",
+            "Country": "DE",
+            "Currency": "EUR",
+            "Isin": "IE0000000001",
+            "Name": "Example UCITS ETF"
+          }
+        ]
+        """,
+        encoding="utf-8",
+    )
 
-    main(["sync-eodhd-isins"])
+    main(
+        [
+            "search",
+            "UCITS ETF",
+            "--root",
+            str(root),
+            "--input",
+            str(input_path),
+            "--search-run-id",
+            "search-cli",
+        ]
+    )
 
     output = capsys.readouterr()
     payload = json.loads(output.out)
-    assert payload["candidate_rows"] == 3
-    assert payload["canonical_rows"] == 2
-    assert payload["exchange_rows"] == 2
-    assert payload["failed_exchanges"] == []
-    assert payload["isin_rows_fetched"] == 3
-    assert payload["query"] == "ALL_EODHD_ISINS"
-    assert payload["unique_isins_fetched"] == 2
-    assert FakeIsinSyncClient.requests == [
-        ("/exchanges-list/", {"fmt": "json"}),
-        ("/exchange-symbol-list/US", {"fmt": "json"}),
-        ("/exchange-symbol-list/XETRA", {"fmt": "json"}),
-    ]
-
-    paths = LakePaths(root=Path("lake"))
-    current_universe = read_json(paths.current_universe())
-    canonical_rows = read_rows(Path(str(current_universe["canonical_universe_path"])))
-    assert len(canonical_rows) == 2
-    assert canonical_rows[0]["exchange"] == "XETRA"
-    assert canonical_rows[0]["selection_reason"] == "preferred_xetra"
-
-
-def test_cli_runs_dry_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    main(["dry-run", "--root", str(tmp_path / "lake")])
-
-    output = capsys.readouterr()
-    assert '"canonical_rows": 2' in output.out
-
-
-def test_cli_runs_search_and_selection_modules(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-                    },
-                    {
-                        "Code": "SECOND",
-                        "Exchange": "XETRA",
-                        "Type": "ETF",
-                        "Country": "DE",
-                        "Currency": "EUR",
-                        "Isin": "IE0000000002",
-                        "Name": "Second UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-            "--debug",
-        ]
-    )
-    search_output = capsys.readouterr()
-    assert '"canonical_rows": 2' in search_output.out
-
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--mock",
-            "--limit",
-            "1",
-            "--debug",
-        ]
-    )
-    bronze_output = capsys.readouterr()
-    assert '"bronze_plan_rows": 1' in bronze_output.out
-    assert '"bronze_quote_rows": 2' in bronze_output.out
-    assert '"concurrency": 2' in bronze_output.out
-
     paths = LakePaths(root=root)
+    assert payload["canonical_rows"] == 1
     assert read_json(paths.current_universe())["search_run_id"] == "search-cli"
-    assert len(read_rows(paths.coverage())) == 1
-    assert read_rows(paths.silver_quote_file("XETRA", "IE0000000001")) == []
-    assert read_rows(paths.gold_returns("XETRA", "IE0000000001")) == []
-
-    main(["silver", "--root", str(root)])
-    silver_output = capsys.readouterr()
-    assert '"concurrency": 2' in silver_output.out
-    assert '"quote_rows": 2' in silver_output.out
-
-    main(["gold", "--root", str(root)])
-    gold_output = capsys.readouterr()
-    assert '"return_rows": 1' in gold_output.out
-    assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
-    assert len(read_rows(paths.gold_correlation("XETRA", "IE0000000001"))) == 1
-    assert len(read_rows(paths.gold_covariance("XETRA", "IE0000000001"))) == 1
-    log_path = next((tmp_path / ".logs").glob("founder-*.log"))
-    assert " DEBUG founder.cli parsed cli args" in log_path.read_text(encoding="utf-8")
 
 
-def test_cli_bronze_can_select_one_isin(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          },
-          {
-            "Code": "SECOND",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000002",
-            "Name": "Second UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--mock",
-            "--isin",
-            "IE0000000002",
-            "--run-date",
-            "2026-07-12",
-        ]
-    )
-
-    bronze_output = capsys.readouterr()
-    assert '"bronze_plan_rows": 1' in bronze_output.out
-    plan_rows = read_rows(LakePaths(root=root).bronze_plan("bronze-20260712"))
-    assert plan_rows[0]["isin"] == "IE0000000002"
-
-
-def test_cli_bronze_limit_and_isin_are_mutually_exclusive() -> None:
-    with pytest.raises(SystemExit):
-        main(["selection", "--limit", "1", "--isin", "IE0000000001"])
-
-
-def test_cli_bronze_live_defaults_to_gap_aware_full_history(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
-    FakeEodhdClient.requests = []
-    monkeypatch.setattr("founder.cli.EodhdClient", FakeEodhdClient)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-live",
-            "--run-date",
-            "2026-07-12",
-        ]
-    )
-
-    bronze_output = capsys.readouterr()
-    assert '"bronze_plan_rows": 1' in bronze_output.out
-    assert '"gap_aware": true' in bronze_output.out
-    assert '"bronze_quote_rows": 2' in bronze_output.out
-    assert '"concurrency": 2' in bronze_output.out
-    assert '"raw_data_payloads": 2' in bronze_output.out
-    assert FakeEodhdClient.requests == [
-        ("/eod/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
-        ("/div/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
-        ("/splits/EXAMPLE.XETRA", {"fmt": "json", "to": "2026-07-12"}),
-    ]
-    paths = LakePaths(root=root)
-    plan_row = read_rows(paths.bronze_plan("bronze-live"))[0]
-    assert plan_row["start_date"] == ""
-    assert plan_row["end_date"] == "2026-07-12"
-    assert plan_row["window_reason"] == "full_history"
-    assert len(read_rows(paths.coverage())) == 1
-    assert read_rows(paths.silver_quote_file("XETRA", "IE0000000001")) == []
-    assert read_rows(paths.gold_returns("XETRA", "IE0000000001")) == []
-    main(["silver", "--root", str(root)])
-    capsys.readouterr()
-    main(["gold", "--root", str(root)])
-    capsys.readouterr()
-    assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
-    assert len(read_rows(paths.gold_correlation("XETRA", "IE0000000001"))) == 1
-    assert len(read_rows(paths.gold_covariance("XETRA", "IE0000000001"))) == 1
-    dividends_path = paths.bronze_dataset_file("dividends", "XETRA", 2025, "IE0000000001")
-    assert read_rows(dividends_path) == [
-        {
-            "date": "2025-12-15",
-            "value": 0.12,
-            "run_id": "bronze-live",
-            "isin": "IE0000000001",
-            "code": "EXAMPLE",
-            "exchange": "XETRA",
-            "symbol": "EXAMPLE.XETRA",
-            "run_date": "2026-07-12",
-        }
-    ]
-    assert not paths.bronze_dataset_file("splits", "XETRA", 2026, "IE0000000001").exists()
-
-
-def test_cli_bronze_manual_start_date_bypasses_gap_aware_planning(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
-    FakeEodhdClient.requests = []
-    monkeypatch.setattr("founder.cli.EodhdClient", FakeEodhdClient)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-current-day",
-            "--start-date",
-            "2026-07-12",
-            "--end-date",
-            "2026-07-12",
-        ]
-    )
-    capsys.readouterr()
-
-    FakeEodhdClient.requests = []
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-manual",
-            "--start-date",
-            "2026-07-01",
-            "--end-date",
-            "2026-07-13",
-        ]
-    )
-
-    bronze_output = capsys.readouterr()
-    assert '"gap_aware": false' in bronze_output.out
-    assert FakeEodhdClient.requests == [
-        ("/eod/EXAMPLE.XETRA", {"fmt": "json", "from": "2026-07-01", "to": "2026-07-13"}),
-        ("/div/EXAMPLE.XETRA", {"fmt": "json", "from": "2026-07-01", "to": "2026-07-13"}),
-        ("/splits/EXAMPLE.XETRA", {"fmt": "json", "from": "2026-07-01", "to": "2026-07-13"}),
-    ]
-
-
-def test_cli_bronze_defaults_to_gap_aware_windows(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
-    FakeEodhdClient.requests = []
-    monkeypatch.setattr("founder.cli.EodhdClient", FakeEodhdClient)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-    main(["selection", "--root", str(root), "--run-id", "bronze-full"])
-    capsys.readouterr()
-    main(["silver", "--root", str(root)])
-    capsys.readouterr()
-
-    FakeEodhdClient.requests = []
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-gap-aware",
-            "--run-date",
-            "2026-07-13",
-        ]
-    )
-
-    bronze_output = capsys.readouterr()
-    assert '"gap_aware": true' in bronze_output.out
-    assert FakeEodhdClient.requests == [
-        ("/eod/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-13"}),
-        ("/div/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-13"}),
-        ("/splits/EXAMPLE.XETRA", {"fmt": "json", "from": "2020-01-03", "to": "2026-07-13"}),
-    ]
-    plan_rows = read_rows(LakePaths(root=root).bronze_plan("bronze-gap-aware"))
-    assert [row["window_reason"] for row in plan_rows] == ["gap_backfill"]
-    assert [(row["start_date"], row["end_date"]) for row in plan_rows] == [
-        ("2020-01-03", "2026-07-13"),
-    ]
-    gap_rows = read_rows(LakePaths(root=root).quote_gaps())
-    assert gap_rows == []
-
-
-def test_cli_bronze_skips_non_quote_data_when_quote_plan_is_empty(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
-    FakeEodhdClient.requests = []
-    monkeypatch.setattr("founder.cli.EodhdClient", FakeEodhdClient)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-current-day",
-            "--start-date",
-            "2026-07-10",
-            "--end-date",
-            "2026-07-10",
-        ]
-    )
-    capsys.readouterr()
-    main(["silver", "--root", str(root)])
-    capsys.readouterr()
-
-    FakeEodhdClient.requests = []
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--run-id",
-            "bronze-no-quote-gaps",
-            "--run-date",
-            "2026-07-10",
-        ]
-    )
-
-    bronze_output = capsys.readouterr()
-    assert '"bronze_plan_rows": 0' in bronze_output.out
-    assert '"raw_data_payloads": 0' in bronze_output.out
-    assert FakeEodhdClient.requests == []
-
-
-def test_cli_bronze_accepts_concurrency_override(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-
-    main(
-        [
-            "selection",
-            "--root",
-            str(root),
-            "--mock",
-            "--concurrency",
-            "1",
-            "--run-date",
-            "2026-07-12",
-        ]
-    )
-
-    assert '"concurrency": 1' in capsys.readouterr().out
-
-
-def test_cli_bronze_rejects_overlapping_run(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-    with (
-        layer_run_lock(LakePaths(root=root), "bronze"),
-        pytest.raises(RuntimeError, match="bronze run already active"),
-    ):
-        main(
-            [
-                "selection",
-                "--root",
-                str(root),
-                "--mock",
-                "--run-id",
-                "bronze-lock",
-                "--run-date",
-                "2026-07-12",
-            ]
-        )
-
-
-def test_cli_refresh_runs_bronze_silver_and_gold(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    root = tmp_path / "lake"
-    input_path = tmp_path / "candidates.json"
-    input_path.write_text(
-        """
-        [
-          {
-            "Code": "EXAMPLE",
-            "Exchange": "XETRA",
-            "Type": "ETF",
-            "Country": "DE",
-            "Currency": "EUR",
-            "Isin": "IE0000000001",
-            "Name": "Example UCITS ETF"
-          }
-        ]
-        """,
-        encoding="utf-8",
-    )
-    main(
-        [
-            "search",
-            "UCITS ETF",
-            "--root",
-            str(root),
-            "--input",
-            str(input_path),
-            "--search-run-id",
-            "search-cli",
-        ]
-    )
-    capsys.readouterr()
-
-    main(
-        [
-            "refresh",
-            "--root",
-            str(root),
-            "--mock",
-            "--run-date",
-            "2026-07-12",
-        ]
-    )
-
-    output = capsys.readouterr().out
-    summary = json.loads(output)
-    assert '"bronze_plan_rows": 1' in output
-    assert summary["bronze"]["concurrency"] == 2
-    assert summary["silver"]["concurrency"] == 2
-    assert summary["gold"]["concurrency"] == 2
-    assert '"quote_rows": 2' in output
-    assert '"return_rows": 1' in output
-    paths = LakePaths(root=root)
-    assert len(read_rows(paths.silver_quote_file("XETRA", "IE0000000001"))) == 2
-    assert len(read_rows(paths.gold_returns("XETRA", "IE0000000001"))) == 1
-
-
-def test_cli_bronze_rejects_removed_incremental_flag() -> None:
-    with pytest.raises(SystemExit):
-        main(["selection", "--incremental"])
-
-
-def test_cli_silver_accepts_concurrency_override(
+def test_cli_runs_univariate_and_bivariate_statistics_modules(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    main(["silver", "--root", str(tmp_path / "lake"), "--concurrency", "1"])
-
-    assert '"concurrency": 1' in capsys.readouterr().out
-
-
-def test_cli_silver_rejects_overlapping_run(tmp_path: Path) -> None:
     root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    write_rows(
+        paths.silver_quote_file("XETRA", "IE1"),
+        [
+            _quote("IE1", "XETRA", "AAA", "2026-01-01", 100.0),
+            _quote("IE1", "XETRA", "AAA", "2026-01-02", 110.0),
+            _quote("IE1", "XETRA", "AAA", "2026-01-03", 120.0),
+        ],
+    )
+    write_rows(
+        paths.silver_quote_file("AS", "IE2"),
+        [
+            _quote("IE2", "AS", "BBB", "2026-01-01", 120.0),
+            _quote("IE2", "AS", "BBB", "2026-01-02", 110.0),
+            _quote("IE2", "AS", "BBB", "2026-01-03", 100.0),
+        ],
+    )
 
-    with (
-        layer_run_lock(LakePaths(root=root), "silver"),
-        pytest.raises(RuntimeError, match="silver run already active"),
-    ):
-        main(["silver", "--root", str(root)])
+    main(["univariate-statistics", "--root", str(root)])
+    univariate_output = capsys.readouterr()
+    assert json.loads(univariate_output.out)["univariate_statistics_rows"] == 2
+    assert len(read_rows(paths.gold_univariate_statistics("XETRA", "IE1"))) == 1
 
-
-def test_cli_gold_rejects_overlapping_run(tmp_path: Path) -> None:
-    root = tmp_path / "lake"
-
-    with (
-        layer_run_lock(LakePaths(root=root), "gold"),
-        pytest.raises(RuntimeError, match="gold run already active"),
-    ):
-        main(["gold", "--root", str(root)])
+    main(["bivariate-statistics", "--root", str(root)])
+    bivariate_output = capsys.readouterr()
+    assert json.loads(bivariate_output.out)["bivariate_statistics_rows"] == 1
+    assert (
+        len(
+            read_rows(
+                paths.gold_bivariate_statistics_pair(
+                    "XETRA",
+                    "IE1",
+                    "AAA",
+                    "AS",
+                    "IE2",
+                    "BBB",
+                )
+            )
+        )
+        == 1
+    )

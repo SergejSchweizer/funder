@@ -11,9 +11,8 @@ Last reviewed: 2026-07-13
 - [Portfolio Objective](#portfolio-objective)
 - [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
-- [Run Search And Bronze](#run-search-and-bronze)
+- [Run The Three Modules](#run-the-three-modules)
 - [Scheduled Founder Cron](#scheduled-founder-cron)
-- [Local Dry Run](#local-dry-run)
 - [EODHD Request Safety](#eodhd-request-safety)
 - [Logging And Debugging](#logging-and-debugging)
 - [Quality Gates](#quality-gates)
@@ -30,10 +29,9 @@ New contributors should read the documentation in this order:
 
 1. Start here to understand the goal, data source, current facts, and local commands.
 2. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the module diagram and one-paragraph purpose of each package module.
-3. Read [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md) before changing Search or Bronze behavior.
-4. Read [docs/lake_contracts.md](docs/lake_contracts.md) before changing paths, schemas, or storage formats.
-5. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
-6. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
+3. Read [docs/lake_contracts.md](docs/lake_contracts.md) before changing paths, schemas, or storage formats.
+4. Check [RISKS.md](RISKS.md), [DECISIONS.md](DECISIONS.md), and [BACKLOG.md](BACKLOG.md) before opening a PR-sized change.
+5. Follow [AGENTS.md](AGENTS.md) for workflow rules, PR status tracking, and merge-gate policy.
 
 ## Current Facts
 
@@ -162,112 +160,69 @@ Portfolio analysis and evaluation computations include:
 
 The first trusted portfolio candidates should be constrained minimum variance and risk parity, with hierarchical risk parity and maximum diversification as robust alternatives for larger ETF universes. Maximum Sharpe should be treated as a comparison technique until the expected-return model is deliberately chosen and tested out of sample.
 
-The current evaluation baseline writes return matrices, asset metrics, portfolio returns, drawdowns, portfolio metrics, walk-forward backtests, rebalancing events, efficient frontiers, and tail-risk summaries for equal-weight or explicit long-only cash-free weights. Portfolio optimizers write equal-weight, constrained minimum-variance, maximum-Sharpe comparison, target-return minimum-variance, risk-parity, hierarchical-risk-parity, and maximum-diversification target weights from Gold evaluation inputs. Risk-parity and diversification runs also write diagnostic rows, target-weight rows include structured optimizer diagnostics, and `founder evaluate` exposes the evaluation path from the CLI. These optimizers are deterministic baseline decision-support outputs, not trade-execution approval by themselves.
+The current refactor keeps the public CLI focused on Search plus reusable univariate and bivariate statistics. Portfolio optimization remains downstream analysis work and is not exposed as a first-class module in this cut.
 
 ## Documentation Map
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains how modules connect and where responsibilities live.
-- [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md) shows how to use Search and Bronze from Python.
 - [docs/lake_contracts.md](docs/lake_contracts.md) defines lake layers and table contracts.
 - [DECISIONS.md](DECISIONS.md) records why durable technical choices were made.
 - [RISKS.md](RISKS.md) tracks active project risks and mitigations.
 - [BACKLOG.md](BACKLOG.md) tracks PR-sized work and implementation status.
 - [AGENTS.md](AGENTS.md) defines agent workflow rules and generated project-history risks.
 
-## Run Search And Bronze
+## Run The Three Modules
 
-Search and Bronze have separate CLI calls. First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `lake`, generates a search run id, and approves the canonical universe for Bronze:
+Founder currently exposes three CLI modules: `search`, `univariate-statistics`, and `bivariate-statistics`.
+
+First run Search with the string to find. By default this reads `docs/eodhd_ucits_etf_matches.csv`, writes to `lake`, generates a search run id, and approves the canonical universe:
 
 ```bash
 uv run founder search "UCITS ETF"
 ```
 
-To sync all currently listed EODHD symbol-list rows that contain an ISIN directly from the API, run
-the first module without additional arguments:
+Then build reusable per-listing statistics from existing Silver quote files:
 
 ```bash
-uv run founder sync-eodhd-isins
+uv run founder univariate-statistics
 ```
 
-This enumerates EODHD exchanges, fetches each exchange symbol list, keeps rows with non-empty ISINs,
-writes Search candidates and the canonical one-row-per-ISIN universe, and approves that universe for
-Bronze. On success, the command prints JSON including `isin_rows_fetched` and
-`unique_isins_fetched`. The API key is read from ignored local config such as `.env.local`.
-
-Then run Selection from the approved universe pointer. By default this loads live EODHD quotes with gap-aware planning, writes Bronze quote/dividend/split rows, and writes Silver operational bronze metadata. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Then build reusable pairwise statistics from the same Silver quote files:
 
 ```bash
-uv run founder selection
+uv run founder bivariate-statistics
 ```
 
-Build Silver quotes and Gold risk inputs explicitly after Bronze:
+Univariate statistics are stored by stable listing key:
 
-```bash
-uv run founder silver
-uv run founder gold
+```text
+lake/gold/univariate_statistics/{exchange}/{ISIN}.parquet
 ```
 
-Bronze, Silver, and Gold all default to `--concurrency 2`. Silver writes per-listing quote files with two worker threads by default; Bronze uses two EODHD workers; Gold uses two worker processes for per-ISIN risk-output builds.
+Bivariate statistics are stored by stable pair key:
 
-Gold defaults to two parallel workers so a 4-core host keeps capacity for the rest of the system while building per-ISIN return, feature, correlation, and covariance outputs. It computes Pearson correlation and sample covariance incrementally over the common return-date intersection, writes `lake/gold/runs/gold_runs.parquet`, and resumes completed ISIN listings when the last quote date, global input snapshot date, and listing count still match. Symmetric correlation and covariance pairs are computed once and written to the relevant per-ISIN files.
-
-Use the refresh command when you want the three phases in one cron-friendly command:
-
-```bash
-uv run founder refresh
+```text
+lake/gold/bivariate_statistics/{left_exchange}/{left_ISIN}/{left_code}/{right_exchange}__{right_ISIN}__{right_code}.parquet
 ```
 
-After a full-history run has written local quotes, later live loads check for per-ISIN quote gaps before downloading. They backfill historical gaps first, then ingest the fresh tail up to the run date:
-
-```bash
-uv run founder selection
-```
-
-Gap-aware Bronze reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. The resulting windows are used for quotes, dividends, and splits. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
-
-The gap-aware approach currently discovers windows from quote history, then applies those windows to all supported EODHD time-series datasets. Dividends and splits are archived beside quotes as dated Bronze Parquet rows under `lake/bronze/dividends/{exchange}/{year}/{ISIN}.parquet` and `lake/bronze/splits/{exchange}/{year}/{ISIN}.parquet`. Additional time-series data types should get their own strategy, coverage fields, and gap table before being added to automatic gap planning.
-
-Use `--mock` for a local no-token Bronze run that writes deterministic Bronze quote and operational metadata artifacts:
-
-```bash
-uv run founder selection --mock
-```
-
-Limit Bronze to the first `N` approved canonical ISINs, or to one exact ISIN, when testing a small batch. `--limit` and `--isin` are mutually exclusive:
-
-```bash
-uv run founder selection --limit 10 --mock
-uv run founder selection --isin IE0000000001 --mock
-```
-
-Pass `--start-date` and/or `--end-date` only when you want to restrict the live EODHD history window.
-
-For full input format details and Python usage examples, see [docs/search_bronze_workflow.md](docs/search_bronze_workflow.md#how-to-run-both-modules).
+Those paths deliberately do not include a search run id. A later Search list can therefore reuse already computed statistics for unchanged listings and unchanged listing pairs instead of recomputing them.
 
 ## Scheduled Founder Cron
 
-The `vcs` user crontab runs the Founder lake refresh every day at 18:00 local server time. Founder commands hold per-layer process locks at `lake/bronze/runs/bronze.lock`, `lake/silver/runs/silver.lock`, and `lake/gold/runs/gold.lock`, so a second Bronze, Silver, or Gold command exits instead of overlapping the active layer. Keep the cron job readable by defining absolute paths once:
+The `vcs` user crontab should call only the three public modules. Keep the cron job readable by defining absolute paths once:
 
 ```cron
 SHELL=/bin/bash
 FOUNDER_PROJECT=/home/vcs/git/founder
 FOUNDER_UV=/home/vcs/.local/bin/uv
-FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
+FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-statistics.log
 
-# Daily lake refresh at 18:00 local server time.
-# Runs Selection -> Silver -> Gold; each layer refuses to overlap an active same-layer run.
-0 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+# Daily statistics rebuild at 18:00 local server time.
+0 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder univariate-statistics --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_LOG" 2>&1
+5 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder bivariate-statistics --root "$FOUNDER_PROJECT/lake" --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
-Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
-
-## Local Dry Run
-
-Run the mocked end-to-end pipeline without credentials:
-
-```bash
-uv run founder dry-run --root lake
-```
+Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-statistics.log`.
 
 The dry run writes search candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance/feature inputs under the selected local lake root.
 
@@ -294,8 +249,8 @@ All CLI commands support `--debug` for more detailed module logs:
 
 ```bash
 uv run founder search "UCITS ETF" --debug
-uv run founder selection --mock --debug
-uv run founder dry-run --debug
+uv run founder univariate-statistics --debug
+uv run founder bivariate-statistics --debug
 ```
 
 The log format is consistent across Founder modules:

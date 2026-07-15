@@ -11,7 +11,7 @@ Last reviewed: 2026-07-13
 
 Founder uses deterministic local lake artifacts under a `LakePaths` root. Table paths ending in `.parquet` are physical Apache Parquet files written through `founder.table_io`; JSON and CSV artifacts keep their native formats.
 
-Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search, Bronze, Gold, or storage code. Read [docs/search_bronze_workflow.md](search_bronze_workflow.md) for executable examples that use these contracts.
+Read this after [ARCHITECTURE.md](../ARCHITECTURE.md) and before changing Search, statistics, or storage code.
 
 ## Layers
 
@@ -31,8 +31,10 @@ Silver and Gold remove the year directory so all years for an ISIN stay in one f
 ```text
 silver/quotes/{exchange}/{ISIN}.parquet
 gold/returns/{exchange}/{ISIN}.parquet
+gold/univariate_statistics/{exchange}/{ISIN}.parquet
 gold/correlation/{exchange}/{ISIN}.parquet
 gold/covariance/{exchange}/{ISIN}.parquet
+gold/bivariate_statistics/{left_exchange}/{left_ISIN}/{left_code}/{right_exchange}__{right_ISIN}__{right_code}.parquet
 gold/correlation_edges/version={version}/metric={metric}/bucket={bucket}.parquet
 gold/features/{exchange}/{ISIN}.parquet
 gold/runs/gold_runs.parquet
@@ -71,6 +73,8 @@ silver/coverage/quote_gaps.parquet
 - `quote_gaps`: quote gap ranges by ISIN, code, exchange, symbol, data type, gap type, start, end, and missing trading-day count. Gap-aware Bronze downloads historical gaps first, then the tail to the selected run date.
 - `errors`: non-secret bronze error records.
 - `returns`, `correlation`, and `covariance`: Gold risk-input tables built from validated Silver quote rows and written as per-ISIN files without year partitions. Gold return rows use daily adjusted-close log returns: `ln(P_t / P_{t-1})`. Pairwise correlation and covariance values are computed only on the common date intersection of the two return series.
+- `univariate_statistics`: one Gold row per ISIN listing, written to a stable listing path that does not include the search run id. Rows include return, volatility, downside, drawdown, trend, and tail-risk summaries that can be reused when later search lists include the same listing.
+- `bivariate_statistics`: one Gold row per pair of distinct ISIN listings, written to a stable pair-key path that does not include the search run id. Rows include stable listing keys, stable pair key, common-date range, common observation count, Pearson correlation, Spearman correlation, covariance, each side's variance, and directional beta values. This lets later search lists reuse already computed pair statistics for unchanged listing pairs instead of recalculating them. This dataset deliberately excludes single-listing return summaries.
 - `correlation_edges`: Gold pair-search table for scalable correlation filtering. Rows store one upper-triangle pair where `left_id < right_id`, the listing identifiers, metric name, input version, common date range, common observation count, and correlation value. Same-ISIN pairs are skipped even when the listings use different exchanges or codes. Supported metrics are `pearson` and `spearman`; Pearson values are computed with an incremental online correlation algorithm, and Spearman values use an approximative online rank-score correlation. Edge values use only the common date intersection of the two return series. Bucket files are grouped by `left_id % bucket_count` so later DuckDB or Polars scans can filter relevant partitions instead of opening a dense matrix.
 - `features`: per-listing Gold asset feature rows with first and last quote dates, quote and return observation counts, total return, mean return, volatility, and maximum drawdown.
 - `gold_runs`: per-listing Gold completion manifest with status, input last quote date, global input snapshot date, listing count, and completion time. Gold uses this to resume the per-ISIN job without reprocessing completed listings when the input snapshot has not changed.
@@ -109,10 +113,12 @@ Current portfolio evaluation writes equal-weight or explicit long-only cash-free
 
 ## How This Fits The Onboarding Flow
 
-Use the deterministic mocked pipeline to see these contracts written end to end:
+Use the three public modules to write and reuse the current contracts:
 
 ```bash
-uv run founder dry-run --root lake
+uv run founder search "UCITS ETF"
+uv run founder univariate-statistics --root lake
+uv run founder bivariate-statistics --root lake
 ```
 
-The dry run is safe to repeat and rewrites the same sample artifacts deterministically.
+Statistics outputs use stable listing and pair paths so later Search lists can reuse unchanged calculations.

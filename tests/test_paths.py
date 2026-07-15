@@ -35,12 +35,23 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_returns("XETRA", "IE0000000001") == Path(
         "lake/gold/returns/XETRA/IE0000000001.parquet"
     )
+    assert paths.gold_univariate_statistics("XETRA", "IE0000000001") == Path(
+        "lake/gold/univariate_statistics/XETRA/IE0000000001.parquet"
+    )
     assert paths.gold_correlation("XETRA", "IE0000000001") == Path(
         "lake/gold/correlation/XETRA/IE0000000001.parquet"
     )
     assert paths.gold_covariance("XETRA", "IE0000000001") == Path(
         "lake/gold/covariance/XETRA/IE0000000001.parquet"
     )
+    assert paths.gold_bivariate_statistics_pair(
+        "XETRA",
+        "IE0000000001",
+        "AAA",
+        "AS",
+        "IE0000000002",
+        "BBB",
+    ) == Path("lake/gold/bivariate_statistics/XETRA/IE0000000001/AAA/AS__IE0000000002__BBB.parquet")
     assert paths.gold_correlation_edges("snapshot-1", "pearson", 7) == Path(
         "lake/gold/correlation_edges/version=snapshot-1/metric=pearson/bucket=007.parquet"
     )

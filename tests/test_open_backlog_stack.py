@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from founder.cli import main
 from founder.evaluation import (
     build_efficient_frontier,
     build_rebalance_events,
@@ -256,95 +255,3 @@ def test_hrp_and_maximum_diversification_write_deterministic_gold_outputs(tmp_pa
     assert read_rows(paths.gold_diversification_metrics("eval-1")) == max_div_metrics
     assert len(hrp_written) == 2
     assert len(max_div_written) == 2
-
-
-def test_evaluate_cli_and_dry_run_write_portfolio_outputs(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    paths = LakePaths(root=tmp_path / "lake")
-    _prepare_lake(paths)
-
-    main(
-        [
-            "evaluate",
-            "--root",
-            str(paths.root),
-            "--evaluation-id",
-            "eval-1",
-            "--objective",
-            "minimum_variance",
-            "--optimize",
-            "--walk-forward",
-            "--rebalance",
-            "--frontier",
-            "--tail-risk",
-            "--train-window",
-            "2",
-            "--test-window",
-            "1",
-            "--grid-step",
-            "0.5",
-        ]
-    )
-    output = capsys.readouterr().out
-    assert '"optimized_weight_rows": 2' in output
-    assert '"backtest_rows": 3' in output
-
-    main(["dry-run", "--root", str(tmp_path / "dry-lake")])
-    dry_run_output = capsys.readouterr().out
-    assert '"return_matrix_rows": 4' in dry_run_output
-    assert '"optimized_weight_rows": 2' in dry_run_output
-
-
-def test_evaluate_cli_frontier_handles_empty_return_matrix(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    paths = LakePaths(root=tmp_path / "lake")
-
-    main(
-        [
-            "evaluate",
-            "--root",
-            str(paths.root),
-            "--evaluation-id",
-            "default",
-            "--frontier",
-        ]
-    )
-
-    output = capsys.readouterr().out
-    assert '"return_matrix_rows": 0' in output
-    assert '"portfolio_return_rows": 0' in output
-    assert '"frontier_point_rows": 2' in output
-    assert read_rows(paths.gold_frontier_points("default"))[0]["is_feasible"] is False
-
-
-def test_evaluate_cli_rebuilds_asset_tail_risk_for_requested_confidence(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    paths = LakePaths(root=tmp_path / "lake")
-    _prepare_lake(paths)
-    write_rows(
-        paths.gold_asset_metrics("eval-1"),
-        [{"evaluation_id": "eval-1", "isin": "IE1", "sharpe_ratio": 1.0}],
-    )
-
-    command = [
-        "evaluate",
-        "--root",
-        str(paths.root),
-        "--evaluation-id",
-        "eval-1",
-        "--confidence-level",
-        "0.8",
-    ]
-    main(command)
-    capsys.readouterr()
-    first = read_rows(paths.gold_asset_metrics("eval-1"))
-    main(command)
-    capsys.readouterr()
-
-    assert read_rows(paths.gold_asset_metrics("eval-1")) == first
-    assert [row["isin"] for row in first] == ["IE1", "IE2"]
-    assert all(row["confidence_level"] == 0.8 for row in first)
-    assert all("cvar" in row and "sharpe_ratio" in row and "sortino_ratio" in row for row in first)

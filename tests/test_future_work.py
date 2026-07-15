@@ -1,5 +1,6 @@
 import csv
 import json
+from pathlib import Path
 
 import pytest
 
@@ -212,7 +213,7 @@ def test_portfolio_objectives_use_bounded_large_universe_fallback() -> None:
     assert sum(weights.values()) == pytest.approx(1.0)
 
 
-def test_optimized_weight_rows_and_gold_write_are_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_optimized_weight_rows_and_gold_write_are_idempotent(tmp_path: Path) -> None:
     paths = LakePaths(root=tmp_path / "lake")
     matrix_rows = [
         {
@@ -476,7 +477,7 @@ def test_risk_parity_reports_zero_variance_non_convergence() -> None:
     assert rows[0]["objective_residual"] == pytest.approx(0.5)
 
 
-def test_risk_parity_gold_writes_are_idempotent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_risk_parity_gold_writes_are_idempotent(tmp_path: Path) -> None:
     paths = LakePaths(root=tmp_path / "lake")
     matrix_rows = [
         {
@@ -568,7 +569,7 @@ def test_risk_parity_gold_writes_are_idempotent(tmp_path) -> None:  # type: igno
     assert diagnostics["risk_parity_residual"] == pytest.approx(risk_rows[0]["objective_residual"])
 
 
-def test_flatex_orders_are_deterministic_and_exportable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_flatex_orders_are_deterministic_and_exportable(tmp_path: Path) -> None:
     orders = prepare_flatex_orders(
         [
             {
@@ -637,7 +638,7 @@ def test_universe_review_flags_missing_isins_currency_and_survivorship() -> None
     assert len(report["warnings"]) == 2
 
 
-def test_docs_refresh_report_tracks_review_lines(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_docs_refresh_report_tracks_review_lines(tmp_path: Path) -> None:
     (tmp_path / "docs").mkdir()
     for name in (
         "README.md",
@@ -647,7 +648,6 @@ def test_docs_refresh_report_tracks_review_lines(tmp_path) -> None:  # type: ign
         "BACKLOG.md",
         "AGENTS.md",
         "docs/lake_contracts.md",
-        "docs/search_bronze_workflow.md",
     ):
         (tmp_path / name).write_text("# Doc\n\nLast reviewed: 2026-07-12\n", encoding="utf-8")
     (tmp_path / "RISKS.md").write_text("# Risks\n", encoding="utf-8")
@@ -662,7 +662,9 @@ def test_docs_refresh_report_tracks_review_lines(tmp_path) -> None:  # type: ign
     assert output.exists()
 
 
-def test_docs_refresh_handles_missing_docs_and_cli(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_docs_refresh_handles_missing_docs_and_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     assert doc_review_line(tmp_path / "missing.md") == "missing"
 
     output = tmp_path / "report.json"
@@ -679,4 +681,4 @@ def test_docs_refresh_handles_missing_docs_and_cli(tmp_path, monkeypatch) -> Non
     main()
 
     assert output.exists()
-    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 8
+    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 7
