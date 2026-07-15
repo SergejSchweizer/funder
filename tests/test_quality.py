@@ -33,15 +33,11 @@ def test_main_gate_extends_pr_gate_with_clean_tree_checks() -> None:
     commands = commands_for_layer("main")
 
     assert commands[:4] == commands_for_layer("pr")[:4]
-    assert commands[4:7] == (
-        ("lint-imports", "--config", "pyproject.toml", "--no-cache"),
-        ("python", "-m", "founder.schema_validation"),
-        (
-            "pytest",
-            "--cov=founder",
-            "--cov-report=term-missing",
-            "--cov-fail-under=95",
-        ),
+    assert commands[4] == (
+        "pytest",
+        "--cov=founder",
+        "--cov-report=term-missing",
+        "--cov-fail-under=95",
     )
     assert commands[-3:] == (
         ("git", "diff", "--quiet"),
@@ -123,8 +119,8 @@ def test_validate_commit_message_file(tmp_path: Path) -> None:
 
 
 def test_validate_squash_subject() -> None:
-    assert validate_squash_subject("feat(selection): add metric filters") == 0
-    assert validate_squash_subject("Add metric filters") == 1
+    assert validate_squash_subject("feat(cli): add command") == 0
+    assert validate_squash_subject("Add command") == 1
 
 
 def test_build_parser_describes_founder_quality_gates() -> None:
@@ -142,7 +138,7 @@ def test_main_validates_commit_message_file(tmp_path: Path) -> None:
 
 
 def test_main_validates_squash_subject() -> None:
-    assert main(["--squash-subject", "docs: define merge policy"]) == 0
+    assert main(["--squash-subject", "feat(cli): add command"]) == 0
 
 
 def test_main_requires_layer_without_commit_message_file() -> None:

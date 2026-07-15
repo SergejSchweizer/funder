@@ -29,6 +29,7 @@ ListingKey = tuple[str, str, str]
 ReturnsByListing = dict[ListingKey, dict[str, float]]
 QuotesByListing = dict[ListingKey, list[JsonRow]]
 
+_worker_listings: tuple[ListingKey, ...] = ()
 _worker_returns_by_listing: ReturnsByListing = {}
 _worker_quotes_by_listing: QuotesByListing = {}
 
@@ -230,11 +231,12 @@ def build_asset_features(
 
 
 def _init_gold_worker(
-    _listings: tuple[ListingKey, ...],
+    listings: tuple[ListingKey, ...],
     returns_by_listing: ReturnsByListing,
     quotes_by_listing: QuotesByListing,
 ) -> None:
-    global _worker_returns_by_listing, _worker_quotes_by_listing
+    global _worker_listings, _worker_returns_by_listing, _worker_quotes_by_listing
+    _worker_listings = listings
     _worker_returns_by_listing = returns_by_listing
     _worker_quotes_by_listing = quotes_by_listing
 

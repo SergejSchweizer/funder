@@ -25,18 +25,11 @@ def build_return_matrix(
 
 
 def write_evaluation_outputs(
-    paths: LakePaths,
-    *,
-    evaluation_id: str = "default",
-    confidence_level: float = 0.95,
+    paths: LakePaths, *, evaluation_id: str = "default"
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     return cast(
         tuple[list[JsonRow], list[JsonRow]],
-        _evaluation().write_evaluation_outputs(
-            paths,
-            evaluation_id=evaluation_id,
-            confidence_level=confidence_level,
-        ),
+        _evaluation().write_evaluation_outputs(paths, evaluation_id=evaluation_id),
     )
 
 

@@ -88,6 +88,18 @@ uv run founder search "UCITS ETF"
 
 For the checked-in dataset, this finds 8,165 candidate rows and selects 3,104 canonical ISIN rows.
 
+To refresh the Search universe directly from EODHD by enumerating all exchange symbol lists and
+keeping every row with a non-empty ISIN, use:
+
+```bash
+uv run founder sync-eodhd-isins
+```
+
+This is the no-argument live Search sync. It reads EODHD credentials from ignored local config such
+as `.env.local`, writes candidates and a canonical one-row-per-ISIN universe under `lake/silver`, and
+approves that universe for Bronze. On success, stdout is JSON and includes `isin_rows_fetched` for
+the total fetched rows with ISINs and `unique_isins_fetched` for the deduplicated canonical ISINs.
+
 To use another local source, pass `--input`. The file can be a CSV with EODHD-style columns, a JSON list of EODHD-style rows, or a JSON object with a `responses` or `candidates` list:
 
 ```json
@@ -117,10 +129,10 @@ This writes raw candidates, normalized candidates, the canonical universe, a rev
 
 ### Run Bronze
 
-Run Bronze against the approved universe. By default, `founder bronze` calls EODHD for live end-of-day quotes with gap-aware planning and archives the additional dated EODHD listing datasets currently supported by Founder. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+Run Selection against the approved universe. By default, `founder selection` calls EODHD for live end-of-day quotes with gap-aware planning and archives the additional dated EODHD listing datasets currently supported by Founder. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
 
 ```bash
-uv run founder bronze
+uv run founder selection
 ```
 
 Bronze is safe for unattended cron execution. Live EODHD loading uses bounded parallelism with default concurrency `2`, while still honoring shared request pacing, retry backoff, and `Retry-After`. Cron execution should use stable run ids, be resumable after partial failures, and prevent or clearly report overlapping runs for the same lake root and run id.
@@ -135,7 +147,7 @@ FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
 FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
 
 # Daily lake refresh at 18:00 local server time.
-# Runs Bronze -> Silver -> Gold and skips the run if a previous refresh is still active.
+# Runs Selection -> Silver -> Gold and skips the run if a previous refresh is still active.
 0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
@@ -144,10 +156,10 @@ Use `crontab -l` as user `vcs` to inspect the installed schedule. Logs are appen
 `--mock` writes deterministic local Bronze quote and operational metadata outputs without using an EODHD token:
 
 ```bash
-uv run founder bronze --mock
+uv run founder selection --mock
 ```
 
-Without `--mock`, `founder bronze` writes the bronze plan, archives live Bronze quote, dividend, and split rows through the same planned windows, and writes coverage/bronze-run metadata. With `--mock`, it writes deterministic local Bronze quote, coverage, and bronze-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--concurrency`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
+Without `--mock`, `founder selection` writes the bronze plan, archives live Bronze quote, dividend, and split rows through the same planned windows, and writes coverage/bronze-run metadata. With `--mock`, it writes deterministic local Bronze quote, coverage, and bronze-run metadata. Optional flags such as `--root`, `--run-id`, `--start-date`, `--end-date`, `--run-date`, `--concurrency`, `--limit`, and `--isin` are available for reproducible custom runs, but they are not required.
 
 Build Silver quotes and Gold risk inputs after Bronze, or use Refresh to run all phases in order:
 
@@ -160,13 +172,13 @@ uv run founder refresh
 Pass `--start-date` and/or `--end-date` only when you want to restrict the EODHD history window:
 
 ```bash
-uv run founder bronze --start-date 2020-01-01 --end-date 2026-07-12
+uv run founder selection --start-date 2020-01-01 --end-date 2026-07-12
 ```
 
 After an initial full-history bronze, later live loads inspect already stored Silver quotes before downloading. The planner coalesces missing quote dates into one backfill window per ISIN, then loads through the selected run date so repeated small historical holes do not create hundreds of API calls:
 
 ```bash
-uv run founder bronze
+uv run founder selection
 ```
 
 When you pass `--start-date`, Bronze uses that manual date window instead of automatic gap planning for quotes, dividends, and splits. ISINs without existing local quotes are still included and ingest full history up to the selected end date. Quote gaps are written to `lake/silver/coverage/quote_gaps.parquet`; after a successful gap backfill this table should shrink or become empty for the covered ISINs.
@@ -176,15 +188,15 @@ Automatic gap discovery is driven by stored Silver quote dates because quotes ar
 Use `--limit N` to restrict Bronze to the first `N` approved canonical ISINs, or `--isin` to restrict Bronze to one exact approved canonical ISIN. These two selectors are mutually exclusive:
 
 ```bash
-uv run founder bronze --limit 10 --mock
-uv run founder bronze --isin IE0000000001 --mock
+uv run founder selection --limit 10 --mock
+uv run founder selection --isin IE0000000001 --mock
 ```
 
 Add `--debug` to either module command when you need more detailed logs under `.logs/`:
 
 ```bash
 uv run founder search "UCITS ETF" --debug
-uv run founder bronze --mock --debug
+uv run founder selection --mock --debug
 ```
 
 ### Run The Full Mocked Pipeline

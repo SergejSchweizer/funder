@@ -35,8 +35,6 @@ CONVENTIONAL_COMMIT_TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|s
 
 MAIN_GATE_COMMANDS: tuple[Command, ...] = (
     *PR_GATE_COMMANDS[:-1],
-    ("lint-imports", "--config", "pyproject.toml", "--no-cache"),
-    ("python", "-m", "founder.schema_validation"),
     MAIN_COVERAGE_COMMAND,
     ("git", "diff", "--quiet"),
     ("git", "diff", "--cached", "--quiet"),

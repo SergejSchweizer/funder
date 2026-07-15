@@ -509,10 +509,11 @@ def eodhd_dataset_loader(client: EodhdClient, strategy: EodhdDatasetStrategy) ->
             params["from"] = start_date
         if end_date:
             params["to"] = end_date
-        payload = cast(object, client.get_json(f"/{strategy.endpoint}/{item['symbol']}", params))
+        payload = client.get_json(f"/{strategy.endpoint}/{item['symbol']}", params)
         if not isinstance(payload, list):
             raise ValueError(f"expected EODHD {strategy.name} list")
-        return [cast(JsonRow, row) for row in cast(list[object], payload) if isinstance(row, dict)]
+        payload_rows = cast(list[object], payload)
+        return [cast(Mapping[str, Any], row) for row in payload_rows if isinstance(row, dict)]
 
     return bronze
 
@@ -561,15 +562,13 @@ def write_raw_eodhd_datasets_to_bronze(
 def _dataset_rows(
     strategy: EodhdDatasetStrategy,
     item: Mapping[str, Any],
-    payload: Sequence[object],
+    payload: Sequence[Mapping[str, Any]],
     *,
     run_date: date,
 ) -> list[JsonRow]:
     rows: list[JsonRow] = []
     for raw_row in payload:
-        if not isinstance(raw_row, Mapping):
-            raise ValueError(f"expected EODHD {strategy.name} row object")
-        row = dict(cast(Mapping[str, Any], raw_row))
+        row = dict(raw_row)
         if "date" not in row:
             raise ValueError(f"expected EODHD {strategy.name} row date")
         rows.append(

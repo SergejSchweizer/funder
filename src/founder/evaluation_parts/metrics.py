@@ -14,19 +14,9 @@ def _evaluation() -> Any:
 
 
 def build_asset_metrics(
-    matrix_rows: Sequence[Mapping[str, Any]],
-    evaluation_id: str = "default",
-    *,
-    confidence_level: float = 0.95,
+    matrix_rows: Sequence[Mapping[str, Any]], evaluation_id: str = "default"
 ) -> list[JsonRow]:
-    return cast(
-        list[JsonRow],
-        _evaluation().build_asset_metrics(
-            matrix_rows,
-            evaluation_id,
-            confidence_level=confidence_level,
-        ),
-    )
+    return cast(list[JsonRow], _evaluation().build_asset_metrics(matrix_rows, evaluation_id))
 
 
 def build_portfolio_metrics(

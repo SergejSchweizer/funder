@@ -45,11 +45,99 @@ class FakeEodhdClient:
         ]
 
 
+class FakeIsinSyncClient:
+    requests: list[tuple[str, dict[str, str | int | float] | None]] = []
+
+    def __init__(self, config: object) -> None:
+        self.config = config
+
+    def get_json(self, path: str, params: dict[str, str | int | float] | None = None) -> Any:
+        self.requests.append((path, params))
+        if path == "/exchanges-list/":
+            return [{"Code": "US"}, {"Code": "XETRA"}]
+        if path == "/exchange-symbol-list/US":
+            return [
+                {
+                    "Code": "AAA",
+                    "Exchange": "US",
+                    "Type": "ETF",
+                    "Country": "USA",
+                    "Currency": "USD",
+                    "Isin": "US0000000001",
+                    "Name": "AAA ETF",
+                },
+                {
+                    "Code": "NOISIN",
+                    "Exchange": "US",
+                    "Type": "Common Stock",
+                    "Country": "USA",
+                    "Currency": "USD",
+                    "Isin": "",
+                    "Name": "No ISIN",
+                },
+            ]
+        if path == "/exchange-symbol-list/XETRA":
+            return [
+                {
+                    "Code": "AAA",
+                    "Exchange": "XETRA",
+                    "Type": "ETF",
+                    "Country": "Germany",
+                    "Currency": "EUR",
+                    "Isin": "US0000000001",
+                    "Name": "AAA ETF Xetra",
+                },
+                {
+                    "Code": "BBB",
+                    "Exchange": "XETRA",
+                    "Type": "ETF",
+                    "Country": "Germany",
+                    "Currency": "EUR",
+                    "Isin": "IE0000000002",
+                    "Name": "BBB UCITS ETF",
+                },
+            ]
+        raise AssertionError(f"unexpected fake EODHD path: {path}")
+
+
 def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
     main([])
 
     output = capsys.readouterr()
     assert output.out == "founder\n"
+
+
+def test_cli_search_sync_isins_fetches_all_eodhd_isins(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("founder.cli.load_eodhd_config", lambda: object())
+    FakeIsinSyncClient.requests = []
+    monkeypatch.setattr("founder.cli.EodhdClient", FakeIsinSyncClient)
+
+    main(["sync-eodhd-isins"])
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["candidate_rows"] == 3
+    assert payload["canonical_rows"] == 2
+    assert payload["exchange_rows"] == 2
+    assert payload["failed_exchanges"] == []
+    assert payload["isin_rows_fetched"] == 3
+    assert payload["query"] == "ALL_EODHD_ISINS"
+    assert payload["unique_isins_fetched"] == 2
+    assert FakeIsinSyncClient.requests == [
+        ("/exchanges-list/", {"fmt": "json"}),
+        ("/exchange-symbol-list/US", {"fmt": "json"}),
+        ("/exchange-symbol-list/XETRA", {"fmt": "json"}),
+    ]
+
+    paths = LakePaths(root=Path("lake"))
+    current_universe = read_json(paths.current_universe())
+    canonical_rows = read_rows(Path(str(current_universe["canonical_universe_path"])))
+    assert len(canonical_rows) == 2
+    assert canonical_rows[0]["exchange"] == "XETRA"
+    assert canonical_rows[0]["selection_reason"] == "preferred_xetra"
 
 
 def test_cli_runs_dry_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -59,7 +147,7 @@ def test_cli_runs_dry_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert '"canonical_rows": 2' in output.out
 
 
-def test_cli_runs_search_and_bronze_modules(
+def test_cli_runs_search_and_selection_modules(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -109,7 +197,7 @@ def test_cli_runs_search_and_bronze_modules(
 
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--mock",
@@ -192,7 +280,7 @@ def test_cli_bronze_can_select_one_isin(
 
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--mock",
@@ -211,7 +299,7 @@ def test_cli_bronze_can_select_one_isin(
 
 def test_cli_bronze_limit_and_isin_are_mutually_exclusive() -> None:
     with pytest.raises(SystemExit):
-        main(["bronze", "--limit", "1", "--isin", "IE0000000001"])
+        main(["selection", "--limit", "1", "--isin", "IE0000000001"])
 
 
 def test_cli_bronze_live_defaults_to_gap_aware_full_history(
@@ -256,7 +344,7 @@ def test_cli_bronze_live_defaults_to_gap_aware_full_history(
 
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -349,7 +437,7 @@ def test_cli_bronze_manual_start_date_bypasses_gap_aware_planning(
     capsys.readouterr()
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -365,7 +453,7 @@ def test_cli_bronze_manual_start_date_bypasses_gap_aware_planning(
     FakeEodhdClient.requests = []
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -425,7 +513,7 @@ def test_cli_bronze_defaults_to_gap_aware_windows(
         ]
     )
     capsys.readouterr()
-    main(["bronze", "--root", str(root), "--run-id", "bronze-full"])
+    main(["selection", "--root", str(root), "--run-id", "bronze-full"])
     capsys.readouterr()
     main(["silver", "--root", str(root)])
     capsys.readouterr()
@@ -433,7 +521,7 @@ def test_cli_bronze_defaults_to_gap_aware_windows(
     FakeEodhdClient.requests = []
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -500,7 +588,7 @@ def test_cli_bronze_skips_non_quote_data_when_quote_plan_is_empty(
     capsys.readouterr()
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -518,7 +606,7 @@ def test_cli_bronze_skips_non_quote_data_when_quote_plan_is_empty(
     FakeEodhdClient.requests = []
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--run-id",
@@ -572,7 +660,7 @@ def test_cli_bronze_accepts_concurrency_override(
 
     main(
         [
-            "bronze",
+            "selection",
             "--root",
             str(root),
             "--mock",
@@ -627,7 +715,7 @@ def test_cli_bronze_rejects_overlapping_run(
     ):
         main(
             [
-                "bronze",
+                "selection",
                 "--root",
                 str(root),
                 "--mock",
@@ -701,7 +789,7 @@ def test_cli_refresh_runs_bronze_silver_and_gold(
 
 def test_cli_bronze_rejects_removed_incremental_flag() -> None:
     with pytest.raises(SystemExit):
-        main(["bronze", "--incremental"])
+        main(["selection", "--incremental"])
 
 
 def test_cli_silver_accepts_concurrency_override(

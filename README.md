@@ -182,10 +182,22 @@ Search and Bronze have separate CLI calls. First run Search with the string to f
 uv run founder search "UCITS ETF"
 ```
 
-Then run Bronze from the approved universe pointer. By default this loads live EODHD quotes with gap-aware planning, writes Bronze quote/dividend/split rows, and writes Silver operational bronze metadata. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+To sync all currently listed EODHD symbol-list rows that contain an ISIN directly from the API, run
+the first module without additional arguments:
 
 ```bash
-uv run founder bronze
+uv run founder sync-eodhd-isins
+```
+
+This enumerates EODHD exchanges, fetches each exchange symbol list, keeps rows with non-empty ISINs,
+writes Search candidates and the canonical one-row-per-ISIN universe, and approves that universe for
+Bronze. On success, the command prints JSON including `isin_rows_fetched` and
+`unique_isins_fetched`. The API key is read from ignored local config such as `.env.local`.
+
+Then run Selection from the approved universe pointer. By default this loads live EODHD quotes with gap-aware planning, writes Bronze quote/dividend/split rows, and writes Silver operational bronze metadata. For first-time ISINs, quote loading requests the full available history up to the run date by omitting `from` and sending `to=<run-date>`:
+
+```bash
+uv run founder selection
 ```
 
 Build Silver quotes and Gold risk inputs explicitly after Bronze:
@@ -208,7 +220,7 @@ uv run founder refresh
 After a full-history run has written local quotes, later live loads check for per-ISIN quote gaps before downloading. They backfill historical gaps first, then ingest the fresh tail up to the run date:
 
 ```bash
-uv run founder bronze
+uv run founder selection
 ```
 
 Gap-aware Bronze reads existing Silver quote dates, expands each ISIN into the missing quote windows, and keeps first-time ISINs in the plan for full-history loading. The resulting windows are used for quotes, dividends, and splits. Remaining quote gaps are recorded in `lake/silver/coverage/quote_gaps.parquet`.
@@ -218,14 +230,14 @@ The gap-aware approach currently discovers windows from quote history, then appl
 Use `--mock` for a local no-token Bronze run that writes deterministic Bronze quote and operational metadata artifacts:
 
 ```bash
-uv run founder bronze --mock
+uv run founder selection --mock
 ```
 
 Limit Bronze to the first `N` approved canonical ISINs, or to one exact ISIN, when testing a small batch. `--limit` and `--isin` are mutually exclusive:
 
 ```bash
-uv run founder bronze --limit 10 --mock
-uv run founder bronze --isin IE0000000001 --mock
+uv run founder selection --limit 10 --mock
+uv run founder selection --isin IE0000000001 --mock
 ```
 
 Pass `--start-date` and/or `--end-date` only when you want to restrict the live EODHD history window.
@@ -243,7 +255,7 @@ FOUNDER_UV=/home/vcs/.local/bin/uv
 FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
 
 # Daily lake refresh at 18:00 local server time.
-# Runs Bronze -> Silver -> Gold; each layer refuses to overlap an active same-layer run.
+# Runs Selection -> Silver -> Gold; each layer refuses to overlap an active same-layer run.
 0 18 * * * cd "$FOUNDER_PROJECT" && "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
@@ -282,7 +294,7 @@ All CLI commands support `--debug` for more detailed module logs:
 
 ```bash
 uv run founder search "UCITS ETF" --debug
-uv run founder bronze --mock --debug
+uv run founder selection --mock --debug
 uv run founder dry-run --debug
 ```
 

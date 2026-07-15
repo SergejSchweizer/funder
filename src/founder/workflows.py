@@ -125,6 +125,76 @@ def run_search_workflow(
     return summary
 
 
+def run_search_sync_isins_workflow(
+    *,
+    root: Path,
+    config_loader: ConfigLoader,
+    client_factory: ClientFactory,
+    search_run_id: str | None = None,
+    run_date: date | None = None,
+    approve: bool = True,
+) -> dict[str, Any]:
+    """Enumerate EODHD exchange symbol lists and write all rows with ISINs."""
+
+    paths = LakePaths(root=root)
+    resolved_run_date = run_date or date.today()
+    resolved_search_run_id = search_run_id or generated_run_id(
+        "sync-eodhd-isins", run_date=resolved_run_date
+    )
+    client = client_factory(config_loader())
+    exchange_codes = _load_eodhd_exchange_codes(client)
+    raw_candidates: list[dict[str, Any]] = []
+    failed_exchanges: list[str] = []
+    for exchange_code in exchange_codes:
+        try:
+            rows = _load_eodhd_symbol_list(client, exchange_code)
+        except Exception as exc:
+            LOGGER.warning(
+                "EODHD symbol-list sync failed exchange=%s error=%s",
+                exchange_code,
+                exc,
+            )
+            failed_exchanges.append(exchange_code)
+            continue
+        raw_candidates.extend(row for row in rows if str(row.get("Isin", "")).strip())
+
+    LOGGER.info(
+        "running search ISIN sync search_run_id=%s exchanges=%s candidates=%s failed_exchanges=%s",
+        resolved_search_run_id,
+        len(exchange_codes),
+        len(raw_candidates),
+        len(failed_exchanges),
+    )
+    candidates = write_search_run(
+        raw_candidates,
+        paths=paths,
+        search_run_id=resolved_search_run_id,
+        query="ALL_EODHD_ISINS",
+        run_date=resolved_run_date,
+        found_at=datetime.combine(resolved_run_date, datetime.min.time(), tzinfo=UTC),
+    )
+    canonical = write_canonical_universe(paths, resolved_search_run_id)
+    summary: dict[str, Any] = {
+        "candidate_rows": len(candidates),
+        "canonical_rows": len(canonical),
+        "exchange_rows": len(exchange_codes),
+        "failed_exchanges": failed_exchanges,
+        "isin_rows_fetched": len(candidates),
+        "query": "ALL_EODHD_ISINS",
+        "search_run_id": resolved_search_run_id,
+        "unique_isins_fetched": len(canonical),
+    }
+    if approve:
+        summary["approved_universe"] = approve_universe(paths, resolved_search_run_id)
+    LOGGER.info(
+        "search ISIN sync complete search_run_id=%s canonical_rows=%s failed_exchanges=%s",
+        resolved_search_run_id,
+        len(canonical),
+        len(failed_exchanges),
+    )
+    return summary
+
+
 def run_bronze_workflow(
     *,
     root: Path,
@@ -474,6 +544,33 @@ def _filter_candidates(rows: Sequence[dict[str, Any]], query: str) -> list[dict[
         for row in rows
         if normalized_query in normalize_name(str(row.get("name", row.get("Name", ""))))
     ]
+
+
+def _load_eodhd_exchange_codes(client: EodhdClient) -> list[str]:
+    payload = client.get_json("/exchanges-list/", {"fmt": "json"})
+    if not isinstance(payload, list):
+        raise ValueError("EODHD exchanges-list response must be a list")
+    codes: set[str] = set()
+    for item in cast(list[object], payload):
+        if not isinstance(item, dict):
+            continue
+        code = str(cast(dict[str, Any], item).get("Code", "")).strip().upper()
+        if code:
+            codes.add(code)
+    if not codes:
+        raise ValueError("EODHD exchanges-list response did not contain exchange codes")
+    return sorted(codes)
+
+
+def _load_eodhd_symbol_list(client: EodhdClient, exchange_code: str) -> list[dict[str, Any]]:
+    payload = client.get_json(f"/exchange-symbol-list/{exchange_code}", {"fmt": "json"})
+    if not isinstance(payload, list):
+        raise ValueError(f"EODHD symbol-list response for {exchange_code} must be a list")
+    rows: list[dict[str, Any]] = []
+    for item in cast(list[object], payload):
+        if isinstance(item, dict):
+            rows.append(cast(dict[str, Any], item))
+    return rows
 
 
 def _mock_quote_rows(start_date: date, end_date: date) -> list[dict[str, Any]]:
