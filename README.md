@@ -21,7 +21,7 @@ Last reviewed: 2026-07-13
 
 Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build risk-aware fund portfolio weights.
 
-The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored environment files such as `.env.local`; never commit real tokens.
+The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored secret files such as `.secrets/eodhd.yaml` or `.env.local`; never commit real tokens.
 
 ## Onboarding Path
 
@@ -38,12 +38,9 @@ New contributors should read the documentation in this order:
 - The local Python environment uses Python 3.14.5 in `.venv/`.
 - The main market data source is the EODHD subscription for EOD Historical Data.
 - The intended trading venue/broker is Flatex.
-- EODHD Search API supports lookup by ticker, company/fund name, or ISIN through `/api/search/{query_string}`.
-- EODHD Search API can filter by asset type with `type=etf` or `type=fund`, but each search response is capped at 500 results.
-- A complete broad lookup for names containing `UCITS ETF` requires enumerating EODHD exchange symbol lists and filtering locally.
-- The generated discovery dataset is stored at `docs/eodhd_ucits_etf_matches.csv`.
-- Portfolio loads should use one canonical listing per ISIN: prefer `XETRA` when that ISIN is listed there, otherwise select a fallback exchange deterministically.
-- The canonical no-duplicate-ISIN dataset is stored at `docs/eodhd_ucits_etf_canonical_isins.csv`.
+- `fetch_all_isins` enumerates EODHD exchange symbol lists and stores the complete ISIN-bearing metadata universe once under `lake/reference/all_isins/`.
+- `metadata_filter` and `univariate_filter` create referencable selections from that reference metadata or from Gold univariate statistics.
+- Portfolio loads should use explicit persisted selections, not ad hoc discovery files.
 - EODHD HTTP requests are paced by the shared client and retry rate-limit responses with `Retry-After` support.
 
 ## ETF Discovery Statistics
@@ -183,16 +180,16 @@ fetch_all_isins
   -> bivariate_statistics
 ```
 
-`fetch_all_isins` is the only source of the full EODHD ISIN universe. It refreshes an irregularly updated all-ISIN dataset and writes it once for every later module. Target command shape:
+`fetch_all_isins` is the only source of the full EODHD ISIN universe. It refreshes an irregularly updated all-ISIN dataset and writes it once for every later module:
 
 ```bash
 uv run founder fetch-all-isins
 ```
 
-`metadata_filter` reads only the all-ISIN source, applies conjunctive metadata predicates, and writes a hash-addressable selection with `isins.parquet` and `manifest.json`. Target command shape:
+`metadata_filter` reads only the all-ISIN source, applies conjunctive metadata predicates, and writes a hash-addressable selection with `isins.parquet` and `manifest.json`:
 
 ```bash
-uv run founder metadata-filter --where type=ETF currency=EUR exchange=XETRA
+uv run founder metadata-filter --where instrument_type=ETF --where currency=EUR --where exchange=XETRA
 ```
 
 `univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
@@ -201,13 +198,13 @@ uv run founder metadata-filter --where type=ETF currency=EUR exchange=XETRA
 uv run founder univariate-statistics
 ```
 
-`univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`. Target command shape:
+`univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`:
 
 ```bash
-uv run founder univariate-filter --where sharpe>0 sortino>0 max_drawdown>-0.3
+uv run founder univariate-filter --where sharpe_ratio>0 --where sortino_ratio>0 --where max_drawdown>-0.3
 ```
 
-`bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates. Target command shape:
+`bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 
 ```bash
 uv run founder bivariate-statistics --selection-id <selection_id>
@@ -248,7 +245,14 @@ The dry run writes discovery candidates, a canonical universe, bronze plan, quot
 
 Founder spaces EODHD requests by default and retries transient failures so large loads do not hammer the API. Bronze is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
 
-Tune these values in `.env.local` when the subscription limit changes:
+Prefer `.secrets/eodhd.yaml` for the API token:
+
+```yaml
+eodhd:
+  api_key: "your-token"
+```
+
+`.env.local` remains supported for non-secret local tuning and fallback token loading. Tune these values there when the subscription limit changes:
 
 ```text
 EODHD_TIMEOUT_SECONDS=30

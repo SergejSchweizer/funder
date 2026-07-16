@@ -2,22 +2,45 @@ from pathlib import Path
 
 import pytest
 
-from founder.config import EodhdConfig, MissingConfigError, load_eodhd_config, read_env_file
+from founder.config import (
+    EodhdConfig,
+    MissingConfigError,
+    load_eodhd_config,
+    read_env_file,
+    read_secret_config,
+)
 
 
 def test_load_eodhd_config_requires_token() -> None:
     with pytest.raises(MissingConfigError, match="EODHD_API_TOKEN"):
-        load_eodhd_config(env={}, env_file=None)
+        load_eodhd_config(env={}, env_file=None, secret_config=None)
 
 
 def test_load_eodhd_config_prefers_env_over_file(tmp_path: Path) -> None:
     env_file = tmp_path / ".env.local"
     env_file.write_text("EODHD_API_TOKEN=file-token\n")
 
-    config = load_eodhd_config(env={"EODHD_API_TOKEN": "env-token"}, env_file=env_file)
+    config = load_eodhd_config(
+        env={"EODHD_API_TOKEN": "env-token"},
+        env_file=env_file,
+        secret_config=None,
+    )
 
     assert config.api_token == "env-token"
     assert "env-token" not in repr(config)
+
+
+def test_load_eodhd_config_prefers_secret_config_over_env(tmp_path: Path) -> None:
+    secret_config = tmp_path / "eodhd.yaml"
+    secret_config.write_text("eodhd:\n  api_key: secret-token\n", encoding="utf-8")
+
+    config = load_eodhd_config(
+        env={"EODHD_API_TOKEN": "env-token"},
+        env_file=None,
+        secret_config=secret_config,
+    )
+
+    assert config.api_token == "secret-token"
 
 
 def test_load_eodhd_config_reads_http_rate_limit_settings() -> None:
@@ -31,6 +54,7 @@ def test_load_eodhd_config_reads_http_rate_limit_settings() -> None:
             "EODHD_RETRY_BACKOFF_SECONDS": "2.5",
         },
         env_file=None,
+        secret_config=None,
     )
 
     assert config.base_url == "https://example.test/api"
@@ -65,3 +89,10 @@ def test_read_env_file_ignores_comments_and_blank_lines(tmp_path: Path) -> None:
     values = read_env_file(env_file)
 
     assert values == {"EODHD_API_TOKEN": "abc"}
+
+
+def test_read_secret_config_accepts_flat_api_key(tmp_path: Path) -> None:
+    secret_config = tmp_path / "eodhd.yaml"
+    secret_config.write_text("api_key: 'abc'\n", encoding="utf-8")
+
+    assert read_secret_config(secret_config) == {"EODHD_API_TOKEN": "abc"}

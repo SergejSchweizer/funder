@@ -34,6 +34,30 @@ class LakePaths:
     def silver_search_run(self, search_run_id: str) -> Path:
         return self.silver / "search" / f"search_run_id={search_run_id}"
 
+    def all_isins(self) -> Path:
+        return self.root / "reference" / "all_isins" / "all_isins.parquet"
+
+    def all_isins_manifest(self) -> Path:
+        return self.root / "reference" / "all_isins" / "manifest.json"
+
+    def metadata_filter_run(self, selection_id: str) -> Path:
+        return self.silver / "metadata_filter" / f"selection_id={selection_id}"
+
+    def metadata_filter_isins(self, selection_id: str) -> Path:
+        return self.metadata_filter_run(selection_id) / "isins.parquet"
+
+    def metadata_filter_manifest(self, selection_id: str) -> Path:
+        return self.metadata_filter_run(selection_id) / "manifest.json"
+
+    def univariate_filter_run(self, selection_id: str) -> Path:
+        return self.silver / "univariate_filter" / f"selection_id={selection_id}"
+
+    def univariate_filter_isins(self, selection_id: str) -> Path:
+        return self.univariate_filter_run(selection_id) / "isins.parquet"
+
+    def univariate_filter_manifest(self, selection_id: str) -> Path:
+        return self.univariate_filter_run(selection_id) / "manifest.json"
+
     def canonical_universe(self, search_run_id: str) -> Path:
         return self.silver_search_run(search_run_id) / "canonical_universe.parquet"
 
