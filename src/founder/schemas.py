@@ -103,6 +103,25 @@ class DatasetContract:
 
 
 SCHEMAS: dict[str, tuple[str, ...]] = {
+    "all_isins": (
+        "isin",
+        "exchange",
+        "code",
+        "name",
+        "instrument_type",
+        "country",
+        "currency",
+        "source_exchange",
+        "fetched_at",
+    ),
+    "isin_selection": (
+        "selection_id",
+        "isin",
+        "exchange",
+        "code",
+        "name",
+        "source_module",
+    ),
     "search_candidates": (
         "search_run_id",
         "query",
@@ -452,6 +471,8 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
 }
 
 DATASET_OWNERS: dict[str, str] = {
+    "all_isins": "fetch_all_isins",
+    "isin_selection": "selection",
     "search_candidates": "search",
     "canonical_universe": "search",
     "bronze_plan": "bronze",
@@ -484,6 +505,8 @@ DATASET_OWNERS: dict[str, str] = {
 }
 
 DATASET_SORT_KEYS: dict[str, tuple[str, ...]] = {
+    "all_isins": ("isin", "exchange", "code"),
+    "isin_selection": ("selection_id", "isin", "exchange", "code"),
     "search_candidates": ("search_run_id", "isin", "exchange", "code"),
     "canonical_universe": ("isin",),
     "bronze_plan": ("run_id", "isin", "exchange", "code"),

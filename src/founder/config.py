@@ -28,6 +28,39 @@ def read_env_file(path: Path) -> Mapping[str, str]:
     return MappingProxyType(values)
 
 
+def read_secret_config(path: Path) -> Mapping[str, str]:
+    """Read a small local secret config file without requiring YAML dependencies."""
+    if not path.exists():
+        return MappingProxyType({})
+
+    values: dict[str, str] = {}
+    parent_key = ""
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line_without_comment = raw_line.split("#", 1)[0].rstrip()
+        if not line_without_comment.strip() or ":" not in line_without_comment:
+            continue
+        indent = len(line_without_comment) - len(line_without_comment.lstrip())
+        key, value = line_without_comment.strip().split(":", 1)
+        key = key.strip()
+        cleaned_value = value.strip().strip('"').strip("'")
+        if indent == 0 and cleaned_value == "":
+            parent_key = key
+            continue
+        if cleaned_value == "":
+            continue
+        normalized_key = key.upper()
+        is_eodhd_token = parent_key.casefold() == "eodhd" and normalized_key in {
+            "API_KEY",
+            "API_TOKEN",
+            "TOKEN",
+        }
+        if is_eodhd_token or normalized_key in {"EODHD_API_TOKEN", "API_KEY", "API_TOKEN"}:
+            values["EODHD_API_TOKEN"] = cleaned_value
+        elif normalized_key.startswith("EODHD_"):
+            values[normalized_key] = cleaned_value
+    return MappingProxyType(values)
+
+
 @dataclass(frozen=True)
 class EodhdConfig:
     """EODHD API configuration."""
@@ -66,12 +99,16 @@ def load_eodhd_config(
     *,
     env: Mapping[str, str] | None = None,
     env_file: Path | None = Path(".env.local"),
+    secret_config: Path | None = Path(".secrets/eodhd.yaml"),
 ) -> EodhdConfig:
-    """Load EODHD configuration from process env, optionally falling back to a file."""
+    """Load EODHD configuration from local files and process env."""
     source = dict(os.environ if env is None else env)
     if env_file is not None:
         file_values = read_env_file(env_file)
         source = {**file_values, **source}
+    if secret_config is not None:
+        secret_values = read_secret_config(secret_config)
+        source = {**source, **secret_values}
 
     token = source.get("EODHD_API_TOKEN", "")
     return EodhdConfig(

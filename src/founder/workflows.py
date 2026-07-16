@@ -1,16 +1,20 @@
-"""Operational workflows behind the three Founder CLI modules."""
+"""Operational workflows behind the Founder CLI modules."""
 
 from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
 from founder.bivariate_statistics import write_bivariate_statistics
+from founder.config import load_eodhd_config
+from founder.fetch_all_isins import fetch_all_isins, write_all_isins
+from founder.http import EodhdClient
 from founder.logging import get_logger
+from founder.metadata_filter import run_metadata_filter
 from founder.paths import LakePaths
 from founder.search import (
     approve_universe,
@@ -18,7 +22,9 @@ from founder.search import (
     write_canonical_universe,
     write_search_run,
 )
+from founder.selection_filters import parse_predicates
 from founder.silver import read_silver_quotes
+from founder.univariate_filter import run_univariate_filter, selection_rows
 from founder.univariate_statistics import (
     DEFAULT_CONFIDENCE_LEVEL,
     build_quote_returns,
@@ -83,6 +89,42 @@ def run_search_workflow(
     return summary
 
 
+def run_fetch_all_isins_workflow(
+    *,
+    root: Path,
+    exchange_codes: Sequence[str] = (),
+    include_delisted: bool = False,
+) -> dict[str, Any]:
+    """Fetch and persist the all-ISIN reference dataset."""
+    paths = LakePaths(root=root)
+    client = EodhdClient(load_eodhd_config())
+    rows = fetch_all_isins(
+        client,
+        exchange_codes=exchange_codes,
+        include_delisted=include_delisted,
+    )
+    written = write_all_isins(paths, rows)
+    return {
+        "all_isins_rows": len(written),
+        "exchange_count": len({str(row["source_exchange"]) for row in written}),
+        "path": str(paths.all_isins()),
+    }
+
+
+def run_metadata_filter_workflow(
+    *,
+    root: Path,
+    predicates: Sequence[str],
+    selection_name: str | None = None,
+) -> dict[str, Any]:
+    """Run Metadata Filter over the reference all-ISIN dataset."""
+    return run_metadata_filter(
+        LakePaths(root=root),
+        parse_predicates(predicates),
+        name=selection_name,
+    )
+
+
 def run_univariate_statistics_workflow(
     *,
     root: Path,
@@ -100,11 +142,31 @@ def run_univariate_statistics_workflow(
     }
 
 
-def run_bivariate_statistics_workflow(*, root: Path) -> dict[str, Any]:
+def run_univariate_filter_workflow(
+    *,
+    root: Path,
+    predicates: Sequence[str],
+    selection_name: str | None = None,
+) -> dict[str, Any]:
+    """Run Univariate Filter over persisted Gold univariate statistics."""
+    return run_univariate_filter(
+        LakePaths(root=root),
+        parse_predicates(predicates),
+        name=selection_name,
+    )
+
+
+def run_bivariate_statistics_workflow(
+    *,
+    root: Path,
+    selection_id: str | None = None,
+) -> dict[str, Any]:
     """Build reusable pairwise statistics from existing Silver quotes."""
     paths = LakePaths(root=root)
-    LOGGER.info("running bivariate statistics root=%s", root)
+    LOGGER.info("running bivariate statistics root=%s selection_id=%s", root, selection_id)
     quotes = read_silver_quotes(paths)
+    if selection_id is not None:
+        quotes = _filter_quotes_to_selection(quotes, selection_rows(paths, selection_id))
     returns = build_quote_returns(quotes)
     rows = write_bivariate_statistics(paths, returns)
     LOGGER.info("bivariate statistics complete root=%s rows=%s", root, len(rows))
@@ -112,7 +174,20 @@ def run_bivariate_statistics_workflow(*, root: Path) -> dict[str, Any]:
         "bivariate_statistics_rows": len(rows),
         "quote_rows": len(quotes),
         "return_rows": len(returns),
+        "selection_id": selection_id or "",
     }
+
+
+def _filter_quotes_to_selection(
+    quotes: Sequence[Mapping[str, Any]],
+    selected_rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    selected = {(str(row["isin"]), str(row["exchange"]), str(row["code"])) for row in selected_rows}
+    return [
+        dict(row)
+        for row in quotes
+        if (str(row["isin"]), str(row["exchange"]), str(row["code"])) in selected
+    ]
 
 
 def _slug(value: str) -> str:
