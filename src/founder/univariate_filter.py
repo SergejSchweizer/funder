@@ -72,6 +72,14 @@ def write_univariate_selection(
             "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         },
     )
+    write_json(
+        paths.current_univariate_filter_selection(),
+        {
+            "selection_id": selection_id_value,
+            "selection_path": str(paths.univariate_filter_isins(selection_id_value)),
+            "manifest_path": str(paths.univariate_filter_manifest(selection_id_value)),
+        },
+    )
     return selection_rows
 
 

@@ -398,11 +398,13 @@ Univariate feature semantics, ranges, and units. The empirical column is compute
 | `last_distribution_date` | Latest positive dividend event date. | ISO date, or empty when no dividend event exists. | Date | n/a |
 | `distribution_observation_count` | Number of positive dividend events used for distribution inference. | Integer `>= 0`. | Rows | `8.7322 [-43.8037, 61.2681]` |
 
-`bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
+`bivariate_statistics` computes reusable pairwise statistics for the latest persisted `univariate_filter` selection by default. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 
 ```bash
-uv run founder bivariate-statistics --selection-id <selection_id>
+uv run founder bivariate-statistics
 ```
+
+Use `--selection-id <selection_id>` only when intentionally rebuilding a specific `univariate_filter` or `metadata_filter` selection.
 
 Bivariate Statistics parallelizes pair work across all CPU cores visible to the system by default. Use `--concurrency <workers>` to cap worker processes.
 

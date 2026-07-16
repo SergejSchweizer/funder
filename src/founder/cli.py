@@ -170,7 +170,10 @@ def build_parser() -> argparse.ArgumentParser:
     bivariate.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
     bivariate.add_argument(
         "--selection-id",
-        help="Optional metadata-filter or univariate-filter selection id to restrict pair work.",
+        help=(
+            "Optional metadata-filter or univariate-filter selection id. "
+            "Defaults to the latest univariate-filter selection."
+        ),
     )
     bivariate.add_argument(
         "--concurrency",

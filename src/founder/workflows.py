@@ -195,10 +195,14 @@ def run_bivariate_statistics_workflow(
 ) -> dict[str, Any]:
     """Build reusable pairwise statistics from existing Silver quotes."""
     paths = LakePaths(root=root)
-    LOGGER.info("running bivariate statistics root=%s selection_id=%s", root, selection_id)
+    resolved_selection_id = selection_id or _current_univariate_filter_selection_id(paths)
+    LOGGER.info(
+        "running bivariate statistics root=%s selection_id=%s",
+        root,
+        resolved_selection_id,
+    )
     quotes = read_silver_quotes(paths)
-    if selection_id is not None:
-        quotes = _filter_quotes_to_selection(quotes, selection_rows(paths, selection_id))
+    quotes = _filter_quotes_to_selection(quotes, selection_rows(paths, resolved_selection_id))
     returns = build_quote_returns(quotes)
     rows = write_bivariate_statistics(paths, returns, concurrency=concurrency)
     workers = _worker_count(concurrency)
@@ -208,7 +212,7 @@ def run_bivariate_statistics_workflow(
         "concurrency": workers,
         "quote_rows": len(quotes),
         "return_rows": len(returns),
-        "selection_id": selection_id or "",
+        "selection_id": resolved_selection_id,
     }
 
 
@@ -251,6 +255,13 @@ def _current_metadata_selection_id(paths: LakePaths) -> str:
     return _latest_metadata_selection_id(paths)
 
 
+def _current_univariate_filter_selection_id(paths: LakePaths) -> str:
+    pointer_path = paths.current_univariate_filter_selection()
+    if pointer_path.exists():
+        return str(read_json(pointer_path)["selection_id"])
+    return _latest_univariate_filter_selection_id(paths)
+
+
 def _latest_metadata_selection_id(paths: LakePaths) -> str:
     manifests = sorted((paths.silver / "metadata_filter").glob("selection_id=*/manifest.json"))
     latest: tuple[str, str] | None = None
@@ -264,6 +275,23 @@ def _latest_metadata_selection_id(paths: LakePaths) -> str:
     if latest is None:
         raise FileNotFoundError(
             "metadata-filter selection does not exist; run metadata-filter first"
+        )
+    return latest[1]
+
+
+def _latest_univariate_filter_selection_id(paths: LakePaths) -> str:
+    manifests = sorted((paths.silver / "univariate_filter").glob("selection_id=*/manifest.json"))
+    latest: tuple[str, str] | None = None
+    for manifest_path in manifests:
+        manifest = read_json(manifest_path)
+        selection_id = str(manifest["selection_id"])
+        created_at = str(manifest.get("created_at", ""))
+        candidate = (created_at, selection_id)
+        if latest is None or candidate > latest:
+            latest = candidate
+    if latest is None:
+        raise FileNotFoundError(
+            "univariate-filter selection does not exist; run univariate-filter first"
         )
     return latest[1]
 

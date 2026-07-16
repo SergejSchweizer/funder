@@ -168,23 +168,23 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
     assert gold_rows[0]["last_distribution_date"] == "2026-02-15"
     assert read_rows(paths.gold_univariate_statistics("AS", "IE2")) == []
 
-    main(["bivariate-statistics", "--root", str(root)])
+    main(["bivariate-statistics", "--root", str(root), "--selection-id", "selected-ie1"])
     bivariate_output = capsys.readouterr()
-    assert json.loads(bivariate_output.out)["bivariate_statistics_rows"] == 1
+    bivariate_payload = json.loads(bivariate_output.out)
+    assert bivariate_payload["selection_id"] == "selected-ie1"
+    assert bivariate_payload["bivariate_statistics_rows"] == 0
     assert (
-        len(
-            read_rows(
-                paths.gold_bivariate_statistics_pair(
-                    "XETRA",
-                    "IE1",
-                    "AAA",
-                    "AS",
-                    "IE2",
-                    "BBB",
-                )
+        read_rows(
+            paths.gold_bivariate_statistics_pair(
+                "XETRA",
+                "IE1",
+                "AAA",
+                "AS",
+                "IE2",
+                "BBB",
             )
         )
-        == 1
+        == []
     )
 
 
@@ -212,7 +212,7 @@ def test_cli_restricts_bivariate_statistics_to_selection(
             ],
         )
     write_rows(
-        paths.metadata_filter_isins("two-listings"),
+        paths.univariate_filter_isins("two-listings"),
         [
             {
                 "selection_id": "two-listings",
@@ -220,10 +220,115 @@ def test_cli_restricts_bivariate_statistics_to_selection(
                 "exchange": "XETRA",
                 "code": "AAA",
                 "name": "",
-                "source_module": "metadata_filter",
+                "source_module": "univariate_filter",
             },
             {
                 "selection_id": "two-listings",
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "name": "",
+                "source_module": "univariate_filter",
+            },
+        ],
+    )
+    write_json(
+        paths.current_univariate_filter_selection(),
+        {"selection_id": "two-listings"},
+    )
+
+    main(["bivariate-statistics", "--root", str(root)])
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload["selection_id"] == "two-listings"
+    assert payload["quote_rows"] == 6
+    assert payload["bivariate_statistics_rows"] == 1
+
+
+def test_cli_bivariate_statistics_requires_univariate_selection(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="run univariate-filter first"):
+        main(["bivariate-statistics", "--root", str(tmp_path / "lake")])
+
+
+def test_cli_bivariate_statistics_uses_latest_univariate_manifest_without_pointer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    for isin, exchange, code, base in (
+        ("IE1", "XETRA", "AAA", 100.0),
+        ("IE2", "AS", "BBB", 120.0),
+    ):
+        write_rows(
+            paths.silver_quote_file(exchange, isin),
+            [
+                _quote(isin, exchange, code, "2026-01-01", base),
+                _quote(isin, exchange, code, "2026-01-02", base + 1.0),
+            ],
+        )
+    write_rows(
+        paths.univariate_filter_isins("latest-two"),
+        [
+            {
+                "selection_id": "latest-two",
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "",
+                "source_module": "univariate_filter",
+            },
+            {
+                "selection_id": "latest-two",
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "name": "",
+                "source_module": "univariate_filter",
+            },
+        ],
+    )
+    write_json(
+        paths.univariate_filter_manifest("latest-two"),
+        {"selection_id": "latest-two", "created_at": "2026-01-02T00:00:00+00:00"},
+    )
+
+    main(["bivariate-statistics", "--root", str(root), "--concurrency", "1"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["selection_id"] == "latest-two"
+    assert payload["bivariate_statistics_rows"] == 1
+
+
+def test_cli_bivariate_statistics_accepts_explicit_metadata_selection(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    for isin, exchange, code, base in (
+        ("IE1", "XETRA", "AAA", 100.0),
+        ("IE2", "AS", "BBB", 120.0),
+    ):
+        write_rows(
+            paths.silver_quote_file(exchange, isin),
+            [
+                _quote(isin, exchange, code, "2026-01-01", base),
+                _quote(isin, exchange, code, "2026-01-02", base + 1.0),
+            ],
+        )
+    write_rows(
+        paths.metadata_filter_isins("metadata-two"),
+        [
+            {
+                "selection_id": "metadata-two",
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "",
+                "source_module": "metadata_filter",
+            },
+            {
+                "selection_id": "metadata-two",
                 "isin": "IE2",
                 "exchange": "AS",
                 "code": "BBB",
@@ -233,11 +338,10 @@ def test_cli_restricts_bivariate_statistics_to_selection(
         ],
     )
 
-    main(["bivariate-statistics", "--root", str(root), "--selection-id", "two-listings"])
+    main(["bivariate-statistics", "--root", str(root), "--selection-id", "metadata-two"])
 
-    output = capsys.readouterr()
-    payload = json.loads(output.out)
-    assert payload["quote_rows"] == 6
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["selection_id"] == "metadata-two"
     assert payload["bivariate_statistics_rows"] == 1
 
 
@@ -324,6 +428,10 @@ def test_cli_runs_metadata_and_univariate_filter_modules(
     univariate_payload = json.loads(univariate_output.out)
     assert univariate_payload["selected_rows"] == 1
     assert len(read_rows(paths.univariate_filter_isins(univariate_payload["selection_id"]))) == 1
+    assert (
+        read_json(paths.current_univariate_filter_selection())["selection_id"]
+        == univariate_payload["selection_id"]
+    )
 
 
 def test_cli_metadata_filter_requires_a_filter(tmp_path: Path) -> None:

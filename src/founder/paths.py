@@ -61,6 +61,9 @@ class LakePaths:
     def univariate_filter_manifest(self, selection_id: str) -> Path:
         return self.univariate_filter_run(selection_id) / "manifest.json"
 
+    def current_univariate_filter_selection(self) -> Path:
+        return self.silver / "univariate_filter" / "current_selection.json"
+
     def canonical_universe(self, search_run_id: str) -> Path:
         return self.silver_search_run(search_run_id) / "canonical_universe.parquet"
 
