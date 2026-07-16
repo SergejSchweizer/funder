@@ -1,4 +1,7 @@
+import pytest
+
 from founder.fetch_all_isins import fetch_all_isins
+from founder.http import EodhdHttpError
 
 
 class FakeClient:
@@ -27,9 +30,11 @@ class FakeClient:
 
 
 def test_fetch_all_isins_enumerates_exchanges_and_keeps_isin_rows() -> None:
-    rows = fetch_all_isins(FakeClient())
+    result = fetch_all_isins(FakeClient())
 
-    assert rows == [
+    assert result.requested_exchanges == ("US", "XETRA")
+    assert result.skipped_exchanges == ()
+    assert list(result.rows) == [
         {
             "isin": "IE1",
             "exchange": "XETRA",
@@ -39,6 +44,32 @@ def test_fetch_all_isins_enumerates_exchanges_and_keeps_isin_rows() -> None:
             "country": "DE",
             "currency": "EUR",
             "source_exchange": "XETRA",
-            "fetched_at": rows[0]["fetched_at"],
+            "fetched_at": result.rows[0]["fetched_at"],
         }
     ]
+
+
+class ForbiddenExchangeClient(FakeClient):
+    def get_json(
+        self,
+        path: str,
+        params: dict[str, str | int | float] | None = None,
+    ) -> object:
+        if path == "/exchanges-list/":
+            return [{"Code": "MONEY"}, {"Code": "XETRA"}]
+        if path == "/exchange-symbol-list/MONEY":
+            raise EodhdHttpError("forbidden", status_code=403)
+        return super().get_json(path, params)
+
+
+def test_fetch_all_isins_skips_forbidden_auto_enumerated_exchanges() -> None:
+    result = fetch_all_isins(ForbiddenExchangeClient())
+
+    assert result.requested_exchanges == ("MONEY", "XETRA")
+    assert result.skipped_exchanges == ("MONEY",)
+    assert len(result.rows) == 1
+
+
+def test_fetch_all_isins_fails_for_explicit_forbidden_exchange() -> None:
+    with pytest.raises(EodhdHttpError, match="forbidden"):
+        fetch_all_isins(ForbiddenExchangeClient(), exchange_codes=("MONEY",))
