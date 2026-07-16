@@ -117,8 +117,9 @@ Use the three public modules to write and reuse the current contracts:
 
 ```bash
 uv run founder search "UCITS ETF"
-uv run founder univariate-statistics --root lake
+uv run founder metadata-filter --name-contains "UCITS ETF" --selection-name ucits-etf
+uv run founder univariate-statistics --root lake --selection-id <metadata_filter_selection_id>
 uv run founder bivariate-statistics --root lake
 ```
 
-Statistics outputs use stable listing and pair paths so later Search lists can reuse unchanged calculations.
+Statistics outputs use stable listing and pair paths so later metadata selections can reuse unchanged calculations.

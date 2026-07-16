@@ -120,6 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     univariate.add_argument("--root", default=str(DEFAULT_ROOT), help="Lake root to build from.")
     univariate.add_argument(
+        "--selection-id",
+        required=True,
+        help="Metadata-filter selection id to restrict univariate statistics.",
+    )
+    univariate.add_argument(
         "--confidence-level",
         type=float,
         default=DEFAULT_CONFIDENCE_LEVEL,
@@ -200,6 +205,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     elif args.command == "univariate-statistics":
         summary = run_univariate_statistics_workflow(
             root=Path(args.root),
+            selection_id=args.selection_id,
             confidence_level=args.confidence_level,
         )
     elif args.command == "univariate-filter":

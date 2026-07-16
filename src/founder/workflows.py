@@ -24,6 +24,7 @@ from founder.search import (
 )
 from founder.selection_filters import parse_predicates
 from founder.silver import read_silver_quotes
+from founder.table_io import read_rows
 from founder.univariate_filter import run_univariate_filter, selection_rows
 from founder.univariate_statistics import (
     DEFAULT_CONFIDENCE_LEVEL,
@@ -137,16 +138,20 @@ def run_metadata_filter_workflow(
 def run_univariate_statistics_workflow(
     *,
     root: Path,
+    selection_id: str,
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL,
 ) -> dict[str, Any]:
-    """Build reusable per-listing statistics from existing Silver quotes."""
+    """Build reusable per-listing statistics for one Metadata Filter selection."""
     paths = LakePaths(root=root)
-    LOGGER.info("running univariate statistics root=%s", root)
-    quotes = read_silver_quotes(paths)
+    LOGGER.info("running univariate statistics root=%s selection_id=%s", root, selection_id)
+    selected_rows = _metadata_selection_rows(paths, selection_id)
+    quotes = _filter_quotes_to_selection(read_silver_quotes(paths), selected_rows)
     rows = write_univariate_statistics(paths, quotes, confidence_level=confidence_level)
     LOGGER.info("univariate statistics complete root=%s rows=%s", root, len(rows))
     return {
         "quote_rows": len(quotes),
+        "selected_listing_count": len(selected_rows),
+        "selection_id": selection_id,
         "univariate_statistics_rows": len(rows),
     }
 
@@ -197,6 +202,13 @@ def _filter_quotes_to_selection(
         for row in quotes
         if (str(row["isin"]), str(row["exchange"]), str(row["code"])) in selected
     ]
+
+
+def _metadata_selection_rows(paths: LakePaths, selection_id: str) -> list[dict[str, Any]]:
+    selection_path = paths.metadata_filter_isins(selection_id)
+    if not selection_path.exists():
+        raise FileNotFoundError(f"metadata-filter selection does not exist: {selection_id}")
+    return read_rows(selection_path)
 
 
 def _slug(value: str) -> str:

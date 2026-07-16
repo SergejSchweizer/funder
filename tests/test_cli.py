@@ -92,11 +92,29 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
             _quote("IE2", "AS", "BBB", "2026-01-03", 100.0),
         ],
     )
+    write_rows(
+        paths.metadata_filter_isins("selected-ie1"),
+        [
+            {
+                "selection_id": "selected-ie1",
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
 
-    main(["univariate-statistics", "--root", str(root)])
+    main(["univariate-statistics", "--root", str(root), "--selection-id", "selected-ie1"])
     univariate_output = capsys.readouterr()
-    assert json.loads(univariate_output.out)["univariate_statistics_rows"] == 2
+    univariate_payload = json.loads(univariate_output.out)
+    assert univariate_payload["selection_id"] == "selected-ie1"
+    assert univariate_payload["selected_listing_count"] == 1
+    assert univariate_payload["quote_rows"] == 3
+    assert univariate_payload["univariate_statistics_rows"] == 1
     assert len(read_rows(paths.gold_univariate_statistics("XETRA", "IE1"))) == 1
+    assert read_rows(paths.gold_univariate_statistics("AS", "IE2")) == []
 
     main(["bivariate-statistics", "--root", str(root)])
     bivariate_output = capsys.readouterr()
