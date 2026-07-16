@@ -254,6 +254,82 @@ uv run founder univariate-statistics
 uv run founder univariate-filter --where sharpe_ratio>0 --where sortino_ratio>0 --where max_drawdown>-0.3
 ```
 
+Available `univariate-filter` options:
+
+```text
+--debug
+  Write verbose DEBUG logs.
+
+--root <path>
+  Lake root to read from. Defaults to lake.
+
+--where <predicate>
+  Required. Add one conjunctive predicate. Repeat this option for multiple predicates.
+
+--selection-name <name>
+  Optional stable human-readable name used in the generated selection id.
+```
+
+Supported predicate operators are the same as `metadata-filter`:
+
+```text
+field=value      exact text match
+field!=value     exact text mismatch
+field~value      case-insensitive substring match
+field>value      numeric greater-than
+field>=value     numeric greater-than-or-equal
+field<value      numeric less-than
+field<=value     numeric less-than-or-equal
+```
+
+Filterable univariate fields are the `univariate_statistics` columns:
+
+```text
+isin
+exchange
+code
+confidence_level
+first_quote_date
+last_quote_date
+quote_observation_count
+first_return_date
+last_return_date
+return_observation_count
+start_adjusted_close
+end_adjusted_close
+total_return
+cagr
+cumulative_log_return
+mean_log_return
+median_log_return
+min_log_return
+max_log_return
+mean_simple_return
+median_simple_return
+min_simple_return
+max_simple_return
+daily_log_return_std
+daily_simple_return_std
+annualized_return
+annualized_log_return
+annualized_simple_return
+annualized_geometric_return
+annualized_volatility
+realized_variance
+realized_volatility
+downside_deviation
+sharpe_ratio
+sortino_ratio
+var
+expected_shortfall
+tail_observation_count
+max_drawdown
+positive_day_ratio
+log_price_slope
+trend_r_squared
+availability_reason
+```
+
 `bivariate_statistics` computes reusable pairwise statistics for a persisted selection. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 
 ```bash
