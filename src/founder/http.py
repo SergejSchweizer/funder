@@ -18,6 +18,10 @@ from founder.config import EodhdConfig
 class EodhdHttpError(RuntimeError):
     """Raised after an EODHD request cannot be completed."""
 
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class EodhdClient:
     """HTTP client that keeps API-token handling in one place."""
@@ -72,7 +76,11 @@ class EodhdClient:
                 self._sleep_before_retry(attempt, None)
 
         safe_url = self.sanitized_url(path, params)
-        raise EodhdHttpError(f"EODHD request failed for {safe_url}") from last_error
+        status_code = last_error.code if isinstance(last_error, urllib.error.HTTPError) else None
+        raise EodhdHttpError(
+            f"EODHD request failed for {safe_url}",
+            status_code=status_code,
+        ) from last_error
 
     def _open(self, url: str) -> Any:
         with self._request_lock:

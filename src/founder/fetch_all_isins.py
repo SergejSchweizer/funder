@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
+from founder.http import EodhdHttpError
 from founder.paths import LakePaths
 from founder.schemas import validate_rows
 from founder.table_io import JsonRow, write_json, write_rows
@@ -21,27 +23,50 @@ class EodhdJsonClient(Protocol):
     ) -> object: ...
 
 
+@dataclass(frozen=True)
+class AllIsinsFetchResult:
+    """Result of a full EODHD ISIN metadata refresh."""
+
+    rows: tuple[JsonRow, ...]
+    requested_exchanges: tuple[str, ...]
+    skipped_exchanges: tuple[str, ...]
+
+
 def fetch_all_isins(
     client: EodhdJsonClient,
     *,
     exchange_codes: Sequence[str] = (),
     include_delisted: bool = False,
-) -> list[JsonRow]:
+) -> AllIsinsFetchResult:
     """Fetch and normalize all available ISIN-bearing EODHD listings."""
+    explicit_exchanges = bool(exchange_codes)
     resolved_exchanges = tuple(exchange_codes) or _fetch_exchange_codes(client)
     fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     rows: list[JsonRow] = []
+    skipped_exchanges: list[str] = []
     for exchange in resolved_exchanges:
-        payload = client.get_json(
-            f"/exchange-symbol-list/{exchange}",
-            {"fmt": "json", "delisted": 1 if include_delisted else 0},
-        )
+        try:
+            payload = client.get_json(
+                f"/exchange-symbol-list/{exchange}",
+                {"fmt": "json", "delisted": 1 if include_delisted else 0},
+            )
+        except EodhdHttpError as error:
+            if explicit_exchanges or error.status_code not in {403, 404}:
+                raise
+            skipped_exchanges.append(exchange)
+            continue
         rows.extend(
             _normalize_listing(row, source_exchange=exchange, fetched_at=fetched_at)
             for row in _payload_rows(payload)
             if str(row.get("Isin", row.get("isin", ""))).strip()
         )
-    return sorted(rows, key=lambda row: (str(row["isin"]), str(row["exchange"]), str(row["code"])))
+    return AllIsinsFetchResult(
+        rows=tuple(
+            sorted(rows, key=lambda row: (str(row["isin"]), str(row["exchange"]), str(row["code"])))
+        ),
+        requested_exchanges=resolved_exchanges,
+        skipped_exchanges=tuple(skipped_exchanges),
+    )
 
 
 def write_all_isins(paths: LakePaths, rows: Sequence[Mapping[str, Any]]) -> list[JsonRow]:

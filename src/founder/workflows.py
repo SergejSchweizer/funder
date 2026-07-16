@@ -98,16 +98,19 @@ def run_fetch_all_isins_workflow(
     """Fetch and persist the all-ISIN reference dataset."""
     paths = LakePaths(root=root)
     client = EodhdClient(load_eodhd_config())
-    rows = fetch_all_isins(
+    fetch_result = fetch_all_isins(
         client,
         exchange_codes=exchange_codes,
         include_delisted=include_delisted,
     )
-    written = write_all_isins(paths, rows)
+    written = write_all_isins(paths, fetch_result.rows)
     return {
         "all_isins_rows": len(written),
         "exchange_count": len({str(row["source_exchange"]) for row in written}),
         "path": str(paths.all_isins()),
+        "requested_exchange_count": len(fetch_result.requested_exchanges),
+        "skipped_exchange_count": len(fetch_result.skipped_exchanges),
+        "skipped_exchanges": list(fetch_result.skipped_exchanges),
     }
 
 
