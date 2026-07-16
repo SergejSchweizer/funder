@@ -218,11 +218,26 @@ def _metadata_selection_rows(paths: LakePaths, selection_id: str) -> list[dict[s
 
 def _current_metadata_selection_id(paths: LakePaths) -> str:
     pointer_path = paths.current_metadata_filter_selection()
-    if not pointer_path.exists():
+    if pointer_path.exists():
+        return str(read_json(pointer_path)["selection_id"])
+    return _latest_metadata_selection_id(paths)
+
+
+def _latest_metadata_selection_id(paths: LakePaths) -> str:
+    manifests = sorted((paths.silver / "metadata_filter").glob("selection_id=*/manifest.json"))
+    latest: tuple[str, str] | None = None
+    for manifest_path in manifests:
+        manifest = read_json(manifest_path)
+        selection_id = str(manifest["selection_id"])
+        created_at = str(manifest.get("created_at", ""))
+        candidate = (created_at, selection_id)
+        if latest is None or candidate > latest:
+            latest = candidate
+    if latest is None:
         raise FileNotFoundError(
-            "current metadata-filter selection does not exist; run metadata-filter first"
+            "metadata-filter selection does not exist; run metadata-filter first"
         )
-    return str(read_json(pointer_path)["selection_id"])
+    return latest[1]
 
 
 def _slug(value: str) -> str:
