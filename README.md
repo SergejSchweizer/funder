@@ -192,6 +192,48 @@ uv run founder fetch-all-isins
 uv run founder metadata-filter --where instrument_type=ETF --where currency=EUR --where exchange=XETRA
 ```
 
+Available `metadata-filter` options:
+
+```text
+--debug
+  Write verbose DEBUG logs.
+
+--root <path>
+  Lake root to read from. Defaults to lake.
+
+--where <predicate>
+  Required. Add one conjunctive predicate. Repeat this option for multiple predicates.
+
+--selection-name <name>
+  Optional stable human-readable name used in the generated selection id.
+```
+
+Supported predicate operators:
+
+```text
+field=value      exact text match
+field!=value     exact text mismatch
+field~value      case-insensitive substring match
+field>value      numeric greater-than
+field>=value     numeric greater-than-or-equal
+field<value      numeric less-than
+field<=value     numeric less-than-or-equal
+```
+
+Filterable metadata fields are the `all_isins` columns:
+
+```text
+isin
+exchange
+code
+name
+instrument_type
+country
+currency
+source_exchange
+fetched_at
+```
+
 `univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
 
 ```bash
