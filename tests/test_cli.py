@@ -137,6 +137,23 @@ def test_cli_runs_fetch_all_quotes_module(
     }
 
 
+def test_fetch_all_quotes_cli_defaults_to_two_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "quotes-cli"}
+
+    monkeypatch.setattr("founder.cli.run_fetch_all_quotes_workflow", fake_workflow)
+
+    main(["fetch-all-quotes", "--root", str(root)])
+
+    assert captured["concurrency"] == 2
+
+
 def test_standalone_fetch_all_quotes_cli(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -168,6 +185,23 @@ def test_standalone_fetch_all_quotes_cli(
     assert captured["concurrency"] == 5
     assert captured["end_date"] == date.fromisoformat("2026-02-01")
     assert captured["root"] == root
+
+
+def test_standalone_fetch_all_quotes_cli_defaults_to_two_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "standalone-quotes"}
+
+    monkeypatch.setattr("founder.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
+
+    fetch_all_quotes_main(["--root", str(root)])
+
+    assert captured["concurrency"] == 2
 
 
 def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
