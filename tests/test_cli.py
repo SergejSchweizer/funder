@@ -105,13 +105,31 @@ def test_cli_runs_univariate_and_bivariate_statistics_modules(
             }
         ],
     )
+    write_rows(
+        paths.metadata_filter_isins("older-ie2"),
+        [
+            {
+                "selection_id": "older-ie2",
+                "isin": "IE2",
+                "exchange": "AS",
+                "code": "BBB",
+                "name": "",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
     write_json(
-        paths.current_metadata_filter_selection(),
+        paths.metadata_filter_manifest("older-ie2"),
+        {
+            "selection_id": "older-ie2",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    write_json(
+        paths.metadata_filter_manifest("selected-ie1"),
         {
             "selection_id": "selected-ie1",
-            "selection_path": str(paths.metadata_filter_isins("selected-ie1")),
-            "manifest_path": str(paths.metadata_filter_manifest("selected-ie1")),
-            "updated_at": "2026-01-01T00:00:00+00:00",
+            "created_at": "2026-01-02T00:00:00+00:00",
         },
     )
 
