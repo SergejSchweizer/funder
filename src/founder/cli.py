@@ -99,8 +99,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--where",
         action="append",
         default=[],
-        required=True,
         help="Conjunctive predicate such as country=DE, name~UCITS, or volume>=1000.",
+    )
+    metadata_filter.add_argument(
+        "--name-contains",
+        action="append",
+        default=[],
+        help="Case-insensitive text search in the instrument name. May be repeated.",
     )
     metadata_filter.add_argument("--selection-name", help="Optional stable human-readable name.")
     univariate = subparsers.add_parser(
@@ -189,6 +194,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         summary = run_metadata_filter_workflow(
             root=Path(args.root),
             predicates=tuple(args.where),
+            name_contains=tuple(args.name_contains),
             selection_name=args.selection_name,
         )
     elif args.command == "univariate-statistics":

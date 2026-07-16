@@ -118,12 +118,18 @@ def run_metadata_filter_workflow(
     *,
     root: Path,
     predicates: Sequence[str],
+    name_contains: Sequence[str] = (),
     selection_name: str | None = None,
 ) -> dict[str, Any]:
     """Run Metadata Filter over the reference all-ISIN dataset."""
+    resolved_predicates = tuple(predicates) + tuple(
+        f"name~{search_text}" for search_text in name_contains
+    )
+    if not resolved_predicates:
+        raise ValueError("metadata-filter requires at least one --where or --name-contains")
     return run_metadata_filter(
         LakePaths(root=root),
-        parse_predicates(predicates),
+        parse_predicates(resolved_predicates),
         name=selection_name,
     )
 

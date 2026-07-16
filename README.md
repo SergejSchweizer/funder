@@ -190,6 +190,7 @@ uv run founder fetch-all-isins
 
 ```bash
 uv run founder metadata-filter --where instrument_type=ETF --where currency=EUR --where exchange=XETRA
+uv run founder metadata-filter --name-contains "UCITS ETF"
 ```
 
 Available `metadata-filter` options:
@@ -202,11 +203,16 @@ Available `metadata-filter` options:
   Lake root to read from. Defaults to lake.
 
 --where <predicate>
-  Required. Add one conjunctive predicate. Repeat this option for multiple predicates.
+  Add one conjunctive predicate. Repeat this option for multiple predicates.
+
+--name-contains <text>
+  Case-insensitive text search in the instrument name. Repeat this option to require multiple name fragments.
 
 --selection-name <name>
   Optional stable human-readable name used in the generated selection id.
 ```
+
+At least one `--where` or `--name-contains` option is required. All filters are conjunctive.
 
 Supported predicate operators:
 
