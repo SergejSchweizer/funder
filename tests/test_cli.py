@@ -206,8 +206,8 @@ def test_cli_runs_metadata_and_univariate_filter_modules(
             str(root),
             "--where",
             "instrument_type=ETF",
-            "--where",
-            "name~UCITS",
+            "--name-contains",
+            "UCITS ETF",
             "--selection-name",
             "ucits-etf",
         ]
@@ -245,3 +245,8 @@ def test_cli_runs_metadata_and_univariate_filter_modules(
     univariate_payload = json.loads(univariate_output.out)
     assert univariate_payload["selected_rows"] == 1
     assert len(read_rows(paths.univariate_filter_isins(univariate_payload["selection_id"]))) == 1
+
+
+def test_cli_metadata_filter_requires_a_filter(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="--where or --name-contains"):
+        main(["metadata-filter", "--root", str(tmp_path / "lake")])
