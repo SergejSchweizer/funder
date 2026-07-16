@@ -493,21 +493,21 @@ The local pre-commit hook runs this same PR gate.
 
 Create branches as `<type>/<scope>-<short-description>` using lowercase ASCII letters, numbers, and hyphens. Allowed branch types are `feat`, `fix`, `refactor`, `docs`, and `chore`; choose the type that describes the primary purpose of the PR.
 
-### Main Gate
+### Merge Gate
 
 Run this immediately before merging to `main`:
 
 ```bash
-uv run founder-quality main
+uv run founder-quality merge
 ```
 
-The main gate requires all of the following checks to pass before merge:
+The protected merge gate requires all of the following checks to pass before merge:
 
 - Ruff lint and format checks.
+- Architecture/import-boundary checks.
 - Pyright strict type checking.
-- Pytest.
+- Pytest with coverage.
 - At least 95% test coverage.
-- Import Linter contracts.
 - Dataset schema-registry validation.
 
 It also validates Conventional Commit subjects and requires a clean tracked working tree. The coverage command is:
@@ -515,6 +515,8 @@ It also validates Conventional Commit subjects and requires a clean tracked work
 ```text
 pytest --cov=founder --cov-report=term-missing --cov-fail-under=95
 ```
+
+`uv run founder-quality main` remains a compatibility alias for `uv run founder-quality merge`.
 
 Both layers require Conventional Commit subjects for branch commits. Pull request titles use the same format because the validated title becomes the squash-merge commit subject:
 

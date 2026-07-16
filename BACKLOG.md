@@ -22,7 +22,7 @@ Every non-merged PR-sized backlog item must include `Branch`, `Git status`, and 
 
 Read this after the architecture and workflow docs when you need implementation status. This file should not explain module behavior in depth; it records scope, dependencies, acceptance criteria, idempotency expectations, branch paths, Git status, and PR links for trackable work.
 
-Use `<type>/<scope>-<short-description>` branch paths with one of `feat`, `fix`, `refactor`, `docs`, or `chore`. Every open PR series must end with a `Series Completion Gate` that names its final branch, requires a Conventional Commit squash subject, and lists the mandatory `main-quality` checks.
+Use `<type>/<scope>-<short-description>` branch paths with one of `feat`, `fix`, `refactor`, `docs`, or `chore`. Every open PR series must end with a `Series Completion Gate` that names its final branch, requires a Conventional Commit squash subject, and lists the mandatory `merge-gate` checks.
 
 ## Search And Bronze Module PR Stack
 
@@ -872,7 +872,7 @@ Final branch: `refactor/three-module-cutover`.
 
 Squash rule: The final PR title and squash commit subject must use `type(optional-scope): subject`.
 
-Required main merge gate: `main-quality` must pass Ruff lint and format, Pyright strict, Pytest, coverage of at least 95%, Import Linter, and schema validation. The series remains incomplete while any stacked PR is unmerged or the final gate is not green.
+Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with coverage of at least 95%, and schema validation. The series remains incomplete while any stacked PR is unmerged or the final gate is not green.
 
 ## Future Work After Finalization
 

@@ -23,16 +23,20 @@ def test_pr_gate_has_simple_checks() -> None:
     assert commands_for_layer("pr") == (
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
-        ("python", "-m", "founder.architecture_checks"),
         ("pyright",),
-        ("pytest",),
+        ("pytest", "-q"),
     )
 
 
-def test_main_gate_extends_pr_gate_with_clean_tree_checks() -> None:
-    commands = commands_for_layer("main")
+def test_merge_gate_extends_pr_gate_with_protected_checks() -> None:
+    commands = commands_for_layer("merge")
 
-    assert commands[:4] == commands_for_layer("pr")[:4]
+    assert commands[:4] == (
+        ("ruff", "check", "."),
+        ("ruff", "format", "--check", "."),
+        ("python", "-m", "founder.architecture_checks"),
+        ("pyright",),
+    )
     assert commands[4] == (
         "pytest",
         "--cov=founder",
@@ -44,6 +48,7 @@ def test_main_gate_extends_pr_gate_with_clean_tree_checks() -> None:
         ("git", "diff", "--cached", "--quiet"),
         ("git", "status", "--short", "--untracked-files=all"),
     )
+    assert commands_for_layer("main") == commands
 
 
 def test_run_commands_stops_at_first_failure() -> None:
@@ -57,12 +62,12 @@ def test_run_commands_stops_at_first_failure() -> None:
     assert calls == [("ruff", "check", ".")]
 
 
-def test_main_gate_fails_on_dirty_status_output() -> None:
+def test_merge_gate_fails_on_dirty_status_output() -> None:
     def runner(command: Sequence[str], **_: object) -> subprocess.CompletedProcess[str]:
         stdout = " M README.md\n" if command[0:2] == ("git", "status") else ""
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
-    assert run_commands((commands_for_layer("main")[-1],), runner=runner) == 1
+    assert run_commands((commands_for_layer("merge")[-1],), runner=runner) == 1
 
 
 def test_conventional_commit_subject_validation() -> None:
@@ -101,7 +106,8 @@ def test_quality_gate_runs_commands_before_commit_validation() -> None:
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     assert run_quality_gate("pr", runner=runner) == 0
-    assert calls[:5] == list(commands_for_layer("pr"))
+    pr_commands = list(commands_for_layer("pr"))
+    assert calls[: len(pr_commands)] == pr_commands
     assert calls[-2:] == [
         ("git", "merge-base", "HEAD", "origin/main"),
         ("git", "log", "--format=%s", "abc123..HEAD"),

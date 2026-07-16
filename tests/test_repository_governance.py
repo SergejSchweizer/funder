@@ -71,25 +71,28 @@ def test_backlog_series_completion_gate_lists_required_main_checks() -> None:
         "Final branch: `refactor/three-module-cutover`.",
         "type(optional-scope): subject",
         "Ruff lint and format",
+        "architecture/import-boundary checks",
         "Pyright strict",
         "Pytest",
         "coverage of at least 95%",
-        "Import Linter",
         "schema validation",
     ):
         assert required_text in gate
 
 
 def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
-    main_workflow = (REPOSITORY_ROOT / ".github/workflows/main-quality.yml").read_text(
+    merge_gate_workflow = (REPOSITORY_ROOT / ".github/workflows/merge-gate.yml").read_text(
         encoding="utf-8"
     )
+    pr_workflow = (REPOSITORY_ROOT / ".github/workflows/pr-quality.yml").read_text(encoding="utf-8")
     merge_workflow = (REPOSITORY_ROOT / ".github/workflows/auto-merge.yml").read_text(
         encoding="utf-8"
     )
 
-    assert "uv run founder-quality main" in main_workflow
-    assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in main_workflow
+    assert "uv run founder-quality pr" in pr_workflow
+    assert "uv run founder-quality merge" in merge_gate_workflow
+    assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in merge_gate_workflow
+    assert "workflows: [merge-gate]" in merge_workflow
     assert "is still a draft; skipping auto-merge" in merge_workflow
     assert "Invalid squash subject" in merge_workflow
     assert '--squash --delete-branch --subject "$PR_TITLE"' in merge_workflow

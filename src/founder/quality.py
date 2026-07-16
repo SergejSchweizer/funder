@@ -19,9 +19,8 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 PR_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "."),
     ("ruff", "format", "--check", "."),
-    ("python", "-m", "founder.architecture_checks"),
     ("pyright",),
-    ("pytest",),
+    ("pytest", "-q"),
 )
 
 MAIN_COVERAGE_COMMAND: Command = (
@@ -33,8 +32,11 @@ MAIN_COVERAGE_COMMAND: Command = (
 
 CONVENTIONAL_COMMIT_TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test"
 
-MAIN_GATE_COMMANDS: tuple[Command, ...] = (
-    *PR_GATE_COMMANDS[:-1],
+MERGE_GATE_COMMANDS: tuple[Command, ...] = (
+    ("ruff", "check", "."),
+    ("ruff", "format", "--check", "."),
+    ("python", "-m", "founder.architecture_checks"),
+    ("pyright",),
     MAIN_COVERAGE_COMMAND,
     ("git", "diff", "--quiet"),
     ("git", "diff", "--cached", "--quiet"),
@@ -46,8 +48,8 @@ def commands_for_layer(layer: str) -> tuple[Command, ...]:
     """Return commands for the requested quality gate layer."""
     if layer == "pr":
         return PR_GATE_COMMANDS
-    if layer == "main":
-        return MAIN_GATE_COMMANDS
+    if layer in {"merge", "main"}:
+        return MERGE_GATE_COMMANDS
     raise ValueError(f"unknown quality gate layer: {layer}")
 
 
@@ -155,9 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Founder quality gates.")
     parser.add_argument(
         "layer",
-        choices=("pr", "main"),
+        choices=("pr", "merge", "main"),
         nargs="?",
-        help="Quality gate layer to run: 'pr' for PR/push checks, 'main' before merge.",
+        help=(
+            "Quality gate layer to run: 'pr' for fast development checks, "
+            "'merge' before main merges."
+        ),
     )
     parser.add_argument(
         "--commit-msg-file",
