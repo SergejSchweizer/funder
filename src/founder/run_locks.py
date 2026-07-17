@@ -1,4 +1,4 @@
-"""Process locks for lake layer commands."""
+"""Process locks for lake commands."""
 
 from __future__ import annotations
 
@@ -13,6 +13,15 @@ from typing import Literal
 from founder.paths import LakePaths
 
 LayerName = Literal["bronze", "silver", "gold"]
+ModuleName = Literal[
+    "bivariate-statistics",
+    "fetch-all-isins",
+    "fetch-all-quotes",
+    "metadata-filter",
+    "search",
+    "univariate-filter",
+    "univariate-statistics",
+]
 
 
 def layer_lock_path(paths: LakePaths, layer: LayerName) -> Path:
@@ -31,6 +40,11 @@ def layer_lock_path(paths: LakePaths, layer: LayerName) -> Path:
         "gold": paths.gold,
     }[layer]
     return layer_root / "runs" / f"{layer}.lock"
+
+
+def module_lock_path(paths: LakePaths, module: ModuleName) -> Path:
+    """Return the stable lock path for one Founder module command."""
+    return paths.root / "runs" / f"{module}.lock"
 
 
 @contextmanager
@@ -58,6 +72,27 @@ def layer_run_lock(paths: LakePaths, layer: LayerName) -> Generator[Path]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RuntimeError(f"{layer} run already active") from error
+        lock_file.seek(0)
+        lock_file.truncate()
+        acquired_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+        lock_file.write(f"pid={os.getpid()} acquired_at={acquired_at}\n")
+        lock_file.flush()
+        try:
+            yield lock_path
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def module_run_lock(paths: LakePaths, module: ModuleName) -> Generator[Path]:
+    """Hold an exclusive non-blocking process lock for one Founder module."""
+    lock_path = module_lock_path(paths, module)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError(f"{module} run already active") from error
         lock_file.seek(0)
         lock_file.truncate()
         acquired_at = datetime.now(UTC).replace(microsecond=0).isoformat()

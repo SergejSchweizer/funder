@@ -22,7 +22,7 @@ from founder.gold_pair_stats import (
     iter_pair_statistics,
 )
 from founder.paths import LakePaths
-from founder.run_locks import layer_run_lock
+from founder.run_locks import layer_run_lock, module_run_lock
 from founder.silver import build_silver_quotes, read_bronze_quote_rows, write_silver_quotes
 from founder.table_io import read_json, read_rows, write_rows
 from founder.univariate_statistics import build_quote_returns, build_univariate_statistics
@@ -78,6 +78,23 @@ def test_layer_run_lock_writes_metadata_and_rejects_contention(tmp_path: Path) -
             layer_run_lock(paths, "gold"),
         ):
             pass
+
+
+def test_module_run_lock_writes_metadata_and_rejects_workflow_contention(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    input_path = tmp_path / "candidates.csv"
+    input_path.write_text(
+        "Code,Exchange,Type,Country,Currency,Isin,Name\nAAA,XETRA,ETF,DE,EUR,IE1,Alpha UCITS ETF\n",
+        encoding="utf-8",
+    )
+
+    with module_run_lock(paths, "search") as lock_path:
+        assert "pid=" in lock_path.read_text(encoding="utf-8")
+        with pytest.raises(RuntimeError, match="search run already active"):
+            run_search_workflow(root=root, input_path=input_path, query="UCITS")
 
 
 def test_silver_reads_bronze_partitions_and_writes_listing_files(tmp_path: Path) -> None:

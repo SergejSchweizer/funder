@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
 from founder.bronze import merge_rows
-from founder.logging import get_logger
+from founder.logging import get_logger, log_event
 from founder.paths import LakePaths
 from founder.table_io import JsonRow, read_rows, write_rows
 
@@ -50,7 +51,13 @@ def build_silver_quote_rows(bronze_rows: Sequence[Mapping[str, Any]]) -> list[Js
             "bronzed_at": bronzed_at,
         }
     silver_rows = [rows[key] for key in sorted(rows)]
-    LOGGER.info("silver quote rows built rows=%s", len(silver_rows))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="silver",
+        event="quote_rows_built",
+        fields={"rows": len(silver_rows)},
+    )
     return silver_rows
 
 
@@ -63,11 +70,12 @@ def _write_silver_listing(args: tuple[LakePaths, str, str, list[Mapping[str, Any
         key_fields=("isin", "exchange", "code", "date"),
     )
     write_rows(quote_path, merged_rows)
-    LOGGER.info(
-        "silver quote rows written exchange=%s isin=%s rows=%s",
-        exchange,
-        isin,
-        len(merged_rows),
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="silver",
+        event="quote_rows_written",
+        fields={"exchange": exchange, "isin": isin, "rows": len(merged_rows)},
     )
     return {"exchange": exchange, "isin": isin, "rows": len(merged_rows)}
 

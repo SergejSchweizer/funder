@@ -9,6 +9,7 @@ analytical Silver and Gold outputs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import AbstractContextManager
@@ -19,7 +20,7 @@ from time import monotonic
 from typing import Any, cast
 
 from founder.http import EodhdClient
-from founder.logging import get_logger
+from founder.logging import get_logger, log_event
 from founder.paths import LakePaths
 from founder.run_locks import layer_run_lock
 from founder.schemas import required_fields
@@ -80,7 +81,13 @@ def validate_canonical_rows(rows: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
             raise ValueError(f"duplicate ISIN: {isin}")
         seen_isins.add(isin)
         validated.append(item)
-    LOGGER.debug("canonical rows validated rows=%s", len(validated))
+    log_event(
+        LOGGER,
+        logging.DEBUG,
+        module="bronze",
+        event="canonical_rows_validated",
+        fields={"rows": len(validated)},
+    )
     return validated
 
 
@@ -114,7 +121,13 @@ def build_bronze_plan(
                 "end_date": end_date.isoformat() if end_date is not None else "",
             }
         )
-    LOGGER.info("bronze plan built run_id=%s rows=%s", run_id, len(plan))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="plan_built",
+        fields={"rows": len(plan), "run_id": run_id},
+    )
     return plan
 
 
@@ -147,7 +160,13 @@ def write_bronze_plan(
     if gap_aware:
         plan = build_gap_bronze_plan(plan, read_silver_quotes(paths), end_date=end_date)
     write_rows(paths.bronze_plan(run_id), plan)
-    LOGGER.info("bronze plan written run_id=%s path=%s", run_id, paths.bronze_plan(run_id))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="plan_written",
+        fields={"path": paths.bronze_plan(run_id), "run_id": run_id},
+    )
     return plan
 
 
@@ -199,7 +218,13 @@ def build_gap_bronze_plan(
                 else "gap_backfill",
             }
         )
-    LOGGER.info("gap bronze plan built input_rows=%s gap_rows=%s", len(plan), len(gap_plan))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="gap_plan_built",
+        fields={"gap_rows": len(gap_plan), "input_rows": len(plan)},
+    )
     return gap_plan
 
 
@@ -432,12 +457,17 @@ def write_eodhd_dataset_to_bronze(
                 "elapsed_seconds": elapsed_seconds,
                 "rows": len(loaded_rows),
             }
-            LOGGER.debug(
-                "EODHD rows written symbol=%s dataset=%s rows=%s elapsed_seconds=%.3f",
-                item["symbol"],
-                strategy.name,
-                len(loaded_rows),
-                elapsed_seconds,
+            log_event(
+                LOGGER,
+                logging.DEBUG,
+                module="bronze",
+                event="eodhd_rows_written",
+                fields={
+                    "dataset": strategy.name,
+                    "elapsed_seconds": f"{elapsed_seconds:.3f}",
+                    "rows": len(loaded_rows),
+                    "symbol": item["symbol"],
+                },
             )
             return success, None
         except Exception as error:  # noqa: BLE001 - record and continue batch failures.
@@ -451,12 +481,17 @@ def write_eodhd_dataset_to_bronze(
                 "error_type": type(error).__name__,
                 "message": str(error),
             }
-            LOGGER.warning(
-                "EODHD bronze failed symbol=%s dataset=%s elapsed_seconds=%.3f error=%s",
-                item["symbol"],
-                strategy.name,
-                elapsed_seconds,
-                error,
+            log_event(
+                LOGGER,
+                logging.WARNING,
+                module="bronze",
+                event="eodhd_failed",
+                fields={
+                    "dataset": strategy.name,
+                    "elapsed_seconds": f"{elapsed_seconds:.3f}",
+                    "error": error,
+                    "symbol": item["symbol"],
+                },
             )
             return None, failure
 
@@ -482,12 +517,17 @@ def write_eodhd_dataset_to_bronze(
 
     successes = [successes_by_index[index] for index in sorted(successes_by_index)]
     errors = [errors_by_index[index] for index in sorted(errors_by_index)]
-    LOGGER.info(
-        "bronze EODHD ingestion complete dataset=%s successes=%s errors=%s concurrency=%s",
-        strategy.name,
-        len(successes),
-        len(errors),
-        worker_count,
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="eodhd_ingestion_completed",
+        fields={
+            "concurrency": worker_count,
+            "dataset": strategy.name,
+            "errors": len(errors),
+            "successes": len(successes),
+        },
     )
     return successes, errors
 
@@ -551,10 +591,12 @@ def write_raw_eodhd_datasets_to_bronze(
         )
         successes.extend(dataset_successes)
         errors.extend(dataset_errors)
-    LOGGER.info(
-        "raw EODHD datasets bronzed successes=%s errors=%s",
-        len(successes),
-        len(errors),
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="raw_datasets_bronzed",
+        fields={"errors": len(errors), "successes": len(successes)},
     )
     return successes, errors
 
@@ -625,7 +667,13 @@ def normalize_quote_rows(
                 "bronzed_at": bronzed_at.astimezone(UTC).isoformat(),
             }
     normalized = [rows[key] for key in sorted(rows)]
-    LOGGER.info("quote rows normalized rows=%s", len(normalized))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="quote_rows_normalized",
+        fields={"rows": len(normalized)},
+    )
     return normalized
 
 
@@ -642,11 +690,12 @@ def write_silver_quotes(paths: LakePaths, quote_rows: Sequence[Mapping[str, Any]
             key_fields=("isin", "exchange", "code", "date"),
         )
         write_rows(quote_path, merged_rows)
-        LOGGER.info(
-            "silver quote rows written exchange=%s isin=%s rows=%s",
-            exchange,
-            isin,
-            len(merged_rows),
+        log_event(
+            LOGGER,
+            logging.INFO,
+            module="bronze",
+            event="silver_quote_rows_written",
+            fields={"exchange": exchange, "isin": isin, "rows": len(merged_rows)},
         )
 
 
@@ -692,7 +741,13 @@ def build_coverage(
                 "next_bronze_start": (last - timedelta(days=overlap_days)).isoformat(),
             }
         )
-    LOGGER.debug("coverage built run_id=%s rows=%s", run_id, len(coverage))
+    log_event(
+        LOGGER,
+        logging.DEBUG,
+        module="bronze",
+        event="coverage_built",
+        fields={"rows": len(coverage), "run_id": run_id},
+    )
     return coverage
 
 
@@ -722,7 +777,13 @@ def write_bronze_manifests(
         ],
     )
     write_csv(paths.coverage().with_suffix(".csv"), coverage, required_fields("coverage"))
-    LOGGER.info("bronze manifests written run_id=%s coverage_rows=%s", run_id, len(coverage))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="bronze",
+        event="manifests_written",
+        fields={"coverage_rows": len(coverage), "run_id": run_id},
+    )
     return coverage
 
 
