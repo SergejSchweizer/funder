@@ -4,16 +4,62 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from math import sqrt
 from typing import Any
 
 from founder.gold import covariance
 from founder.paths import LakePaths
-from founder.portfolio import PortfolioConstraints, optimize_portfolio
+from founder.portfolio import PortfolioConstraints, equal_weight_seed, optimize_portfolio
 from founder.return_quality import MIN_HISTORY_LONG, MIN_HISTORY_MEDIUM, MIN_HISTORY_SHORT
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ANNUAL_TRADING_DAYS = 252
+
+WALK_FORWARD_DEVELOPMENT_PROFILE = "development"
+WALK_FORWARD_PRODUCTION_PROFILE = "production"
+
+PRODUCTION_MIN_TRAIN_OBSERVATIONS = 504
+PRODUCTION_MIN_TEST_OBSERVATIONS = 21
+PRODUCTION_MIN_COMPLETED_SPLITS = 2
+PRODUCTION_MAX_WEIGHT = 0.25
+
+
+@dataclass(frozen=True)
+class WalkForwardProfile:
+    """Named walk-forward policy: development fixtures vs. production defaults."""
+
+    name: str
+    min_train_observations: int
+    min_test_observations: int
+    min_completed_splits: int
+    max_weight: float
+
+
+WALK_FORWARD_PROFILES: dict[str, WalkForwardProfile] = {
+    WALK_FORWARD_DEVELOPMENT_PROFILE: WalkForwardProfile(
+        name=WALK_FORWARD_DEVELOPMENT_PROFILE,
+        min_train_observations=1,
+        min_test_observations=1,
+        min_completed_splits=1,
+        max_weight=1.0,
+    ),
+    WALK_FORWARD_PRODUCTION_PROFILE: WalkForwardProfile(
+        name=WALK_FORWARD_PRODUCTION_PROFILE,
+        min_train_observations=PRODUCTION_MIN_TRAIN_OBSERVATIONS,
+        min_test_observations=PRODUCTION_MIN_TEST_OBSERVATIONS,
+        min_completed_splits=PRODUCTION_MIN_COMPLETED_SPLITS,
+        max_weight=PRODUCTION_MAX_WEIGHT,
+    ),
+}
+
+
+def _compound_return(returns: Sequence[float]) -> float:
+    """Geometrically compound a series of simple returns: `prod(1 + r) - 1`."""
+    product = 1.0
+    for value in returns:
+        product *= 1.0 + value
+    return product - 1.0
 
 
 def read_gold_returns(paths: LakePaths) -> list[JsonRow]:
@@ -338,6 +384,31 @@ def write_portfolio_evaluation(
     return portfolio_returns, drawdowns, metrics
 
 
+def _actual_optimizer_method(
+    listings: Sequence[Mapping[str, Any]],
+    constraints: PortfolioConstraints,
+    objective: str,
+    weights: Mapping[str, float],
+) -> str:
+    """Detect a silent equal-weight candidate-limit fallback (see `_fallback_candidate_weights`).
+
+    The deterministic baseline optimizer falls back to a single equal-weight
+    candidate when the exact grid search would be too large. That fallback
+    must never be reported as if the requested objective actually ran.
+    """
+    if objective == "equal_weight":
+        return objective
+    isins = sorted({str(row["isin"]) for row in listings})
+    try:
+        fallback_weights = equal_weight_seed(isins, constraints)
+    except ValueError:
+        return objective
+    matches_fallback = all(
+        abs(float(weights[isin]) - fallback_weights[isin]) < 1e-9 for isin in isins
+    )
+    return "equal_weight_fallback" if matches_fallback else objective
+
+
 def build_walk_forward_backtest(
     matrix_rows: Sequence[Mapping[str, Any]],
     *,
@@ -349,12 +420,32 @@ def build_walk_forward_backtest(
     test_window: int,
     mode: str = "rolling",
     grid_step: float = 0.1,
+    profile: str = WALK_FORWARD_DEVELOPMENT_PROFILE,
+    transaction_cost_rate: float = 0.0,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     dates = sorted({str(row["date"]) for row in matrix_rows})
     if train_window < 1 or test_window < 1:
         raise ValueError("train_window and test_window must be positive")
     if mode not in {"rolling", "expanding"}:
         raise ValueError("mode must be rolling or expanding")
+    if profile not in WALK_FORWARD_PROFILES:
+        raise ValueError(f"unknown walk-forward profile: {profile}")
+    profile_settings = WALK_FORWARD_PROFILES[profile]
+    if train_window < profile_settings.min_train_observations:
+        raise ValueError(
+            f"{profile} profile requires train_window >= "
+            f"{profile_settings.min_train_observations} observations, got {train_window}"
+        )
+    if test_window < profile_settings.min_test_observations:
+        raise ValueError(
+            f"{profile} profile requires test_window >= "
+            f"{profile_settings.min_test_observations} observations, got {test_window}"
+        )
+    if constraints.max_weight > profile_settings.max_weight:
+        raise ValueError(
+            f"{profile} profile requires max_weight <= {profile_settings.max_weight}, "
+            f"got {constraints.max_weight}"
+        )
     metrics: list[JsonRow] = []
     weight_rows: list[JsonRow] = []
     previous_weights: dict[str, float] = {}
@@ -376,6 +467,9 @@ def build_walk_forward_backtest(
             constraints=constraints,
             grid_step=grid_step,
         )
+        actual_optimizer_method = _actual_optimizer_method(
+            listings, constraints, objective, weights
+        )
         split_id = f"split-{split_index:03d}"
         portfolio_returns = build_portfolio_returns(
             test_rows,
@@ -385,22 +479,39 @@ def build_walk_forward_backtest(
         )
         drawdowns = build_drawdowns(portfolio_returns)
         returns = [float(row["return"]) for row in portfolio_returns]
-        volatility = sqrt(covariance(returns, returns)) if len(returns) >= 2 else 0.0
-        realized_return = sum(returns)
+        daily_volatility = sqrt(covariance(returns, returns)) if len(returns) >= 2 else 0.0
+        downside_returns = [min(0.0, value) for value in returns]
+        downside_deviation = (
+            sqrt(sum(value * value for value in downside_returns) / len(downside_returns))
+            if downside_returns
+            else 0.0
+        )
+        pre_cost_return = _compound_return(returns)
         turnover = _turnover(previous_weights, weights)
+        transaction_cost = turnover * transaction_cost_rate
+        post_cost_return = (1.0 - transaction_cost) * (1.0 + pre_cost_return) - 1.0
+        periods_per_year = ANNUAL_TRADING_DAYS / len(test_dates)
+        annualized_return = (1.0 + post_cost_return) ** periods_per_year - 1.0
+        annualized_volatility = daily_volatility * sqrt(ANNUAL_TRADING_DAYS)
+        annualized_downside_deviation = downside_deviation * sqrt(ANNUAL_TRADING_DAYS)
         metrics.append(
             {
                 "run_id": run_id,
                 "evaluation_id": evaluation_id,
                 "split_id": split_id,
                 "objective": objective,
+                "actual_optimizer_method": actual_optimizer_method,
                 "train_start_date": train_dates[0],
                 "train_end_date": train_dates[-1],
                 "test_start_date": test_dates[0],
                 "test_end_date": test_dates[-1],
-                "realized_return": realized_return,
-                "realized_volatility": volatility,
-                "sharpe_ratio": _ratio(realized_return, volatility),
+                "pre_cost_return": pre_cost_return,
+                "transaction_cost": transaction_cost,
+                "post_cost_return": post_cost_return,
+                "realized_return": post_cost_return,
+                "realized_volatility": annualized_volatility,
+                "sharpe_ratio": _ratio(annualized_return, annualized_volatility),
+                "sortino_ratio": _ratio(annualized_return, annualized_downside_deviation),
                 "max_drawdown": min((float(row["drawdown"]) for row in drawdowns), default=0.0),
                 "turnover": turnover,
             }
@@ -420,6 +531,21 @@ def build_walk_forward_backtest(
         previous_weights = weights
         split_index += 1
         start += test_window
+    completed_splits = len(metrics)
+    production_eligible = (
+        profile == WALK_FORWARD_PRODUCTION_PROFILE
+        and completed_splits >= profile_settings.min_completed_splits
+    )
+    if profile != WALK_FORWARD_PRODUCTION_PROFILE:
+        availability_reason = "development_profile_baseline_only"
+    elif production_eligible:
+        availability_reason = "ok"
+    else:
+        availability_reason = "insufficient_completed_splits"
+    for row in metrics:
+        row["profile"] = profile
+        row["production_eligible"] = production_eligible
+        row["availability_reason"] = availability_reason
     return metrics, sorted(weight_rows, key=lambda row: (str(row["split_id"]), str(row["isin"])))
 
 
@@ -434,6 +560,8 @@ def write_walk_forward_backtest(
     test_window: int,
     mode: str = "rolling",
     grid_step: float = 0.1,
+    profile: str = WALK_FORWARD_DEVELOPMENT_PROFILE,
+    transaction_cost_rate: float = 0.0,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     matrix = _read_or_build_matrix(paths, evaluation_id)
     metrics, weights = build_walk_forward_backtest(
@@ -446,6 +574,8 @@ def write_walk_forward_backtest(
         test_window=test_window,
         mode=mode,
         grid_step=grid_step,
+        profile=profile,
+        transaction_cost_rate=transaction_cost_rate,
     )
     write_rows(paths.gold_backtests(run_id), metrics)
     write_rows(paths.gold_backtest_weights(run_id), weights)

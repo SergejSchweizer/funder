@@ -285,6 +285,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Walk-forward test window in common return rows.",
     )
     multivariate.add_argument(
+        "--walk-forward-profile",
+        choices=("development", "production"),
+        default="development",
+        help=(
+            "Walk-forward policy: 'development' allows tiny fixture windows but is never "
+            "production eligible; 'production' enforces minimum history, test window, "
+            "completed-split, and concentration requirements."
+        ),
+    )
+    multivariate.add_argument(
         "--rebalance-schedule",
         choices=("monthly", "quarterly", "annual", "threshold"),
         default="monthly",
@@ -400,6 +410,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             grid_step=args.grid_step,
             train_window=args.train_window,
             test_window=args.test_window,
+            walk_forward_profile=args.walk_forward_profile,
             rebalance_schedule=args.rebalance_schedule,
             transaction_cost_rate=args.transaction_cost_rate,
             drift_threshold=args.drift_threshold,

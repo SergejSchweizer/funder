@@ -82,10 +82,22 @@ def test_evaluation_boundary_functions_delegate(monkeypatch: pytest.MonkeyPatch)
         monkeypatch.setattr(module.importlib, "import_module", lambda _name, fake=fake: fake)
 
     modules[0].build_walk_forward_backtest(
-        [], [], run_id="r", evaluation_id="e", objective="o", constraints=object()
+        [],
+        run_id="r",
+        evaluation_id="e",
+        objective="o",
+        constraints=object(),
+        train_window=1,
+        test_window=1,
     )
     modules[0].write_walk_forward_backtest(
-        Path("lake"), evaluation_id="e", run_id="r", objective="o", constraints=object()
+        Path("lake"),
+        evaluation_id="e",
+        run_id="r",
+        objective="o",
+        constraints=object(),
+        train_window=1,
+        test_window=1,
     )
     modules[1].build_efficient_frontier(
         [], [], {}, evaluation_id="e", constraints=object(), target_returns=[]

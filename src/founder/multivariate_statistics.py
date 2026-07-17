@@ -45,6 +45,7 @@ class MultivariateStatisticsConfig:
     grid_step: float = 0.1
     train_window: int = 2
     test_window: int = 1
+    walk_forward_profile: str = "development"
     rebalance_schedule: str = "monthly"
     transaction_cost_rate: float = 0.0
     drift_threshold: float | None = None
@@ -203,6 +204,8 @@ def write_multivariate_statistics(
         train_window=resolved_config.train_window,
         test_window=resolved_config.test_window,
         grid_step=resolved_config.grid_step,
+        profile=resolved_config.walk_forward_profile,
+        transaction_cost_rate=resolved_config.transaction_cost_rate,
     )
     return {
         "asset_metric_rows": len(asset_metrics),
