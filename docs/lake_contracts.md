@@ -100,7 +100,8 @@ Gold evaluation datasets include:
 - `evaluation/frontier_weights/{evaluation_id}.parquet`: long-format ISIN, exchange, code, and weight rows for each efficient-frontier point.
 - `evaluation/backtests/{run_id}.parquet`: planned walk-forward train/test windows, fitted objective, realized out-of-sample metrics, and drawdown metrics.
 - `evaluation/backtest_weights/{run_id}.parquet`: long-format split, ISIN, exchange, code, and fitted weight rows for walk-forward history.
-- `evaluation/rebalance_events/{run_id}.parquet`: planned rebalance dates, pre-trade weights, target weights, turnover, transaction-cost estimates, and post-cost returns.
+- `evaluation/rebalance_events/{run_id}.parquet`: one portfolio-level row per date with the pre-trade portfolio value (after that day's own-instrument drift, before any trade), turnover, transaction-cost estimate, post-cost return, resulting portfolio value, and cash remainder after the trade.
+- `evaluation/rebalance_weights/{run_id}.parquet`: one row per date per instrument with pre-trade value, pre-trade weight, target weight, target value, and trade value. Each instrument drifts from its own simple return between rebalance dates; it never drifts from the blended portfolio return.
 - `evaluation/tail_risk/{run_id}.parquet`: planned VaR, CVaR, confidence level, tail observation count, and tail scenario diagnostics.
 - `weights/{objective}/{evaluation_id}.parquet`: selected target weights, constraints, and diagnostics for objectives such as equal weight, constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, and CVaR.
 - `risk_contributions/{objective}/{evaluation_id}.parquet`: marginal, absolute, and percent risk contribution rows for risk-parity portfolios, including target risk budgets, per-asset residuals, portfolio variance, objective residual, and convergence status.

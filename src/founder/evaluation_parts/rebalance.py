@@ -15,23 +15,27 @@ def _evaluation() -> Any:
 
 
 def build_rebalance_events(
-    portfolio_returns: Sequence[Mapping[str, Any]],
+    matrix_rows: Sequence[Mapping[str, Any]],
     *,
     run_id: str,
     evaluation_id: str,
     portfolio_id: str,
+    target_weights: Mapping[str, float] | None = None,
     schedule: str = "monthly",
-    transaction_cost_rate: float = 0.001,
-) -> list[JsonRow]:
+    transaction_cost_rate: float = 0.0,
+    drift_threshold: float | None = None,
+) -> tuple[list[JsonRow], list[JsonRow]]:
     return cast(
-        list[JsonRow],
+        tuple[list[JsonRow], list[JsonRow]],
         _evaluation().build_rebalance_events(
-            portfolio_returns,
+            matrix_rows,
             run_id=run_id,
             evaluation_id=evaluation_id,
             portfolio_id=portfolio_id,
+            target_weights=target_weights,
             schedule=schedule,
             transaction_cost_rate=transaction_cost_rate,
+            drift_threshold=drift_threshold,
         ),
     )
 
@@ -42,18 +46,22 @@ def write_rebalance_simulation(
     evaluation_id: str,
     run_id: str,
     portfolio_id: str,
+    target_weights: Mapping[str, float] | None = None,
     schedule: str = "monthly",
-    transaction_cost_rate: float = 0.001,
-) -> list[JsonRow]:
+    transaction_cost_rate: float = 0.0,
+    drift_threshold: float | None = None,
+) -> tuple[list[JsonRow], list[JsonRow]]:
     return cast(
-        list[JsonRow],
+        tuple[list[JsonRow], list[JsonRow]],
         _evaluation().write_rebalance_simulation(
             paths,
             evaluation_id=evaluation_id,
             run_id=run_id,
             portfolio_id=portfolio_id,
+            target_weights=target_weights,
             schedule=schedule,
             transaction_cost_rate=transaction_cost_rate,
+            drift_threshold=drift_threshold,
         ),
     )
 

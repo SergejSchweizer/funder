@@ -129,7 +129,7 @@ def test_walk_forward_frontier_rebalance_and_tail_risk_outputs(tmp_path: Path) -
         target_returns=[0.0, 0.01],
         grid_step=0.5,
     )
-    rebalance_events = write_rebalance_simulation(
+    rebalance_events, rebalance_weights = write_rebalance_simulation(
         paths,
         evaluation_id="eval-1",
         run_id="rebalance-1",
@@ -153,6 +153,7 @@ def test_walk_forward_frontier_rebalance_and_tail_risk_outputs(tmp_path: Path) -
     assert read_rows(paths.gold_frontier_points("eval-1")) == frontier_points
     assert rebalance_events[0]["is_rebalance"] is True
     assert read_rows(paths.gold_rebalance_events("rebalance-1")) == rebalance_events
+    assert read_rows(paths.gold_rebalance_weights("rebalance-1")) == rebalance_weights
     assert tail_rows[0]["tail_observation_count"] >= 1
     assert read_rows(paths.gold_tail_risk("tail-1")) == tail_rows
 
@@ -172,7 +173,7 @@ def test_builders_cover_rejections_and_threshold_rebalance() -> None:
             test_window=1,
             mode="bad",
         )
-    events = build_rebalance_events(
+    events, event_weights = build_rebalance_events(
         matrix,
         run_id="rebalance-1",
         evaluation_id="eval-1",
@@ -198,6 +199,7 @@ def test_builders_cover_rejections_and_threshold_rebalance() -> None:
     )
 
     assert any(row["is_rebalance"] for row in events)
+    assert any(row["is_rebalance"] for row in event_weights)
     assert tail[0]["cvar"] >= tail[0]["var"]
     assert points[0]["is_feasible"] is False
     assert {row["weight"] for row in weights} == {0.0}

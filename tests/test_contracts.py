@@ -121,6 +121,23 @@ def test_gold_evaluation_schema_contracts_are_registered() -> None:
     assert "weight" in required_fields("frontier_weights")
     assert "split_id" in required_fields("backtests")
     assert "post_cost_return" in required_fields("rebalance_events")
+    assert "pre_trade_value" in required_fields("rebalance_events")
+    assert "cash_remainder" in required_fields("rebalance_events")
+    assert required_fields("rebalance_weights") == (
+        "run_id",
+        "evaluation_id",
+        "portfolio_id",
+        "isin",
+        "exchange",
+        "code",
+        "date",
+        "pre_trade_value",
+        "pre_trade_weight",
+        "target_weight",
+        "target_value",
+        "trade_value",
+        "is_rebalance",
+    )
     assert "cvar" in required_fields("tail_risk")
     assert "constraints" in required_fields("optimized_weights")
     assert "cluster_variance" in required_fields("hrp_clusters")

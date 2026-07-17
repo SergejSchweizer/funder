@@ -174,6 +174,9 @@ class LakePaths:
     def gold_rebalance_events(self, run_id: str) -> Path:
         return self.gold / "evaluation" / "rebalance_events" / f"{run_id}.parquet"
 
+    def gold_rebalance_weights(self, run_id: str) -> Path:
+        return self.gold / "evaluation" / "rebalance_weights" / f"{run_id}.parquet"
+
     def gold_tail_risk(self, run_id: str) -> Path:
         return self.gold / "evaluation" / "tail_risk" / f"{run_id}.parquet"
 

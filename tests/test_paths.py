@@ -91,6 +91,9 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_rebalance_events("rebalance-1") == Path(
         "lake/gold/evaluation/rebalance_events/rebalance-1.parquet"
     )
+    assert paths.gold_rebalance_weights("rebalance-1") == Path(
+        "lake/gold/evaluation/rebalance_weights/rebalance-1.parquet"
+    )
     assert paths.gold_tail_risk("tail-1") == Path("lake/gold/evaluation/tail_risk/tail-1.parquet")
     assert paths.gold_optimized_weights("minimum_variance", "eval-1") == Path(
         "lake/gold/weights/minimum_variance/eval-1.parquet"

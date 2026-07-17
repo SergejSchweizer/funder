@@ -458,45 +458,70 @@ def build_rebalance_events(
     run_id: str,
     evaluation_id: str,
     portfolio_id: str,
-    target_weights: Mapping[str, float],
-    schedule: str,
+    target_weights: Mapping[str, float] | None = None,
+    schedule: str = "monthly",
     transaction_cost_rate: float = 0.0,
     drift_threshold: float | None = None,
-) -> list[JsonRow]:
+) -> tuple[list[JsonRow], list[JsonRow]]:
+    """Simulate a rebalance schedule where each instrument drifts from its own return.
+
+    Returns `(events, weights)`: `events` is one row per date with portfolio-level
+    turnover, transaction cost, post-cost return, portfolio value, and cash
+    remainder; `weights` is one row per date per instrument with pre-trade value,
+    pre-trade weight, target value, and trade value.
+    """
     if schedule not in {"monthly", "quarterly", "annual", "threshold"}:
         raise ValueError("unknown rebalance schedule")
     rows_by_date = _rows_by_date(matrix_rows)
-    weights = dict(target_weights)
-    current_weights = dict(weights)
-    value = 1.0
+    weights = (
+        equal_weight_portfolio(matrix_rows) if target_weights is None else dict(target_weights)
+    )
+    isins = sorted(weights)
+    current_values = {isin: weights[isin] for isin in isins}
+    portfolio_value = sum(current_values.values())
     events: list[JsonRow] = []
+    weight_rows: list[JsonRow] = []
     last_period = ""
     for item_date in sorted(rows_by_date):
-        period = _rebalance_period(item_date, schedule)
-        daily_return = sum(
-            current_weights[str(row["isin"])] * float(row["return"])
-            for row in rows_by_date[item_date]
+        listing_by_isin = {str(row["isin"]): row for row in rows_by_date[item_date]}
+        pre_trade_values = {
+            isin: current_values[isin] * (1.0 + _asset_simple_return(listing_by_isin[isin]))
+            if isin in listing_by_isin
+            else current_values[isin]
+            for isin in isins
+        }
+        pre_trade_total = sum(pre_trade_values.values())
+        pre_trade_weights = (
+            {isin: pre_trade_values[isin] / pre_trade_total for isin in isins}
+            if pre_trade_total
+            else dict.fromkeys(isins, 0.0)
         )
-        drift = sum(abs(current_weights[isin] - weights[isin]) for isin in weights) / 2
+        period = _rebalance_period(item_date, schedule)
+        drift = _turnover(pre_trade_weights, weights)
         scheduled = period != last_period
         threshold_hit = (
             schedule == "threshold" and drift_threshold is not None and drift >= drift_threshold
         )
         is_rebalance = scheduled or threshold_hit
-        turnover = _turnover(current_weights, weights) if is_rebalance else 0.0
-        cost = turnover * transaction_cost_rate
-        post_cost_return = daily_return - cost
-        value *= 1.0 + post_cost_return
         if is_rebalance:
-            current_weights = dict(weights)
+            target_values = {isin: weights[isin] * pre_trade_total for isin in isins}
+            trade_values = {isin: target_values[isin] - pre_trade_values[isin] for isin in isins}
+            turnover = drift
+            cost = turnover * transaction_cost_rate * pre_trade_total
+            post_trade_total = pre_trade_total - cost
+            scale = (post_trade_total / pre_trade_total) if pre_trade_total else 0.0
+            current_values = {isin: target_values[isin] * scale for isin in isins}
             last_period = period
         else:
-            total = sum(current_weights[isin] * (1.0 + daily_return) for isin in current_weights)
-            if total:
-                current_weights = {
-                    isin: current_weights[isin] * (1.0 + daily_return) / total
-                    for isin in current_weights
-                }
+            turnover = 0.0
+            cost = 0.0
+            post_trade_total = pre_trade_total
+            target_values = dict(pre_trade_values)
+            trade_values = dict.fromkeys(isins, 0.0)
+            current_values = dict(pre_trade_values)
+        cash_remainder = post_trade_total - sum(current_values.values())
+        post_cost_return = (post_trade_total / portfolio_value) - 1.0 if portfolio_value else 0.0
+        portfolio_value = post_trade_total
         events.append(
             {
                 "run_id": run_id,
@@ -504,14 +529,35 @@ def build_rebalance_events(
                 "portfolio_id": portfolio_id,
                 "date": item_date,
                 "schedule": schedule,
+                "pre_trade_value": pre_trade_total,
                 "turnover": turnover,
                 "transaction_cost": cost,
                 "post_cost_return": post_cost_return,
-                "portfolio_value": value,
+                "portfolio_value": portfolio_value,
+                "cash_remainder": cash_remainder,
                 "is_rebalance": is_rebalance,
             }
         )
-    return events
+        for isin in isins:
+            listing = listing_by_isin.get(isin)
+            weight_rows.append(
+                {
+                    "run_id": run_id,
+                    "evaluation_id": evaluation_id,
+                    "portfolio_id": portfolio_id,
+                    "isin": isin,
+                    "exchange": str(listing["exchange"]) if listing else "",
+                    "code": str(listing["code"]) if listing else "",
+                    "date": item_date,
+                    "pre_trade_value": pre_trade_values[isin],
+                    "pre_trade_weight": pre_trade_weights[isin],
+                    "target_weight": weights[isin],
+                    "target_value": target_values[isin],
+                    "trade_value": trade_values[isin],
+                    "is_rebalance": is_rebalance,
+                }
+            )
+    return events, weight_rows
 
 
 def write_rebalance_simulation(
@@ -524,10 +570,10 @@ def write_rebalance_simulation(
     schedule: str = "monthly",
     transaction_cost_rate: float = 0.0,
     drift_threshold: float | None = None,
-) -> list[JsonRow]:
+) -> tuple[list[JsonRow], list[JsonRow]]:
     matrix = _read_or_build_matrix(paths, evaluation_id)
     weights = equal_weight_portfolio(matrix) if target_weights is None else dict(target_weights)
-    events = build_rebalance_events(
+    events, weight_rows = build_rebalance_events(
         matrix,
         run_id=run_id,
         evaluation_id=evaluation_id,
@@ -538,7 +584,8 @@ def write_rebalance_simulation(
         drift_threshold=drift_threshold,
     )
     write_rows(paths.gold_rebalance_events(run_id), events)
-    return events
+    write_rows(paths.gold_rebalance_weights(run_id), weight_rows)
+    return events, weight_rows
 
 
 def build_efficient_frontier(
