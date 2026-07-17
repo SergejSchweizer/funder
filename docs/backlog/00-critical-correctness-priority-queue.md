@@ -222,6 +222,10 @@ availability_reasons
 
 ## Mandatory Amendments To PR59
 
+Branch: `fix/solver-boundary-no-silent-equal-weight-fallback`.
+
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/99.
+
 PR59 remains the production solver boundary. Its existing scope must explicitly prevent method substitution and misleading labels.
 
 ### No Silent Equal-Weight Fallback
