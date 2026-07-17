@@ -1082,47 +1082,11 @@ Determinism: Recommendation ids derive from scorecard, stress results, income ar
 
 Idempotency: Re-running unchanged recommendations produces the same structured report artifacts and does not alter optimizer, backtest, Selection, Refresh, or Update artifacts.
 
-### PR67. Current Positions, Transition Plan, And Flatex Export
-
-Branch: `feat/trading-transition-flatex-export`.
-
-Git status: not started. PR: TBD.
-
-Priority: P4 trade preparation.
-
-Depends on: PR66.
-
-Scope: Extend `founder.trading` with persisted current positions, base currency, cash, cost basis, current-versus-target differences, turnover, estimated fees, FX costs, taxes where configured, whole-share rounding, minimum order size, cash remainder, and Flatex-oriented trade-preparation export. The trade layer consumes approved recommendation weights and must not choose the optimization objective.
-
-Acceptance: Tests cover existing positions, new buys, sells, no-trade thresholds, whole-share rounding, minimum order sizes, cash remainder, fee and FX assumptions, cost-basis metadata, deterministic CSV export ordering, and rejection of unapproved or non-production candidate weights unless explicitly overridden.
-
-Determinism: Transition ids include current-position snapshot id, target-weight recommendation id, price snapshot id, fee/tax/FX policy ids, rounding policy, and export version.
-
-Idempotency: Re-running transition planning with unchanged inputs writes the same transition plan and export without duplicate trade rows or pointer changes.
-
-### PR68. Local Project Reports And Monitoring Baseline
-
-Branch: `feat/local-reports-monitoring`.
-
-Git status: not started. PR: TBD.
-
-Priority: P4 local product surface.
-
-Depends on: PR67.
-
-Scope: Add persisted local portfolio projects, structured HTML or static report generation, portfolio monitoring runs, drift checks, risk-limit checks, distribution-cut checks, NAV-erosion checks, and alert-ready machine-readable status outputs. Keep hosted bring-your-own-key UI work out of scope until licensing, security, privacy, and operational requirements are documented.
-
-Acceptance: Tests cover project creation, report regeneration, monitoring with unchanged data, drift threshold status, risk-limit breach status, distribution-cut warning, stale-data warning, deterministic report asset names, and no provider-data redistribution beyond local user-owned outputs.
-
-Determinism: Project report and monitoring ids include project id, current Refresh snapshot, Selection membership, Update analysis, recommendation id, transition plan id, monitoring policy, and template version.
-
-Idempotency: Re-running local reports and monitoring with unchanged inputs produces the same report content and status artifacts, updating only explicitly allowed generated-at metadata.
-
 ### Series Completion Gate
 
-Final branch: `feat/local-reports-monitoring`.
+Final branch: `feat/recommendation-explanation-report`.
 
-Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until all prior PR56-PR67 branches are merged or explicitly superseded in this backlog.
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until all prior PR56-PR66 branches are merged or explicitly superseded in this backlog.
 
 Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and the production-candidate report tests added in this stack. The series remains incomplete while any production-candidate output can be generated without data-quality gates, consistent return semantics, risk-model diagnostics, solver diagnostics, baseline comparison, walk-forward evidence, costs, tail-risk/drawdown metrics, concentration/risk contributions, and explanation artifacts.
 
@@ -1192,7 +1156,7 @@ Git status: not started. PR: TBD.
 
 Priority: P4 end-user workflow handoff.
 
-Depends on: PR71 and PR68.
+Depends on: PR71.
 
 Scope: Add an optional `multivariate_statistics` handoff to current-position transition analysis, Flatex export, local project report generation, and monitoring statuses. The module may reference approved recommendation weights and transition outputs, but it must not decide broker execution or alter current positions.
 
@@ -1288,7 +1252,7 @@ Git status: not started. PR: TBD.
 
 Priority: P0 governance for product scope.
 
-Depends on: PR68, PR75.
+Depends on: PR75.
 
 Scope: Add a maintained goal-to-backlog traceability matrix mapping `GOALS.md` sections to PR stacks, explicit production prerequisites, blocked hosted items, and out-of-scope broker-execution decisions. Add a machine-checkable documentation test that every active goal category has either an implemented PR, an open backlog PR, or an explicit deferred rationale.
 
