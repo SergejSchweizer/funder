@@ -129,7 +129,7 @@ Unchanged split requests resolve to the same metrics and weights; interrupted ru
 
 Branch: `perf/pairwise-bucketed-scale-guard`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/95.
 
 Priority: P0/P1 operational safety.
 
