@@ -904,7 +904,7 @@ Idempotency: Re-running quality checks and return builds with unchanged inputs r
 
 Branch: `fix/rebalance-instrument-drift`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/85.
 
 Priority: P0 backtest correctness.
 
