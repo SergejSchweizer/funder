@@ -39,7 +39,7 @@ C01 and C02 are logically independent and may be implemented in parallel on sepa
 
 Branch: `fix/cli-entrypoint-consistency`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/91.
 
 Priority: P0 package correctness.
 
