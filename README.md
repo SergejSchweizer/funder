@@ -111,7 +111,7 @@ Top canonical exchanges after one-row-per-ISIN selection:
 
 1. Discover ETF and fund instruments from EODHD without committing credentials.
 2. Deduplicate the universe to one canonical listing per ISIN, preferring `XETRA` when available.
-3. Bronze end-of-day quotes for the selected canonical universe.
+3. Fetch Bronze end-of-day quotes for the latest `metadata_filter` selection with `fetch-all-quotes`.
 4. Build Silver quotes into a reproducible local dataset.
 5. Validate coverage, missing dates, currencies, identifiers, and duplicate listings.
 6. Estimate return and risk inputs from validated quote history.
@@ -184,6 +184,46 @@ fetch_all_isins
 
 ```bash
 uv run founder fetch-all-isins
+```
+
+`fetch-all-quotes` is the quote refresh module. It reads the latest persisted `metadata_filter` selection, fetches EODHD quotes plus companion dividends and splits by default, writes Bronze inputs, rebuilds Silver quotes, and updates coverage manifests:
+
+```bash
+uv run founder fetch-all-quotes
+```
+
+Available `fetch-all-quotes` options:
+
+```text
+--debug
+  Write verbose DEBUG logs.
+
+--root <path>
+  Lake root to write to. Defaults to lake.
+
+--run-id <id>
+  Optional stable run id. Defaults to fetch-all-quotes plus the end date.
+
+--start-date <YYYY-MM-DD>
+  Optional first quote date. Empty means full provider history.
+
+--end-date <YYYY-MM-DD>
+  Optional last quote date. Defaults to today.
+
+--limit <n>
+  Optional maximum approved listings to fetch.
+
+--isin <ISIN>
+  Fetch only one ISIN from the latest metadata-filter selection.
+
+--no-gap-aware
+  Disable Silver-based gap planning and request the whole requested date window.
+
+--no-raw-datasets
+  Do not fetch companion raw dividends and splits datasets.
+
+--concurrency <workers>
+  Worker thread count for EODHD requests and Silver writes. Defaults to 2.
 ```
 
 `metadata_filter` reads only the all-ISIN source, applies conjunctive metadata predicates, and writes a hash-addressable selection with `isins.parquet` and `manifest.json`:
@@ -422,20 +462,20 @@ Statistic paths deliberately do not include a selection id. Later metadata or un
 
 ## Scheduled Founder Cron
 
-Founder cron should call the refresh orchestration for the five-module architecture, not individual ad hoc module snippets. Keep the cron job readable by defining absolute paths once:
+Founder cron should call the `fetch-all-quotes` module for quote updates, not individual ad hoc Bronze/Silver snippets. Keep the cron job readable by defining absolute paths once:
 
 ```cron
 SHELL=/bin/bash
 FOUNDER_PROJECT=/home/vcs/git/founder
 FOUNDER_UV=/home/vcs/.local/bin/uv
-FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-refresh.lock
-FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-refresh.log
+FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-fetch-all-quotes.lock
+FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-fetch-all-quotes.log
 
-# Daily refresh at 18:00 local server time.
-0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder refresh --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+# Daily quote fetch at 18:00 local server time.
+0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder fetch-all-quotes --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
 ```
 
-Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-refresh.log`.
+Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-fetch-all-quotes.log`.
 
 The dry run writes discovery candidates, a canonical universe, bronze plan, quote rows, coverage manifests, and Gold return/correlation/covariance/feature inputs under the selected local lake root.
 

@@ -13,6 +13,7 @@ from founder.univariate_statistics import DEFAULT_CONFIDENCE_LEVEL
 from founder.workflows import (
     run_bivariate_statistics_workflow,
     run_fetch_all_isins_workflow,
+    run_fetch_all_quotes_workflow,
     run_metadata_filter_workflow,
     run_search_workflow,
     run_univariate_filter_workflow,
@@ -79,6 +80,58 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-delisted",
         action="store_true",
         help="Include delisted symbols when EODHD provides them.",
+    )
+    fetch_all_quotes = subparsers.add_parser(
+        "fetch-all-quotes",
+        help="Fetch quote, dividend, and split data for the latest metadata-filter selection.",
+    )
+    fetch_all_quotes.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Write verbose DEBUG logs.",
+    )
+    fetch_all_quotes.add_argument(
+        "--root", default=str(DEFAULT_ROOT), help="Lake root to write to."
+    )
+    fetch_all_quotes.add_argument(
+        "--run-id",
+        help="Optional stable run id. Defaults to fetch-all-quotes plus the end date.",
+    )
+    fetch_all_quotes.add_argument(
+        "--start-date",
+        type=_parse_date,
+        help="Optional first quote date YYYY-MM-DD. Empty means full provider history.",
+    )
+    fetch_all_quotes.add_argument(
+        "--end-date",
+        type=_parse_date,
+        help="Optional last quote date YYYY-MM-DD. Defaults to today.",
+    )
+    fetch_all_quotes.add_argument(
+        "--limit",
+        type=int,
+        help="Optional maximum approved listings to fetch.",
+    )
+    fetch_all_quotes.add_argument(
+        "--isin",
+        help="Optional single ISIN from the latest metadata-filter selection to fetch.",
+    )
+    fetch_all_quotes.add_argument(
+        "--no-gap-aware",
+        action="store_true",
+        help="Disable Silver-based gap planning and request the whole requested date window.",
+    )
+    fetch_all_quotes.add_argument(
+        "--no-raw-datasets",
+        action="store_true",
+        help="Do not fetch companion raw dividends and splits datasets.",
+    )
+    fetch_all_quotes.add_argument(
+        "--concurrency",
+        type=int,
+        default=2,
+        help="Worker thread count for EODHD requests and Silver writes. Defaults to 2.",
     )
     metadata_filter = subparsers.add_parser(
         "metadata-filter",
@@ -206,6 +259,18 @@ def main(argv: Sequence[str] | None = None) -> None:
             root=Path(args.root),
             exchange_codes=tuple(args.exchange_code),
             include_delisted=args.include_delisted,
+        )
+    elif args.command == "fetch-all-quotes":
+        summary = run_fetch_all_quotes_workflow(
+            root=Path(args.root),
+            run_id=args.run_id,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            limit=args.limit,
+            isin=args.isin,
+            gap_aware=not args.no_gap_aware,
+            include_raw_datasets=not args.no_raw_datasets,
+            concurrency=args.concurrency,
         )
     elif args.command == "metadata-filter":
         summary = run_metadata_filter_workflow(

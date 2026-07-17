@@ -1,11 +1,14 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 from founder.cli import main
+from founder.fetch_all_quotes import main as fetch_all_quotes_main
 from founder.paths import LakePaths
 from founder.table_io import read_json, read_rows, write_json, write_rows
+from founder.workflows import run_fetch_all_quotes_workflow
 
 
 def _quote(isin: str, exchange: str, code: str, date: str, close: float) -> dict[str, object]:
@@ -82,6 +85,224 @@ def test_cli_runs_search_module(tmp_path: Path, capsys: pytest.CaptureFixture[st
     paths = LakePaths(root=root)
     assert payload["canonical_rows"] == 1
     assert read_json(paths.current_universe())["search_run_id"] == "search-cli"
+
+
+def test_cli_runs_fetch_all_quotes_module(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "quotes-cli", "quote_successes": 2}
+
+    monkeypatch.setattr("founder.cli.run_fetch_all_quotes_workflow", fake_workflow)
+
+    main(
+        [
+            "fetch-all-quotes",
+            "--root",
+            str(root),
+            "--run-id",
+            "quotes-cli",
+            "--start-date",
+            "2026-01-01",
+            "--end-date",
+            "2026-01-31",
+            "--limit",
+            "3",
+            "--isin",
+            "IE0000000001",
+            "--no-gap-aware",
+            "--no-raw-datasets",
+            "--concurrency",
+            "4",
+        ]
+    )
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload == {"quote_successes": 2, "run_id": "quotes-cli"}
+    assert captured == {
+        "concurrency": 4,
+        "end_date": date.fromisoformat("2026-01-31"),
+        "gap_aware": False,
+        "include_raw_datasets": False,
+        "isin": "IE0000000001",
+        "limit": 3,
+        "root": root,
+        "run_id": "quotes-cli",
+        "start_date": date.fromisoformat("2026-01-01"),
+    }
+
+
+def test_fetch_all_quotes_cli_defaults_to_two_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "quotes-cli"}
+
+    monkeypatch.setattr("founder.cli.run_fetch_all_quotes_workflow", fake_workflow)
+
+    main(["fetch-all-quotes", "--root", str(root)])
+
+    assert captured["concurrency"] == 2
+
+
+def test_standalone_fetch_all_quotes_cli(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "standalone-quotes", "quote_errors": 0}
+
+    monkeypatch.setattr("founder.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
+
+    fetch_all_quotes_main(
+        [
+            "--root",
+            str(root),
+            "--run-id",
+            "standalone-quotes",
+            "--end-date",
+            "2026-02-01",
+            "--concurrency",
+            "5",
+        ]
+    )
+
+    output = capsys.readouterr()
+    payload = json.loads(output.out)
+    assert payload == {"quote_errors": 0, "run_id": "standalone-quotes"}
+    assert captured["concurrency"] == 5
+    assert captured["end_date"] == date.fromisoformat("2026-02-01")
+    assert captured["root"] == root
+
+
+def test_standalone_fetch_all_quotes_cli_defaults_to_two_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    captured: dict[str, object] = {}
+
+    def fake_workflow(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"run_id": "standalone-quotes"}
+
+    monkeypatch.setattr("founder.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
+
+    fetch_all_quotes_main(["--root", str(root)])
+
+    assert captured["concurrency"] == 2
+
+
+def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    write_rows(
+        paths.metadata_filter_isins("older-selection"),
+        [
+            {
+                "selection_id": "older-selection",
+                "isin": "IE0000000000",
+                "code": "OLD",
+                "exchange": "XETRA",
+                "name": "Older ETF",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
+    write_json(
+        paths.metadata_filter_manifest("older-selection"),
+        {
+            "selection_id": "older-selection",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        },
+    )
+    write_rows(
+        paths.metadata_filter_isins("latest-selection"),
+        [
+            {
+                "selection_id": "latest-selection",
+                "isin": "IE0000000001",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "name": "Example UCITS ETF",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
+    write_json(
+        paths.metadata_filter_manifest("latest-selection"),
+        {
+            "selection_id": "latest-selection",
+            "created_at": "2026-01-02T00:00:00+00:00",
+        },
+    )
+
+    class FakeClient:
+        def get_json(
+            self, path: str, params: dict[str, str] | None = None
+        ) -> list[dict[str, object]]:
+            del params
+            if path == "/eod/AAA.XETRA":
+                return [
+                    {
+                        "date": "2026-01-01",
+                        "open": 100.0,
+                        "high": 101.0,
+                        "low": 99.0,
+                        "close": 100.0,
+                        "adjusted_close": 100.0,
+                        "volume": 10,
+                    },
+                    {
+                        "date": "2026-01-02",
+                        "open": 101.0,
+                        "high": 102.0,
+                        "low": 100.0,
+                        "close": 101.0,
+                        "adjusted_close": 101.0,
+                        "volume": 11,
+                    },
+                ]
+            if path == "/div/AAA.XETRA":
+                return [{"date": "2026-01-02", "value": 0.1}]
+            if path == "/splits/AAA.XETRA":
+                return [{"date": "2026-01-02", "split": "1/1"}]
+            raise AssertionError(path)
+
+    monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
+    monkeypatch.setattr("founder.workflows.EodhdClient", lambda config: FakeClient())
+
+    summary = run_fetch_all_quotes_workflow(
+        root=root,
+        run_id="quotes-run",
+        end_date=date.fromisoformat("2026-01-02"),
+        concurrency=1,
+    )
+
+    assert summary["quote_successes"] == 1
+    assert summary["raw_dataset_successes"] == 2
+    assert summary["selection_id"] == "latest-selection"
+    assert summary["selected_listing_count"] == 1
+    assert summary["silver_quote_rows"] == 2
+    assert len(read_rows(paths.bronze_quote_file("XETRA", 2026, "IE0000000001"))) == 2
+    assert (
+        len(read_rows(paths.bronze_dataset_file("dividends", "XETRA", 2026, "IE0000000001"))) == 1
+    )
+    assert len(read_rows(paths.bronze_dataset_file("splits", "XETRA", 2026, "IE0000000001"))) == 1
+    assert len(read_rows(paths.silver_quote_file("XETRA", "IE0000000001"))) == 2
 
 
 def test_cli_runs_univariate_and_bivariate_statistics_modules(

@@ -11,6 +11,15 @@ from pathlib import Path
 from typing import Any, cast
 
 from founder.bivariate_statistics import write_bivariate_statistics
+from founder.bronze import (
+    ADDITIONAL_EODHD_DATASETS,
+    QUOTE_DATASET,
+    build_gap_bronze_plan,
+    eodhd_dataset_loader,
+    write_bronze_manifests,
+    write_quotes_to_bronze,
+    write_raw_eodhd_datasets_to_bronze,
+)
 from founder.config import load_eodhd_config
 from founder.fetch_all_isins import fetch_all_isins, write_all_isins
 from founder.http import EodhdClient
@@ -24,8 +33,8 @@ from founder.search import (
     write_search_run,
 )
 from founder.selection_filters import parse_predicates
-from founder.silver import read_silver_quotes
-from founder.table_io import read_json, read_rows
+from founder.silver import build_silver_quotes, read_silver_quotes
+from founder.table_io import read_json, read_rows, write_rows
 from founder.univariate_filter import run_univariate_filter, selection_rows
 from founder.univariate_statistics import (
     DEFAULT_CONFIDENCE_LEVEL,
@@ -114,6 +123,116 @@ def run_fetch_all_isins_workflow(
         "skipped_exchange_count": len(fetch_result.skipped_exchanges),
         "skipped_exchanges": list(fetch_result.skipped_exchanges),
     }
+
+
+def run_fetch_all_quotes_workflow(
+    *,
+    root: Path,
+    run_id: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    limit: int | None = None,
+    isin: str | None = None,
+    gap_aware: bool = True,
+    include_raw_datasets: bool = True,
+    concurrency: int = 2,
+) -> dict[str, Any]:
+    """Fetch Bronze quote inputs for the latest Metadata Filter selection."""
+    paths = LakePaths(root=root)
+    resolved_end_date = end_date or date.today()
+    resolved_run_id = run_id or generated_run_id("fetch-all-quotes", run_date=resolved_end_date)
+    selection_id = _latest_metadata_selection_id(paths)
+    selection_rows = _metadata_selection_rows(paths, selection_id)
+    if isin is not None:
+        normalized_isin = isin.casefold()
+        selection_rows = [
+            row for row in selection_rows if str(row.get("isin", "")).casefold() == normalized_isin
+        ]
+        if not selection_rows:
+            raise ValueError(f"metadata-filter selection does not contain ISIN: {isin}")
+    if limit is not None:
+        selection_rows = selection_rows[:limit]
+    plan = _build_fetch_all_quotes_plan(
+        selection_rows,
+        run_id=resolved_run_id,
+        start_date=start_date,
+        end_date=resolved_end_date,
+    )
+    if gap_aware:
+        plan = build_gap_bronze_plan(plan, read_silver_quotes(paths), end_date=resolved_end_date)
+    write_rows(paths.bronze_plan(resolved_run_id), plan)
+    client = EodhdClient(load_eodhd_config())
+    quote_successes, quote_errors = write_quotes_to_bronze(
+        paths,
+        plan,
+        run_date=resolved_end_date,
+        loader=eodhd_dataset_loader(client, QUOTE_DATASET),
+        concurrency=concurrency,
+    )
+    raw_successes: list[dict[str, Any]] = []
+    raw_errors: list[dict[str, Any]] = []
+    if include_raw_datasets:
+        raw_successes, raw_errors = write_raw_eodhd_datasets_to_bronze(
+            paths,
+            plan,
+            run_date=resolved_end_date,
+            loaders={
+                strategy.name: eodhd_dataset_loader(client, strategy)
+                for strategy in ADDITIONAL_EODHD_DATASETS
+            },
+            concurrency=concurrency,
+        )
+    silver_rows = build_silver_quotes(paths, concurrency=concurrency)
+    coverage = write_bronze_manifests(
+        paths,
+        run_id=resolved_run_id,
+        quote_rows=silver_rows,
+        plan=plan,
+        as_of=resolved_end_date,
+    )
+    LOGGER.info(
+        "fetch-all-quotes complete run_id=%s plan_rows=%s quote_successes=%s quote_errors=%s",
+        resolved_run_id,
+        len(plan),
+        len(quote_successes),
+        len(quote_errors),
+    )
+    return {
+        "coverage_rows": len(coverage),
+        "raw_dataset_errors": len(raw_errors),
+        "raw_dataset_successes": len(raw_successes),
+        "quote_errors": len(quote_errors),
+        "quote_successes": len(quote_successes),
+        "run_id": resolved_run_id,
+        "selection_id": selection_id,
+        "selected_listing_count": len(selection_rows),
+        "silver_quote_rows": len(silver_rows),
+    }
+
+
+def _build_fetch_all_quotes_plan(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    run_id: str,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[dict[str, Any]]:
+    plan: list[dict[str, Any]] = []
+    for row in rows:
+        code = str(row["code"])
+        exchange = str(row["exchange"])
+        plan.append(
+            {
+                "run_id": run_id,
+                "isin": str(row["isin"]),
+                "code": code,
+                "exchange": exchange,
+                "symbol": f"{code}.{exchange}",
+                "start_date": start_date.isoformat() if start_date is not None else "",
+                "end_date": end_date.isoformat() if end_date is not None else "",
+            }
+        )
+    return plan
 
 
 def run_metadata_filter_workflow(

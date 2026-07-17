@@ -192,13 +192,13 @@ Update trigger: Revisit if the project adopts a different primary matrix store, 
 
 Date: 2026-07-13
 
-Context: Bronze, Silver, and Gold can be run either as standalone CLI commands or through `founder refresh`. A global cron `flock` prevents one scheduled refresh overlap, but it does not protect manual standalone layer commands from colliding with a refresh or with another same-layer command.
+Context: Bronze, Silver, and Gold can be run either as standalone CLI commands or through `founder fetch-all-quotes`. A global cron `flock` prevents one scheduled quote-fetch overlap, but it does not protect manual standalone layer commands from colliding with a quote fetch or with another same-layer command.
 
 Decision: Use stable OS-backed locks per lake layer: `lake/bronze/runs/bronze.lock`, `lake/silver/runs/silver.lock`, and `lake/gold/runs/gold.lock`. Each layer command exits with a clear active-run error when the same layer is already running for the lake root.
 
 Consequences: Different layers may still run at the same time when explicitly started, but duplicate Bronze, duplicate Silver, and duplicate Gold writes are blocked. The lock files may remain as metadata after a process exits, but the OS lock is released when the process terminates, avoiding stale file-existence locks.
 
-Update trigger: Revisit if Founder moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole-refresh serialization instead of same-layer serialization.
+Update trigger: Revisit if Founder moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole quote-fetch serialization instead of same-layer serialization.
 
 ## D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries
 

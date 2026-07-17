@@ -77,7 +77,7 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.logging` owns uniform module logging. It configures `.logs/founder-YYYY-MM-DD.log`, supports DEBUG verbosity for CLI commands, zips plain logs older than seven days, and deletes zip archives older than one month.
 
-`founder.run_locks` owns per-layer process locks. It serializes Bronze, Silver, and Gold commands per lake root with stable OS locks so standalone commands and refresh runs cannot overlap the same layer.
+`founder.run_locks` owns per-layer process locks. It serializes Bronze, Silver, and Gold commands per lake root with stable OS locks so standalone commands and fetch-all-quotes runs cannot overlap the same layer.
 
 `founder.__init__` owns the package import surface. It keeps the package importable and exposes the package version without triggering configuration loading, API calls, or lake writes.
 
