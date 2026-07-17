@@ -1,6 +1,6 @@
 # Founder Goals
 
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-17
 
 ## Purpose
 
@@ -615,6 +615,235 @@ A suitable progression is:
 
 Founder should initially remain a decision-support and trade-preparation tool. Direct broker order execution should be considered only after the analytical product, audit trail, security model, and regulatory implications are mature.
 
+## Initial Hosted Architecture
+
+The first hosted version should deliberately use a minimal architecture. It should be easy to understand, operate, back up, and replace incrementally.
+
+### Initial topology
+
+```text
+Browser / Mobile Browser
+          |
+          | HTTPS
+          v
++-----------------------------+
+| Web UI container            |
+| Next.js + React             |
+| TypeScript + Tailwind       |
+| Plotly                      |
+| Port 3000                   |
++-------------+---------------+
+              |
+              | REST / JSON
+              v
++-----------------------------+
+| API container               |
+| FastAPI                     |
+| Founder Python Core         |
+| SQLite + Parquet access     |
+| Port 8000                   |
++-------------+---------------+
+              |
+              v
+       Persistent data volume
+```
+
+The initial deployment consists of only:
+
+1. one `web` container;
+2. one `api` container containing FastAPI and the Founder analytical package;
+3. one persistent data directory or Docker volume.
+
+The first version should not require PostgreSQL, Redis, a separate worker, a message queue, Kubernetes, object storage, or a dedicated authentication service.
+
+### Responsibilities
+
+The Web UI is responsible for:
+
+- responsive desktop, tablet, and mobile presentation;
+- portfolio input and editing;
+- EODHD key entry for a session;
+- analysis configuration;
+- Plotly charts and analytical tables;
+- displaying progress, warnings, and results.
+
+The API is responsible for:
+
+- validating requests;
+- communicating with EODHD using the user's key;
+- invoking Founder workflows and analytical functions;
+- storing portfolio metadata and analysis-run state;
+- writing immutable Parquet result artifacts and JSON manifests;
+- returning compact JSON responses to the Web UI.
+
+The Founder Core remains responsible for all financial calculations. Portfolio logic must not be duplicated in the React application.
+
+### Initial data flow
+
+```text
+1. User opens Founder.
+2. User enters an EODHD key for the current session.
+3. User defines a small portfolio, initially approximately 3 to 10 funds.
+4. Next.js sends the portfolio and analysis request to FastAPI.
+5. FastAPI loads and caches the permitted EODHD data.
+6. Founder validates the data and calculates the analysis.
+7. The run is stored as Parquet artifacts plus a JSON manifest.
+8. SQLite stores the portfolio, positions, run status, and artifact path.
+9. FastAPI returns metrics and chart-ready JSON.
+10. Plotly renders the analysis in the responsive Web UI.
+```
+
+The EODHD key should initially be held only for the active request or session and must never be logged. Persistent encrypted credential storage can be added later.
+
+### Initial storage model
+
+SQLite stores only small application-state records:
+
+```text
+portfolios
+positions
+analysis_runs
+settings
+```
+
+Analytical outputs remain in Parquet:
+
+```text
+data/
+  founder.db
+  uploads/
+  market/
+  analytics/
+    {run_id}/
+      manifest.json
+      asset_metrics.parquet
+      portfolio_metrics.parquet
+      portfolio_returns.parquet
+      drawdowns.parquet
+      target_weights.parquet
+      risk_contributions.parquet
+```
+
+SQLite should act as the catalog. Parquet should contain the analytical results. The manifest should record how each result was produced.
+
+### Minimal repository direction
+
+```text
+founder/
+  apps/
+    web/                    # Next.js application
+      app/
+      components/
+      package.json
+      Dockerfile
+    api/                    # FastAPI application layer
+      founder_api/
+        main.py
+        routes/
+        services/
+      pyproject.toml
+      Dockerfile
+  src/
+    founder/                # existing analytical core
+  data/                     # ignored runtime data
+  docker-compose.yml
+  pyproject.toml
+```
+
+### Minimal API surface
+
+```text
+GET  /health
+
+POST /portfolios
+GET  /portfolios
+GET  /portfolios/{portfolio_id}
+
+POST /analyses
+GET  /analyses/{run_id}
+GET  /analyses/{run_id}/metrics
+GET  /analyses/{run_id}/returns
+GET  /analyses/{run_id}/weights
+```
+
+For the first small portfolios, FastAPI may execute an analysis synchronously. The API contract should nevertheless expose a run identifier and status so that a separate worker can be introduced without redesigning the Web UI.
+
+### Initial UI scope
+
+The first UI should contain only four main areas:
+
+```text
+/dashboard
+/portfolio
+/analysis/{run_id}
+/settings
+```
+
+Mobile should emphasize portfolio status, drawdown, risk, income, warnings, and recommended actions. Desktop should additionally expose comparison tables, correlation views, optimizer weights, and larger charts.
+
+Plotly is the initial unified charting library. Responsiveness requires both fluid chart containers and mobile-specific chart layouts; merely shrinking desktop charts is not sufficient.
+
+### Minimal Docker Compose direction
+
+```yaml
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/founder.db
+      FOUNDER_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+```
+
+Production deployment should place HTTPS and a reverse proxy in front of the Web UI and API. An existing NAS reverse proxy may be reused instead of introducing another container.
+
+### Initial analysis scope
+
+The first hosted release should prioritize a small, correct feature set:
+
+1. current user portfolio;
+2. Equal Weight benchmark;
+3. Inverse Volatility benchmark;
+4. Minimum Variance candidate;
+5. return and volatility metrics;
+6. maximum drawdown;
+7. Sharpe and Sortino ratios;
+8. CVaR;
+9. risk contributions;
+10. correlation matrix.
+
+True HRP, production ERC, the Income Optimizer, AI Investment Committee, extensive walk-forward validation, and scheduled monitoring should follow after the base workflow is stable.
+
+### Growth path
+
+The minimal architecture should be extended only when observed load requires it:
+
+```text
+SQLite             -> PostgreSQL
+local filesystem   -> S3-compatible object storage
+synchronous API    -> separate worker and queue
+single API         -> multiple API instances
+session key        -> encrypted credential vault
+```
+
+Each transition should be independent. Parquet result artifacts and stable API contracts should minimize migration cost.
+
 ## Proposed Module Direction
 
 ```text
@@ -702,7 +931,7 @@ Existing stable public module surfaces may be preserved while internal package b
 23. Add persisted user portfolio projects and current positions.
 24. Add current-versus-target transition analysis.
 25. Add structured HTML or web reports.
-26. Add a hosted bring-your-own-key interface.
+26. Add a hosted bring-your-own-key interface using the initial two-container architecture.
 27. Add portfolio monitoring and alerts after licensing and security review.
 
 ## Initial Production Definition Of Done
