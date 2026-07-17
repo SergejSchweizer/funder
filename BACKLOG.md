@@ -978,11 +978,13 @@ Idempotency: Re-running unchanged objectives produces the same weights, diagnost
 
 Branch: `feat/hrp-cvar-production-optimizers`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1/P2 robust and tail-risk construction.
 
 Depends on: PR60.
+
+Progress note: the True HRP half of this scope (real hierarchical clustering, correlation-distance matrix, quasi-diagonal ordering, recursive bisection with inverse-variance cluster weights, linkage/dendrogram persistence, and a clearly labeled `hierarchical_risk_parity_baseline` for the retired naive split) is merged: https://github.com/SergejSchweizer/founder/pull/104. Historical Minimum CVaR optimization remains open.
 
 Scope: Replace temporary HRP behavior with true hierarchical clustering, correlation-distance matrix, quasi-diagonal ordering, and recursive bisection by cluster variance. Add historical Minimum CVaR optimization under long-only, concentration, and turnover-aware constraints. Keep Maximum Diversification and Maximum Sharpe as comparison methods unless their inputs satisfy production criteria.
 

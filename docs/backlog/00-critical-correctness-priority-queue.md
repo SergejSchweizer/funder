@@ -263,6 +263,10 @@ production_eligible
 
 ## Mandatory Amendments To PR61
 
+Branch: `feat/hrp-cvar-production-optimizers`.
+
+Git status: True HRP merged. PR: https://github.com/SergejSchweizer/founder/pull/104. Minimum CVaR optimization (PR61's other half in BACKLOG.md) remains open.
+
 The current recursive midpoint split is not true Hierarchical Risk Parity.
 
 PR61 must:
