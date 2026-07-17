@@ -86,12 +86,15 @@ def test_resolve_actual_optimizer_method_is_not_fooled_by_a_genuine_equal_weight
 
 
 def test_optimize_portfolio_production_mode_rejects_candidate_limit_exceeded() -> None:
+    # maximum_sharpe has no solver-backed production path yet (PR60 only wired
+    # Minimum Variance and Equal Risk Contribution), so it still hits the
+    # grid candidate-limit guard added in the PR59 amendment.
     with pytest.raises(ValueError, match=CANDIDATE_LIMIT_EXCEEDED_REASON):
         optimize_portfolio(
             _OVER_LIMIT_LISTINGS,
             _dense_covariance_rows(_OVER_LIMIT_LISTINGS),
             {row["isin"]: 0.01 for row in _OVER_LIMIT_LISTINGS},
-            objective="minimum_variance",
+            objective="maximum_sharpe",
             constraints=PortfolioConstraints(max_weight=0.5),
             grid_step=_OVER_LIMIT_GRID_STEP,
             mode=PRODUCTION_SOLVER_MODE,
@@ -131,7 +134,7 @@ def test_diagnostics_report_candidate_limit_fallback_and_block_production_eligib
         _OVER_LIMIT_LISTINGS,
         _dense_covariance_rows(_OVER_LIMIT_LISTINGS),
         {row["isin"]: 0.01 for row in _OVER_LIMIT_LISTINGS},
-        objective="minimum_variance",
+        objective="maximum_sharpe",
         constraints=PortfolioConstraints(max_weight=0.5),
         grid_step=_OVER_LIMIT_GRID_STEP,
         mode=BASELINE_SOLVER_MODE,
@@ -142,13 +145,13 @@ def test_diagnostics_report_candidate_limit_fallback_and_block_production_eligib
         _dense_covariance_rows(_OVER_LIMIT_LISTINGS),
         {row["isin"]: 0.01 for row in _OVER_LIMIT_LISTINGS},
         weights,
-        objective="minimum_variance",
+        objective="maximum_sharpe",
         constraints=PortfolioConstraints(max_weight=0.5),
         mode=PRODUCTION_SOLVER_MODE,
         grid_step=_OVER_LIMIT_GRID_STEP,
     )
 
-    assert diagnostics["requested_method"] == "minimum_variance"
+    assert diagnostics["requested_method"] == "maximum_sharpe"
     assert diagnostics["actual_method"] == EQUAL_WEIGHT_FALLBACK_METHOD
     assert diagnostics["fallback_used"] is True
     assert diagnostics["fallback_reason"] == CANDIDATE_LIMIT_EXCEEDED_REASON
@@ -183,11 +186,11 @@ def test_diagnostics_distinguish_explicit_equal_weight_from_a_hidden_fallback() 
             _OVER_LIMIT_LISTINGS,
             _dense_covariance_rows(_OVER_LIMIT_LISTINGS),
             {row["isin"]: 0.01 for row in _OVER_LIMIT_LISTINGS},
-            objective="minimum_variance",
+            objective="maximum_sharpe",
             constraints=PortfolioConstraints(max_weight=0.5),
             grid_step=_OVER_LIMIT_GRID_STEP,
         ),
-        objective="minimum_variance",
+        objective="maximum_sharpe",
         constraints=PortfolioConstraints(max_weight=0.5),
         mode=PRODUCTION_SOLVER_MODE,
         grid_step=_OVER_LIMIT_GRID_STEP,

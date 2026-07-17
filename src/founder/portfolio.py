@@ -9,6 +9,13 @@ from math import comb, isclose, isfinite
 from typing import Any
 
 from founder.paths import LakePaths
+from founder.portfolio_parts.solvers import SOLVER_NAME as PGD_SOLVER_NAME
+from founder.portfolio_parts.solvers import SOLVER_VERSION as PGD_SOLVER_VERSION
+from founder.portfolio_parts.solvers import (
+    SolverOutcome,
+    solve_equal_risk_contribution,
+    solve_minimum_variance,
+)
 from founder.table_io import JsonRow, read_rows, write_rows
 
 ListingKey = tuple[str, str, str]
@@ -26,6 +33,10 @@ GRID_OBJECTIVES = frozenset(
         *RISK_PARITY_OBJECTIVES,
     }
 )
+# Objectives with a real solver-backed production implementation (PR60).
+# maximum_sharpe, target_return_minimum_variance, and maximum_diversification
+# remain grid-only comparison methods until a later PR gives them a solver.
+SOLVER_BACKED_OBJECTIVES = frozenset({"minimum_variance", *RISK_PARITY_OBJECTIVES})
 PRODUCTION_SOLVER_MODE = "production"
 BASELINE_SOLVER_MODE = "baseline"
 SOLVER_MODES = (PRODUCTION_SOLVER_MODE, BASELINE_SOLVER_MODE)
@@ -255,6 +266,14 @@ def optimize_portfolio(
         raise ValueError("target_return is required")
     target_value = 0.0 if target_return is None else target_return
 
+    covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
+
+    if mode == PRODUCTION_SOLVER_MODE and objective in SOLVER_BACKED_OBJECTIVES:
+        result = _solve_production_objective(ordered, covariances, objective, constraints)
+        validate_weights(result, constraints)
+        return result
+
     if mode == PRODUCTION_SOLVER_MODE and is_candidate_limit_exceeded(len(ordered), grid_step):
         raise ValueError(
             f"{CANDIDATE_LIMIT_EXCEEDED_REASON}: production mode requires a numerical solver "
@@ -263,8 +282,6 @@ def optimize_portfolio(
             f"mode='{BASELINE_SOLVER_MODE}' for an explicitly labeled Equal Weight fallback."
         )
 
-    covariances = _covariance_map(covariance_rows)
-    require_complete_covariance(ordered, covariances)
     candidates = _candidate_weights(ordered, constraints, grid_step=grid_step)
     if not candidates:
         raise ValueError("no feasible weights for constraints")
@@ -343,11 +360,29 @@ def build_optimizer_diagnostics(
     expected_return = _portfolio_return(ordered, ordered_weights, expected_returns)
     violations = _constraint_violations(weights, constraints)
     missing_covariances, non_finite_covariances = _covariance_completeness(ordered, covariances)
+    solver_backed = mode == PRODUCTION_SOLVER_MODE and objective in SOLVER_BACKED_OBJECTIVES
 
     fallback_used = False
     fallback_reason = ""
     iteration_count = 1
-    if objective in GRID_OBJECTIVES and grid_step is not None:
+    solver_name = optimizer_type
+    solver_converged = True
+    solver_backed_matches_weights = False
+    if solver_backed and not (missing_covariances or non_finite_covariances):
+        solver_outcome = _run_production_solver(ordered, covariances, objective, constraints)
+        # Only trust the solver's own convergence/iteration stats when the
+        # given weights actually match what it produced; otherwise these
+        # weights came from a different computation (e.g. a baseline grid
+        # result) and must not be misreported as solver-verified.
+        solver_backed_matches_weights = all(
+            abs(given - solved) < 1e-6
+            for given, solved in zip(ordered_weights, solver_outcome.weights, strict=True)
+        )
+        if solver_backed_matches_weights:
+            iteration_count = solver_outcome.iteration_count
+            solver_name = PGD_SOLVER_NAME
+            solver_converged = solver_outcome.converged
+    if not solver_backed_matches_weights and objective in GRID_OBJECTIVES and grid_step is not None:
         candidate_count = exact_candidate_count(len(ordered), grid_step)
         if candidate_count > MAX_EXACT_WEIGHT_CANDIDATES:
             fallback_used = True
@@ -372,7 +407,9 @@ def build_optimizer_diagnostics(
         )
         portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
         objective_value = _objective_value(objective, ordered, ordered_weights, covariances)
-        if fallback_used:
+        if solver_backed_matches_weights and not solver_converged:
+            solver_status = "solver_not_converged"
+        elif fallback_used:
             solver_status = CANDIDATE_LIMIT_EXCEEDED_REASON
         elif violations:
             solver_status = "constraint_violation"
@@ -386,6 +423,7 @@ def build_optimizer_diagnostics(
     production_eligible = (
         mode == PRODUCTION_SOLVER_MODE
         and not fallback_used
+        and (not solver_backed_matches_weights or solver_converged)
         and missing_covariances == 0
         and non_finite_covariances == 0
         and not violations
@@ -395,8 +433,10 @@ def build_optimizer_diagnostics(
         optimizer_status=solver_status,
         requested_method=objective,
         actual_method=actual_method,
-        solver_name=optimizer_type,
-        solver_version=OPTIMIZER_ALGORITHM_VERSION,
+        solver_name=solver_name,
+        solver_version=PGD_SOLVER_VERSION
+        if solver_backed_matches_weights
+        else OPTIMIZER_ALGORITHM_VERSION,
         solver_status=solver_status,
         convergence_status=convergence_status,
         objective_value=objective_value,
@@ -851,6 +891,43 @@ def _covariance_map(
         right = (str(row["right_isin"]), str(row["right_exchange"]), str(row["right_code"]))
         values[(left, right)] = float(row["covariance"])
     return values
+
+
+def _run_production_solver(
+    listings: Sequence[ListingKey],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+    objective: str,
+    constraints: PortfolioConstraints,
+) -> SolverOutcome:
+    if objective == "minimum_variance":
+        return solve_minimum_variance(
+            listings,
+            covariances,
+            min_weight=constraints.min_weight,
+            max_weight=constraints.max_weight,
+        )
+    return solve_equal_risk_contribution(
+        listings,
+        covariances,
+        min_weight=constraints.min_weight,
+        max_weight=constraints.max_weight,
+    )
+
+
+def _solve_production_objective(
+    listings: Sequence[ListingKey],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+    objective: str,
+    constraints: PortfolioConstraints,
+) -> dict[str, float]:
+    outcome = _run_production_solver(listings, covariances, objective, constraints)
+    if not outcome.converged:
+        raise ValueError(
+            f"solver_not_converged: the {PGD_SOLVER_NAME} solver did not converge for "
+            f"objective {objective!r} within {outcome.iteration_count} iterations; no "
+            "production weights are produced for this request"
+        )
+    return {isin: weight for (isin, _, _), weight in zip(listings, outcome.weights, strict=True)}
 
 
 def _constraint_violations(
