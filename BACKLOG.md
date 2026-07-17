@@ -922,7 +922,7 @@ Idempotency: Re-running the same rebalance id with unchanged inputs produces the
 
 Branch: `feat/risk-model-diagnostics`.
 
-Git status: not started. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/89.
 
 Priority: P0/P1 risk-model foundation.
 
