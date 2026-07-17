@@ -1,6 +1,6 @@
 # Backlog
 
-Last reviewed: 2026-07-14
+Last reviewed: 2026-07-17
 
 ## Table Of Contents
 
@@ -11,6 +11,7 @@ Last reviewed: 2026-07-14
 - [Architecture Refactor PR Stack](#architecture-refactor-pr-stack)
 - [Refactor Hardening PR Stack](#refactor-hardening-pr-stack)
 - [Refresh, Selection, And Update Module PR Stack](#refresh-selection-and-update-module-pr-stack)
+- [Production Portfolio Product PR Stack](#production-portfolio-product-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -873,6 +874,252 @@ Final branch: `refactor/three-module-cutover`.
 Squash rule: The final PR title and squash commit subject must use `type(optional-scope): subject`.
 
 Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with coverage of at least 95%, and schema validation. The series remains incomplete while any stacked PR is unmerged or the final gate is not green.
+
+## Production Portfolio Product PR Stack
+
+Priority policy: This stack translates `GOALS.md` into production portfolio decision-support work. Each PR must be stacked on the previous PR until merged, must keep Refresh global, Selection deterministic and side-effect-free, and Update scoped to the current Selection. Production-facing outputs must be labeled unavailable or baseline until their data quality, return semantics, risk model diagnostics, constraints, walk-forward evidence, costs, and explanation artifacts are present. Every PR must preserve immutable input identities and avoid hidden network calls outside Refresh.
+
+### PR56. Return Semantics And Data-Quality Gate
+
+Branch: `fix/production-return-quality-gate`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 correctness foundation.
+
+Depends on: PR55.
+
+Scope: Make return type explicit in every affected contract and metric artifact; separate simple-return wealth simulation from log-return statistical calculations; reject, quarantine, or mark invalid prices instead of converting them to zero returns; add minimum-history, stale-price, duplicate-row, unexplained-gap, and quote-coverage checks before portfolio analysis can be marked production-eligible.
+
+Acceptance: Tests cover zero, negative, missing, stale, duplicate, and corrected prices; simple wealth compounding; log-return metrics; closed-period denominators; minimum observation thresholds of 252, 504, and 756 daily observations; explicit unavailable reasons; and prevention of production-candidate output when quality gates fail.
+
+Determinism: Quality decisions, return rows, unavailable reasons, and production-eligibility flags derive only from pinned market-data versions, explicit date windows, and versioned policy thresholds.
+
+Idempotency: Re-running quality checks and return builds with unchanged inputs reuses or rewrites the same artifacts without duplicate rows, pointer churn, or changes to Refresh and Selection state.
+
+### PR57. Instrument-Level Rebalancing Drift And Cost Basis
+
+Branch: `fix/rebalance-instrument-drift`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 backtest correctness.
+
+Depends on: PR56.
+
+Scope: Correct rebalance simulation so each instrument drifts from its own simple return, not the portfolio return. Add explicit pre-trade value, pre-trade weight, target value, trade value, turnover, cash remainder, and post-cost portfolio value fields. Keep existing deterministic baseline schedules while making monthly, quarterly, annual, threshold, and hybrid rules use the same instrument-level engine.
+
+Acceptance: Tests cover multi-asset drift, no-trade periods, threshold triggers, partial periods, cash remainder, transaction-cost application, changing target weights, and equality between a one-period manual spreadsheet fixture and persisted rows.
+
+Determinism: Drift rows and rebalance events depend only on pinned aligned simple returns, prior weights, schedule policy, cost policy, and target-weight artifact ids.
+
+Idempotency: Re-running the same rebalance id with unchanged inputs produces the same event ids, portfolio values, costs, weights, and metrics without appending duplicates.
+
+### PR58. Risk Model Package And Covariance Diagnostics
+
+Branch: `feat/risk-model-diagnostics`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0/P1 risk-model foundation.
+
+Depends on: PR57.
+
+Scope: Introduce `founder.risk_model` with sample covariance, Ledoit-Wolf shrinkage covariance, EWMA covariance, rolling and expanding estimation windows, and structured diagnostics for estimation period, observation count, missing pair count, positive-semidefinite status, condition number or stability category, shrinkage intensity, missing-observation handling, and base return frequency.
+
+Acceptance: Tests cover sample covariance parity with current baseline, Ledoit-Wolf shrinkage on small and highly correlated fixtures, EWMA decay behavior, rolling and expanding windows, PSD detection, condition-number categories, insufficient common history, and deterministic diagnostic rows.
+
+Determinism: Risk-model artifact ids include membership id, calendar id, return type, estimator, estimator parameters, window policy, and algorithm version; worker order and filesystem order cannot affect matrices or diagnostics.
+
+Idempotency: Recomputing unchanged risk models resolves to the same covariance, correlation, and diagnostic artifacts and does not mutate prior model versions.
+
+### PR59. Production Numerical Solver Boundary
+
+Branch: `feat/optimizer-solver-boundary`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 optimizer foundation.
+
+Depends on: PR58.
+
+Scope: Add a numerical optimization dependency and a stable solver boundary for constrained convex portfolio problems. Separate deterministic baseline optimizers from production solver-backed optimizers, expose convergence status, objective value, constraint residuals, bound activity, iteration count, solver settings, and infeasibility reasons. Remove large-universe grid-search fallback behavior from production-labeled paths.
+
+Acceptance: Tests cover feasible and infeasible quadratic programs, long-only/full-investment/min/max-weight constraints, concentration limits, deterministic tie-breaking, solver failure reporting, no-grid fallback in production mode, and unchanged baseline outputs where explicitly requested.
+
+Determinism: Solver requests canonicalize asset order, constraints, bounds, risk-model ids, expected-return ids, and settings; diagnostics record tolerances so repeated runs are stable within explicit numeric tolerances.
+
+Idempotency: Re-running the same solver request writes the same target-weight and diagnostic artifacts or the same explicit failure artifact without partial portfolio outputs.
+
+### PR60. Production Minimum Variance And Equal Risk Contribution
+
+Branch: `feat/production-risk-optimizers`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 robust portfolio construction.
+
+Depends on: PR59.
+
+Scope: Implement solver-backed constrained Minimum Variance and Equal Risk Contribution over shrinkage or EWMA risk models. Persist target weights, marginal risk contribution, absolute risk contribution, percentage risk contribution, objective residuals, constraint diagnostics, and production-readiness labels.
+
+Acceptance: Tests cover diagonal covariance, correlated ETF clusters, near-singular covariance, allocation caps, issuer or group caps when supplied, zero-variance assets, equal-risk-budget residuals, convergence failure, and comparison against Equal Weight and Inverse Volatility baselines.
+
+Determinism: Optimizer outputs depend only on pinned final membership, risk-model artifact, constraints, solver settings, and objective version.
+
+Idempotency: Re-running unchanged objectives produces the same weights, diagnostics, and baseline comparisons without recomputing unchanged risk-model artifacts.
+
+### PR61. True HRP And Minimum CVaR Optimizers
+
+Branch: `feat/hrp-cvar-production-optimizers`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1/P2 robust and tail-risk construction.
+
+Depends on: PR60.
+
+Scope: Replace temporary HRP behavior with true hierarchical clustering, correlation-distance matrix, quasi-diagonal ordering, and recursive bisection by cluster variance. Add historical Minimum CVaR optimization under long-only, concentration, and turnover-aware constraints. Keep Maximum Diversification and Maximum Sharpe as comparison methods unless their inputs satisfy production criteria.
+
+Acceptance: Tests cover clustering tie-breaks, highly correlated groups, recursive bisection allocations, cluster variance, CVaR loss scenarios, repeated tail losses, confidence-level validation, long-only bounds, infeasible CVaR constraints, and explicit baseline versus production labels.
+
+Determinism: HRP ordering, cluster ids, CVaR scenario ids, tail sets, and weights derive from canonical asset order, pinned returns, risk-model ids, objective settings, and algorithm versions.
+
+Idempotency: Re-running unchanged HRP or CVaR requests reuses existing matrices and writes the same cluster, tail-risk, diagnostic, and target-weight artifacts.
+
+### PR62. Income And Distribution Quality Metrics
+
+Branch: `feat/income-distribution-quality`.
+
+Git status: not started. PR: TBD.
+
+Priority: P2 income specialization.
+
+Depends on: PR61.
+
+Scope: Introduce `founder.income` metrics for distribution history, trailing twelve-month distribution amount, trailing yield, average and median monthly distribution, conservative lower-percentile monthly distribution, distribution variability, coefficient of variation, distribution cuts, largest cut, longest falling sequence, distribution trend, price-return versus total-return gap, NAV erosion, income per Expected Shortfall, estimated gross and net income, sustainable income, and income efficiency.
+
+Acceptance: Tests cover monthly, quarterly, annual, irregular, missing, cut, and resumed distributions; ex-date/payment-date fallback; price erosion with positive total return; genuine NAV versus market-close behavior; tax and fee assumptions; insufficient income history; and warnings for unsupported high distribution rates.
+
+Determinism: Income artifacts key on listing id, dividend/NAV/quote input versions, tax and fee policy, date window, percentile policy, and algorithm version.
+
+Idempotency: Re-running income metrics with unchanged inputs reuses immutable raw and derived artifacts and never changes Selection predicates or Refresh data.
+
+### PR63. Portfolio Profiles, Constraints, And Ensemble Candidate
+
+Branch: `feat/profile-constraints-ensemble`.
+
+Git status: not started. PR: TBD.
+
+Priority: P2 recommendation foundation.
+
+Depends on: PR62.
+
+Scope: Add versioned Defensive, Balanced, Income, and Growth profile contracts with explicit objective sets, constraints, risk limits, income requirements, and production eligibility rules. Build the initial Balanced ensemble from True HRP, Equal Risk Contribution, and shrinkage Minimum Variance using per-asset median weights, normalization, and final constraint projection. Add Income-profile constraints for sustainable net income, NAV erosion, CVaR, concentration, and turnover.
+
+Acceptance: Tests cover profile expansion, constraint validation, group and issuer limits when metadata is available, minimum and maximum weights, minimum income, maximum drawdown/CVaR/turnover, ensemble median aggregation, final projection, infeasible profile reporting, and comparison against Equal Weight and Inverse Volatility.
+
+Determinism: Profile candidate ids include profile version, final membership id, risk-model ids, income artifact ids, optimizer ids, constraints, and projection settings.
+
+Idempotency: Re-running a profile with unchanged inputs reuses component optimizer outputs and writes the same ensemble and constraint-diagnostic artifacts.
+
+### PR64. Walk-Forward Model Comparison Scorecard
+
+Branch: `feat/walk-forward-scorecard`.
+
+Git status: not started. PR: TBD.
+
+Priority: P3 validation and selection.
+
+Depends on: PR63.
+
+Scope: Expand walk-forward testing across profiles, optimizers, and risk estimators with rolling and expanding windows, monthly and quarterly re-estimation, realistic rebalance rules, costs, turnover, and weight stability. Add a common scorecard for out-of-sample return, volatility, Sharpe, Sortino, CVaR, drawdown, recovery time, concentration, income quality, robustness across windows, and adverse-period behavior.
+
+Acceptance: Tests cover information cutoffs per split, rolling and expanding windows, insufficient training windows, cost-adjusted returns, turnover, weight stability, median and adverse quantiles, deterministic ranking, and prevention of highest in-sample return as the sole recommendation criterion.
+
+Determinism: Split ids, scorecard rows, rankings, and model-comparison ids depend only on pinned candidates, windows, rebalance policy, costs, risk estimators, objective ids, and scorecard version.
+
+Idempotency: Re-running unchanged model comparison reuses completed split artifacts and produces the same scorecard, rank order, and availability reasons.
+
+### PR65. Stress, Bootstrap, And Sensitivity Analysis
+
+Branch: `feat/stress-bootstrap-sensitivity`.
+
+Git status: not started. PR: TBD.
+
+Priority: P3 robustness evidence.
+
+Depends on: PR64.
+
+Scope: Add historical stress periods, correlation-convergence stress, distribution-cut scenarios, block-bootstrap return scenarios, covariance and parameter perturbations, alternate training windows, and alternate rebalance schedules. Persist scenario definitions, scenario results, and sensitivity summaries for every recommended candidate and baseline.
+
+Acceptance: Tests cover deterministic historical period selection, block bootstrap with seeded scenario ids, covariance perturbation bounds, distribution-cut shocks, correlation-convergence shocks, scenario drawdown/CVaR outputs, and stable sensitivity summaries.
+
+Determinism: Scenario ids include scenario policy, seed, input artifact ids, candidate id, and algorithm version; random draws must be reproducible from persisted seeds.
+
+Idempotency: Re-running unchanged scenario analysis resolves to the same scenario ids and results and resumes only missing scenarios after interruption.
+
+### PR66. Explainable Recommendation Report
+
+Branch: `feat/recommendation-explanation-report`.
+
+Git status: not started. PR: TBD.
+
+Priority: P3 user decision support.
+
+Depends on: PR65.
+
+Scope: Introduce `founder.recommendation` to compare eligible candidates and produce best defensive, diversified, income, total-return, ensemble, Equal Weight, and current-portfolio comparison outputs. Generate human-readable assumptions, inclusion and exclusion reasons, target weights, risk contributions, expected income, drawdown, tail risk, concentration, costs, turnover, data-quality warnings, model disadvantages, and production-candidate status.
+
+Acceptance: Tests cover explanation completeness, excluded-instrument reasons, warning propagation, candidate disadvantages, scorecard traceability, deterministic Markdown/HTML-safe structured report data, no guaranteed-return language, and explicit user-approval boundary before trade preparation.
+
+Determinism: Recommendation ids derive from scorecard, stress results, income artifacts, profile settings, current-position snapshot if supplied, and report template version.
+
+Idempotency: Re-running unchanged recommendations produces the same structured report artifacts and does not alter optimizer, backtest, Selection, Refresh, or Update artifacts.
+
+### PR67. Current Positions, Transition Plan, And Flatex Export
+
+Branch: `feat/trading-transition-flatex-export`.
+
+Git status: not started. PR: TBD.
+
+Priority: P4 trade preparation.
+
+Depends on: PR66.
+
+Scope: Extend `founder.trading` with persisted current positions, base currency, cash, cost basis, current-versus-target differences, turnover, estimated fees, FX costs, taxes where configured, whole-share rounding, minimum order size, cash remainder, and Flatex-oriented trade-preparation export. The trade layer consumes approved recommendation weights and must not choose the optimization objective.
+
+Acceptance: Tests cover existing positions, new buys, sells, no-trade thresholds, whole-share rounding, minimum order sizes, cash remainder, fee and FX assumptions, cost-basis metadata, deterministic CSV export ordering, and rejection of unapproved or non-production candidate weights unless explicitly overridden.
+
+Determinism: Transition ids include current-position snapshot id, target-weight recommendation id, price snapshot id, fee/tax/FX policy ids, rounding policy, and export version.
+
+Idempotency: Re-running transition planning with unchanged inputs writes the same transition plan and export without duplicate trade rows or pointer changes.
+
+### PR68. Local Project Reports And Monitoring Baseline
+
+Branch: `feat/local-reports-monitoring`.
+
+Git status: not started. PR: TBD.
+
+Priority: P4 local product surface.
+
+Depends on: PR67.
+
+Scope: Add persisted local portfolio projects, structured HTML or static report generation, portfolio monitoring runs, drift checks, risk-limit checks, distribution-cut checks, NAV-erosion checks, and alert-ready machine-readable status outputs. Keep hosted bring-your-own-key UI work out of scope until licensing, security, privacy, and operational requirements are documented.
+
+Acceptance: Tests cover project creation, report regeneration, monitoring with unchanged data, drift threshold status, risk-limit breach status, distribution-cut warning, stale-data warning, deterministic report asset names, and no provider-data redistribution beyond local user-owned outputs.
+
+Determinism: Project report and monitoring ids include project id, current Refresh snapshot, Selection membership, Update analysis, recommendation id, transition plan id, monitoring policy, and template version.
+
+Idempotency: Re-running local reports and monitoring with unchanged inputs produces the same report content and status artifacts, updating only explicitly allowed generated-at metadata.
+
+### Series Completion Gate
+
+Final branch: `feat/local-reports-monitoring`.
+
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until all prior PR56-PR67 branches are merged or explicitly superseded in this backlog.
+
+Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and the production-candidate report tests added in this stack. The series remains incomplete while any production-candidate output can be generated without data-quality gates, consistent return semantics, risk-model diagnostics, solver diagnostics, baseline comparison, walk-forward evidence, costs, tail-risk/drawdown metrics, concentration/risk contributions, and explanation artifacts.
 
 ## Future Work After Finalization
 
