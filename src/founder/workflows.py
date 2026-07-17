@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from founder.bivariate_statistics import write_bivariate_statistics
+from founder.bivariate_statistics import resolve_worker_count, write_bivariate_statistics
 from founder.bronze import (
     ADDITIONAL_EODHD_DATASETS,
     QUOTE_DATASET,
@@ -371,7 +371,7 @@ def run_bivariate_statistics_workflow(
         quotes = _filter_quotes_to_selection(quotes, selection_rows(paths, resolved_selection_id))
         returns = build_quote_returns(quotes)
         rows = write_bivariate_statistics(paths, returns, concurrency=concurrency)
-        workers = _worker_count(concurrency)
+        workers = resolve_worker_count(concurrency)
         log_event(
             LOGGER,
             logging.INFO,

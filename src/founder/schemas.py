@@ -287,6 +287,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "data_quality_reason",
     ),
     "bivariate_statistics": (
+        "version",
         "pair_key",
         "left_listing_key",
         "right_listing_key",
@@ -308,6 +309,7 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "right_variance",
         "left_beta_to_right",
         "right_beta_to_left",
+        "bucket",
     ),
     "gold_runs": (
         "status",
@@ -565,7 +567,7 @@ DATASET_SORT_KEYS: dict[str, tuple[str, ...]] = {
     "covariance": ("left_isin", "left_exchange", "left_code", "right_isin"),
     "correlation_edges": ("version", "metric", "bucket", "left_id", "right_id"),
     "univariate_statistics": ("isin", "exchange", "code"),
-    "bivariate_statistics": ("pair_key",),
+    "bivariate_statistics": ("version", "bucket", "left_id", "right_id"),
     "gold_runs": ("isin", "exchange", "code"),
     "job_manifests": ("job_type", "run_id"),
     "return_matrix": ("evaluation_id", "date", "isin"),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from math import sqrt
@@ -11,6 +12,108 @@ from founder.table_io import JsonRow
 
 ListingKey = tuple[str, str, str]
 ReturnsByListing = dict[ListingKey, dict[str, float]]
+
+# Explicit resource policy for pairwise (bivariate) computation. These are
+# deliberately conservative for a NAS-hosted, few-core deployment: a universe
+# whose theoretical unordered-pair count exceeds DEFAULT_MAX_PAIR_COUNT must be
+# rejected before pairs are materialized or worker tasks are submitted, unless
+# a caller explicitly raises the limit. Default worker count is capped rather
+# than scaling with every visible CPU core.
+DEFAULT_MAX_PAIR_COUNT = 500_000
+DEFAULT_MAX_WORKERS = 4
+DEFAULT_PAIR_CHUNK_SIZE = 5_000
+DEFAULT_BUCKET_COUNT = 128
+DEFAULT_BYTES_PER_PAIR = 200
+
+PAIR_PLAN_MODES = frozenset({"dense", "sparse", "top_k"})
+
+
+@dataclass(frozen=True)
+class PairPlan:
+    """Deterministic diagnostics computed before enumerating any pairs."""
+
+    listing_count: int
+    theoretical_pair_count: int
+    mode: str
+    chunk_size: int
+    worker_count: int
+    bucket_count: int
+    expected_bucket_count: int
+    estimated_memory_bytes: int
+    max_pair_count: int
+    accepted: bool
+    rejection_reason: str | None
+
+
+def resolve_worker_count(concurrency: int | None, *, max_workers: int = DEFAULT_MAX_WORKERS) -> int:
+    """Resolve a worker count capped by an explicit policy, not all visible cores."""
+    if concurrency is not None:
+        return max(1, concurrency)
+    return max(1, min(max_workers, os.cpu_count() or 1))
+
+
+def build_pair_plan(
+    listing_count: int,
+    *,
+    mode: str = "dense",
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
+    chunk_size: int = DEFAULT_PAIR_CHUNK_SIZE,
+    bucket_count: int = DEFAULT_BUCKET_COUNT,
+    concurrency: int | None = None,
+    max_workers: int = DEFAULT_MAX_WORKERS,
+    bytes_per_pair: int = DEFAULT_BYTES_PER_PAIR,
+) -> PairPlan:
+    """Compute a pair-materialization plan and reject oversized universes early."""
+    if mode not in PAIR_PLAN_MODES:
+        raise ValueError(f"unsupported pair plan mode: {mode}")
+    if listing_count < 0:
+        raise ValueError("listing_count must not be negative")
+    if max_pair_count < 1:
+        raise ValueError("max_pair_count must be positive")
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
+    if bucket_count < 1:
+        raise ValueError("bucket_count must be positive")
+
+    theoretical_pair_count = listing_count * (listing_count - 1) // 2
+    accepted = theoretical_pair_count <= max_pair_count
+    rejection_reason = (
+        None
+        if accepted
+        else (
+            f"theoretical_pair_count {theoretical_pair_count} exceeds max_pair_count "
+            f"{max_pair_count} for mode '{mode}' with listing_count {listing_count}"
+        )
+    )
+    return PairPlan(
+        listing_count=listing_count,
+        theoretical_pair_count=theoretical_pair_count,
+        mode=mode,
+        chunk_size=chunk_size,
+        worker_count=resolve_worker_count(concurrency, max_workers=max_workers),
+        bucket_count=bucket_count,
+        expected_bucket_count=min(bucket_count, listing_count) if listing_count else 0,
+        estimated_memory_bytes=theoretical_pair_count * bytes_per_pair,
+        max_pair_count=max_pair_count,
+        accepted=accepted,
+        rejection_reason=rejection_reason,
+    )
+
+
+def chunked_pairs(
+    pairs: Iterator[PairObservation], chunk_size: int
+) -> Iterator[list[PairObservation]]:
+    """Stream pair observations in deterministic, bounded-size chunks."""
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
+    chunk: list[PairObservation] = []
+    for pair in pairs:
+        chunk.append(pair)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 @dataclass(frozen=True)

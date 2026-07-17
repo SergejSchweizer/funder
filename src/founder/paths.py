@@ -132,6 +132,14 @@ class LakePaths:
             self.gold / "bivariate_statistics" / left_exchange / left_isin / left_code / pair_file
         )
 
+    def gold_bivariate_statistics_bucket(self, version: str, bucket: int) -> Path:
+        return (
+            self.gold
+            / "bivariate_statistics"
+            / f"version={version}"
+            / f"bucket={bucket:03d}.parquet"
+        )
+
     def gold_correlation_edges(self, version: str, metric: str, bucket: int) -> Path:
         return (
             self.gold

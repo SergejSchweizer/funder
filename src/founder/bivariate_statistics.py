@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
-from itertools import chain
 from typing import Any
 
 from founder.gold_pair_stats import (
+    DEFAULT_BUCKET_COUNT,
+    DEFAULT_MAX_PAIR_COUNT,
+    DEFAULT_PAIR_CHUNK_SIZE,
     PairObservation,
+    PairPlan,
+    build_pair_plan,
+    chunked_pairs,
     correlation_value,
     index_returns,
     iter_pair_observations,
+    resolve_worker_count,
     sample_covariance,
     sort_pair_rows,
 )
 from founder.paths import LakePaths
+from founder.run_state import build_job_manifest, write_job_manifest
 from founder.schemas import validate_rows
 from founder.table_io import JsonRow, read_rows, write_rows
+
+_CURRENT_VERSION = "current"
 
 
 def build_bivariate_statistics(
@@ -26,32 +34,44 @@ def build_bivariate_statistics(
     *,
     skip_same_isin: bool = True,
     concurrency: int | None = None,
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
+    chunk_size: int = DEFAULT_PAIR_CHUNK_SIZE,
 ) -> list[JsonRow]:
     """Compute pairwise statistics from aligned return rows.
 
     The output intentionally contains only two-listing statistics. Single-listing
-    return summaries belong in the separate univariate statistics module.
+    return summaries belong in the separate univariate statistics module. A
+    universe whose theoretical pair count exceeds ``max_pair_count`` is rejected
+    before any pair is enumerated.
     """
     returns_by_listing = index_returns(return_rows)
+    plan = build_pair_plan(
+        len(returns_by_listing),
+        mode="dense",
+        max_pair_count=max_pair_count,
+        chunk_size=chunk_size,
+        concurrency=concurrency,
+    )
+    if not plan.accepted:
+        raise ValueError(f"bivariate statistics rejected: {plan.rejection_reason}")
+
     pairs = iter_pair_observations(
         returns_by_listing,
         include_self=False,
         skip_same_isin=skip_same_isin,
     )
+    rows: list[JsonRow] = []
+    executor = ProcessPoolExecutor(max_workers=plan.worker_count) if plan.worker_count > 1 else None
     try:
-        first_pair = next(pairs)
-    except StopIteration:
-        return []
-    try:
-        second_pair = next(pairs)
-    except StopIteration:
-        return [_build_bivariate_pair_statistics(first_pair)]
-    all_pairs = chain((first_pair, second_pair), pairs)
-    workers = _worker_count(concurrency)
-    if workers == 1:
-        return sort_pair_rows([_build_bivariate_pair_statistics(pair) for pair in all_pairs])
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        return sort_pair_rows(list(executor.map(_build_bivariate_pair_statistics, all_pairs)))
+        for chunk in chunked_pairs(pairs, plan.chunk_size):
+            if executor is None or len(chunk) <= 1:
+                rows.extend(_build_bivariate_pair_statistics(pair) for pair in chunk)
+            else:
+                rows.extend(executor.map(_build_bivariate_pair_statistics, chunk))
+    finally:
+        if executor is not None:
+            executor.shutdown()
+    return sort_pair_rows(rows)
 
 
 def write_bivariate_statistics(
@@ -60,50 +80,154 @@ def write_bivariate_statistics(
     *,
     skip_same_isin: bool = True,
     concurrency: int | None = None,
+    version: str = _CURRENT_VERSION,
+    bucket_count: int = DEFAULT_BUCKET_COUNT,
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
+    chunk_size: int = DEFAULT_PAIR_CHUNK_SIZE,
 ) -> list[JsonRow]:
-    """Write Bivariate Statistics rows to stable Gold paths by listing pair."""
-    pairs = list(
-        iter_pair_observations(
-            index_returns(return_rows),
-            include_self=False,
-            skip_same_isin=skip_same_isin,
-        )
+    """Write Bivariate Statistics rows to deterministic bucketed Gold paths.
+
+    Rows are grouped into ``bucket_count`` Parquet buckets keyed by
+    ``left_id % bucket_count`` instead of one file per pair, so file count grows
+    sublinearly with pair count. A universe whose theoretical pair count exceeds
+    ``max_pair_count`` is rejected before any pair is materialized or submitted
+    to a worker. Pair-plan diagnostics are persisted as a job manifest for every
+    call, including rejected ones.
+    """
+    returns_by_listing = index_returns(return_rows)
+    plan = build_pair_plan(
+        len(returns_by_listing),
+        mode="dense",
+        max_pair_count=max_pair_count,
+        chunk_size=chunk_size,
+        bucket_count=bucket_count,
+        concurrency=concurrency,
     )
-    cached_rows: list[JsonRow] = []
-    stale_pairs: list[PairObservation] = []
-    for pair in pairs:
-        cached = _cached_bivariate_pair_row(paths, pair)
-        if cached is None:
-            stale_pairs.append(pair)
-        else:
-            cached_rows.append(cached)
-
-    workers = _worker_count(concurrency)
-    if workers == 1 or len(stale_pairs) <= 1:
-        rows = [_build_bivariate_pair_statistics(pair) for pair in stale_pairs]
-    else:
-        with ProcessPoolExecutor(max_workers=workers) as executor:
-            rows = list(executor.map(_build_bivariate_pair_statistics, stale_pairs))
-    validate_rows("bivariate_statistics", rows)
-    for row in rows:
-        write_rows(
-            paths.gold_bivariate_statistics_pair(
-                str(row["left_exchange"]),
-                str(row["left_isin"]),
-                str(row["left_code"]),
-                str(row["right_exchange"]),
-                str(row["right_isin"]),
-                str(row["right_code"]),
-            ),
-            [row],
+    _write_pair_plan_manifest(paths, version=version, plan=plan)
+    if not plan.accepted:
+        raise ValueError(
+            f"bivariate statistics rejected for version {version!r}: {plan.rejection_reason}"
         )
-    return sort_pair_rows(cached_rows + rows)
+
+    existing_by_bucket = _read_existing_buckets(paths, version, plan.bucket_count)
+    cache_index: dict[str, JsonRow] = {}
+    for bucket_rows in existing_by_bucket.values():
+        for row in bucket_rows:
+            cache_index[str(row["pair_key"])] = row
+
+    pairs = iter_pair_observations(
+        returns_by_listing,
+        include_self=False,
+        skip_same_isin=skip_same_isin,
+    )
+    final_by_bucket: dict[int, list[JsonRow]] = {}
+    dirty_buckets: set[int] = set()
+    executor = ProcessPoolExecutor(max_workers=plan.worker_count) if plan.worker_count > 1 else None
+    try:
+        for chunk in chunked_pairs(pairs, plan.chunk_size):
+            fresh_targets: list[PairObservation] = []
+            for pair in chunk:
+                bucket = pair.left_id % plan.bucket_count
+                cached = cache_index.get(_pair_key(pair.left, pair.right))
+                if cached is not None and _cache_row_matches(cached, pair, version, bucket):
+                    final_by_bucket.setdefault(bucket, []).append(cached)
+                    continue
+                fresh_targets.append(pair)
+            if not fresh_targets:
+                continue
+            if executor is None or len(fresh_targets) <= 1:
+                fresh_rows = [_build_bivariate_pair_statistics(pair) for pair in fresh_targets]
+            else:
+                fresh_rows = list(executor.map(_build_bivariate_pair_statistics, fresh_targets))
+            for pair, row in zip(fresh_targets, fresh_rows, strict=True):
+                bucket = pair.left_id % plan.bucket_count
+                bucketed_row = dict(row)
+                bucketed_row["version"] = version
+                bucketed_row["bucket"] = bucket
+                final_by_bucket.setdefault(bucket, []).append(bucketed_row)
+                dirty_buckets.add(bucket)
+    finally:
+        if executor is not None:
+            executor.shutdown()
+
+    validate_rows(
+        "bivariate_statistics",
+        [row for bucket_rows in final_by_bucket.values() for row in bucket_rows],
+    )
+    _write_dirty_buckets(paths, version, existing_by_bucket, final_by_bucket, dirty_buckets)
+    return sort_pair_rows([row for bucket_rows in final_by_bucket.values() for row in bucket_rows])
 
 
-def _worker_count(concurrency: int | None) -> int:
-    if concurrency is not None:
-        return max(1, concurrency)
-    return max(1, os.cpu_count() or 1)
+def _write_pair_plan_manifest(paths: LakePaths, *, version: str, plan: PairPlan) -> None:
+    manifest = build_job_manifest(
+        job_type="bivariate-statistics-plan",
+        run_id=version,
+        status="completed" if plan.accepted else "failed",
+        row_counts={
+            "listing_count": plan.listing_count,
+            "theoretical_pair_count": plan.theoretical_pair_count,
+            "chunk_size": plan.chunk_size,
+            "worker_count": plan.worker_count,
+            "bucket_count": plan.bucket_count,
+            "expected_bucket_count": plan.expected_bucket_count,
+            "estimated_memory_bytes": plan.estimated_memory_bytes,
+            "max_pair_count": plan.max_pair_count,
+        },
+        resume_marker=plan.mode,
+        error_summary=() if plan.accepted else ({"reason": plan.rejection_reason},),
+    )
+    write_job_manifest(paths, manifest)
+
+
+def _read_existing_buckets(
+    paths: LakePaths, version: str, bucket_count: int
+) -> dict[int, list[JsonRow]]:
+    """Read existing bucket files, discarding any bucket whose content is corrupt."""
+    by_bucket: dict[int, list[JsonRow]] = {}
+    for bucket in range(bucket_count):
+        path = paths.gold_bivariate_statistics_bucket(version, bucket)
+        if not path.exists():
+            continue
+        rows = read_rows(path)
+        if any(int(row.get("bucket", -1)) != bucket for row in rows):
+            # Corrupt or foreign bucket content must never masquerade as a cache hit.
+            continue
+        by_bucket[bucket] = rows
+    return by_bucket
+
+
+def _write_dirty_buckets(
+    paths: LakePaths,
+    version: str,
+    existing_by_bucket: Mapping[int, list[JsonRow]],
+    final_by_bucket: Mapping[int, list[JsonRow]],
+    dirty_buckets: set[int],
+) -> None:
+    for bucket in sorted(set(existing_by_bucket) | set(final_by_bucket)):
+        final_rows = sort_pair_rows(final_by_bucket.get(bucket, []))
+        existing_keys = {str(row["pair_key"]) for row in existing_by_bucket.get(bucket, [])}
+        final_keys = {str(row["pair_key"]) for row in final_rows}
+        if bucket not in dirty_buckets and existing_keys == final_keys:
+            continue
+        path = paths.gold_bivariate_statistics_bucket(version, bucket)
+        if not final_rows:
+            path.unlink(missing_ok=True)
+            continue
+        write_rows(path, final_rows)
+
+
+def _cache_row_matches(cached: JsonRow, pair: PairObservation, version: str, bucket: int) -> bool:
+    date_start = pair.dates[0] if pair.dates else ""
+    date_end = pair.dates[-1] if pair.dates else ""
+    return (
+        str(cached.get("version")) == version
+        and int(cached.get("bucket", -1)) == bucket
+        and str(cached.get("left_listing_key")) == _listing_key(pair.left)
+        and str(cached.get("right_listing_key")) == _listing_key(pair.right)
+        and str(cached.get("date_start")) == date_start
+        and str(cached.get("date_end")) == date_end
+        and int(cached.get("n_observations", -1)) == len(pair.dates)
+    )
 
 
 def _build_bivariate_pair_statistics(pair: PairObservation) -> JsonRow:
@@ -143,30 +267,27 @@ def _build_bivariate_pair_statistics(pair: PairObservation) -> JsonRow:
     }
 
 
-def _cached_bivariate_pair_row(paths: LakePaths, pair: PairObservation) -> JsonRow | None:
-    cached = read_rows(
+def read_legacy_bivariate_pair(
+    paths: LakePaths, left: tuple[str, str, str], right: tuple[str, str, str]
+) -> JsonRow | None:
+    """Read a single pair row from the pre-C03 one-file-per-pair layout.
+
+    Kept only for the documented migration window while historical
+    ``gold/bivariate_statistics/{exchange}/{isin}/{code}/...`` files still
+    exist. New writes always use :func:`write_bivariate_statistics`, which
+    persists deterministic version/bucket Parquet files instead.
+    """
+    rows = read_rows(
         paths.gold_bivariate_statistics_pair(
-            pair.left[1],
-            pair.left[0],
-            pair.left[2],
-            pair.right[1],
-            pair.right[0],
-            pair.right[2],
+            left[1],
+            left[0],
+            left[2],
+            right[1],
+            right[0],
+            right[2],
         )
     )
-    if len(cached) != 1:
-        return None
-    row = cached[0]
-    if (
-        str(row.get("pair_key")) == _pair_key(pair.left, pair.right)
-        and str(row.get("left_listing_key")) == _listing_key(pair.left)
-        and str(row.get("right_listing_key")) == _listing_key(pair.right)
-        and str(row.get("date_start")) == (pair.dates[0] if pair.dates else "")
-        and str(row.get("date_end")) == (pair.dates[-1] if pair.dates else "")
-        and int(row.get("n_observations", -1)) == len(pair.dates)
-    ):
-        return row
-    return None
+    return rows[0] if len(rows) == 1 else None
 
 
 def _listing_key(listing: tuple[str, str, str]) -> str:
@@ -184,5 +305,7 @@ def _ratio(numerator: float, denominator: float) -> float:
 
 __all__ = [
     "build_bivariate_statistics",
+    "read_legacy_bivariate_pair",
+    "resolve_worker_count",
     "write_bivariate_statistics",
 ]

@@ -10,7 +10,9 @@ from math import log, sqrt
 from typing import Any
 
 from founder.gold_pair_stats import (
+    DEFAULT_MAX_PAIR_COUNT,
     bucket_correlation_edges,
+    build_pair_plan,
     correlation_value,
     incremental_pearson,
     index_returns,
@@ -76,8 +78,13 @@ def covariance(left_values: Sequence[float], right_values: Sequence[float]) -> f
 
 def build_correlation_and_covariance(
     return_rows: Sequence[Mapping[str, Any]],
+    *,
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
 ) -> tuple[list[JsonRow], list[JsonRow]]:
     returns_by_listing = index_returns(return_rows)
+    plan = build_pair_plan(len(returns_by_listing), mode="dense", max_pair_count=max_pair_count)
+    if not plan.accepted:
+        raise ValueError(f"correlation/covariance build rejected: {plan.rejection_reason}")
     correlations: list[JsonRow] = []
     covariances: list[JsonRow] = []
     for pair in iter_pair_observations(returns_by_listing, include_self=True):
@@ -95,6 +102,7 @@ def build_correlation_edges(
     metric: str = "pearson",
     min_abs_correlation: float | None = None,
     top_k_per_left: int | None = None,
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
 ) -> list[JsonRow]:
     if metric not in {"pearson", "spearman"}:
         raise ValueError(f"unsupported correlation edge metric: {metric}")
@@ -104,6 +112,10 @@ def build_correlation_edges(
         raise ValueError("top_k_per_left must be positive")
 
     returns_by_listing = index_returns(return_rows)
+    mode = "dense" if min_abs_correlation is None and top_k_per_left is None else "sparse"
+    plan = build_pair_plan(len(returns_by_listing), mode=mode, max_pair_count=max_pair_count)
+    if not plan.accepted:
+        raise ValueError(f"correlation edges build rejected: {plan.rejection_reason}")
     rows: list[JsonRow] = []
     for pair in iter_pair_observations(
         returns_by_listing,
@@ -151,6 +163,7 @@ def write_correlation_edges(
     min_abs_correlation: float | None = None,
     top_k_per_left: int | None = None,
     bucket_count: int = 128,
+    max_pair_count: int = DEFAULT_MAX_PAIR_COUNT,
 ) -> list[JsonRow]:
     if bucket_count < 1:
         raise ValueError("bucket_count must be positive")
@@ -160,6 +173,7 @@ def write_correlation_edges(
         metric=metric,
         min_abs_correlation=min_abs_correlation,
         top_k_per_left=top_k_per_left,
+        max_pair_count=max_pair_count,
     )
     base = paths.gold / "correlation_edges" / f"version={version}" / f"metric={metric}"
     if base.exists():
