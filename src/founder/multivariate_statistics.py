@@ -92,6 +92,7 @@ def write_multivariate_statistics(
             "frontier_points": 0,
             "frontier_weight_rows": 0,
             "hrp_cluster_rows": 0,
+            "hrp_linkage_rows": 0,
             "matrix_rows": 0,
             "maximum_diversification_metric_rows": 0,
             "optimized_weight_rows": 0,
@@ -149,7 +150,7 @@ def write_multivariate_statistics(
         )
         written_portfolios += 1
 
-    hrp_weights, hrp_clusters = write_hierarchical_risk_parity(
+    hrp_weights, hrp_clusters, hrp_linkage = write_hierarchical_risk_parity(
         paths,
         evaluation_id=resolved_config.evaluation_id,
         portfolio_id=_portfolio_id(resolved_config, "hierarchical_risk_parity"),
@@ -215,6 +216,7 @@ def write_multivariate_statistics(
         "frontier_points": len(frontier_points),
         "frontier_weight_rows": len(frontier_weights),
         "hrp_cluster_rows": len(hrp_clusters),
+        "hrp_linkage_rows": len(hrp_linkage),
         "matrix_rows": len(matrix),
         "maximum_diversification_metric_rows": len(max_div_metrics),
         "optimized_weight_rows": len(optimized_weight_rows)

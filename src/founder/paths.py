@@ -197,6 +197,11 @@ class LakePaths:
     def gold_hrp_clusters(self, evaluation_id: str) -> Path:
         return self.gold / "clusters" / "hierarchical_risk_parity" / f"{evaluation_id}.parquet"
 
+    def gold_hrp_linkage(self, evaluation_id: str) -> Path:
+        return (
+            self.gold / "clusters" / "hierarchical_risk_parity_linkage" / f"{evaluation_id}.parquet"
+        )
+
     def gold_diversification_metrics(self, evaluation_id: str) -> Path:
         return self.gold / "metrics" / "maximum_diversification" / f"{evaluation_id}.parquet"
 

@@ -155,7 +155,7 @@ def test_portfolio_boundary_functions_delegate(monkeypatch: pytest.MonkeyPatch) 
     )
     modules[1].write_maximum_diversification(Path("lake"), evaluation_id="e")
     modules[2].hierarchical_risk_parity_weights([], [], object())
-    modules[2].build_hrp_cluster_rows([], [], {}, evaluation_id="e", portfolio_id="p")
+    modules[2].build_hrp_cluster_rows([], [], evaluation_id="e", portfolio_id="p")
     modules[2].write_hierarchical_risk_parity(Path("lake"), evaluation_id="e")
     modules[3].optimize_portfolio([], [])
     modules[3].build_target_weight_rows(

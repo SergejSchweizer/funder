@@ -28,7 +28,6 @@ def hierarchical_risk_parity_weights(
 def build_hrp_cluster_rows(
     listings: Sequence[Mapping[str, Any]],
     covariance_rows: Sequence[Mapping[str, Any]],
-    weights: Mapping[str, float],
     *,
     evaluation_id: str,
     portfolio_id: str,
@@ -38,7 +37,6 @@ def build_hrp_cluster_rows(
         _portfolio().build_hrp_cluster_rows(
             listings,
             covariance_rows,
-            weights,
             evaluation_id=evaluation_id,
             portfolio_id=portfolio_id,
         ),
@@ -51,9 +49,9 @@ def write_hierarchical_risk_parity(
     evaluation_id: str = "default",
     portfolio_id: str = "hierarchical-risk-parity",
     constraints: Any | None = None,
-) -> tuple[list[JsonRow], list[JsonRow]]:
+) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow]]:
     return cast(
-        tuple[list[JsonRow], list[JsonRow]],
+        tuple[list[JsonRow], list[JsonRow], list[JsonRow]],
         _portfolio().write_hierarchical_risk_parity(
             paths,
             evaluation_id=evaluation_id,

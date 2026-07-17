@@ -104,6 +104,9 @@ def test_lake_paths_are_deterministic() -> None:
     assert paths.gold_hrp_clusters("eval-1") == Path(
         "lake/gold/clusters/hierarchical_risk_parity/eval-1.parquet"
     )
+    assert paths.gold_hrp_linkage("eval-1") == Path(
+        "lake/gold/clusters/hierarchical_risk_parity_linkage/eval-1.parquet"
+    )
     assert paths.gold_diversification_metrics("eval-1") == Path(
         "lake/gold/metrics/maximum_diversification/eval-1.parquet"
     )

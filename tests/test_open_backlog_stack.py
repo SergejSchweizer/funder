@@ -236,7 +236,7 @@ def test_hrp_and_maximum_diversification_write_deterministic_gold_outputs(tmp_pa
         evaluation_id="eval-1",
         portfolio_id="max-div",
     )
-    hrp_written, clusters_written = write_hierarchical_risk_parity(
+    hrp_written, clusters_written, linkage_written = write_hierarchical_risk_parity(
         paths,
         evaluation_id="eval-1",
         portfolio_id="hrp",
@@ -254,6 +254,8 @@ def test_hrp_and_maximum_diversification_write_deterministic_gold_outputs(tmp_pa
     assert cluster_rows[0]["ordered_isins"] == "IE1,IE2"
     assert metric_rows[0]["diversification_ratio"] >= 1.0
     assert read_rows(paths.gold_hrp_clusters("eval-1")) == clusters_written
+    assert read_rows(paths.gold_hrp_linkage("eval-1")) == linkage_written
+    assert len(linkage_written) == 1
     assert read_rows(paths.gold_diversification_metrics("eval-1")) == max_div_metrics
     assert len(hrp_written) == 2
     assert len(max_div_written) == 2

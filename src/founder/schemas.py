@@ -507,6 +507,21 @@ SCHEMAS: dict[str, tuple[str, ...]] = {
         "cluster_variance",
         "allocation",
         "ordered_isins",
+        "linkage_method",
+        "tie_breaking_policy",
+        "algorithm_version",
+    ),
+    "hrp_linkage": (
+        "evaluation_id",
+        "portfolio_id",
+        "step_index",
+        "left_cluster_id",
+        "right_cluster_id",
+        "distance",
+        "size",
+        "linkage_method",
+        "tie_breaking_policy",
+        "algorithm_version",
     ),
     "diversification_metrics": (
         "evaluation_id",
@@ -550,6 +565,7 @@ DATASET_OWNERS: dict[str, str] = {
     "tail_risk": "evaluation",
     "optimized_weights": "portfolio",
     "hrp_clusters": "portfolio",
+    "hrp_linkage": "portfolio",
     "diversification_metrics": "portfolio",
 }
 
@@ -584,6 +600,7 @@ DATASET_SORT_KEYS: dict[str, tuple[str, ...]] = {
     "tail_risk": ("run_id", "portfolio_id"),
     "optimized_weights": ("evaluation_id", "objective", "portfolio_id", "isin"),
     "hrp_clusters": ("evaluation_id", "portfolio_id", "cluster_id"),
+    "hrp_linkage": ("evaluation_id", "portfolio_id", "step_index"),
     "diversification_metrics": ("evaluation_id", "portfolio_id"),
 }
 

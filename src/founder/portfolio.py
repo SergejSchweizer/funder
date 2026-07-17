@@ -9,10 +9,21 @@ from math import comb, isclose, isfinite
 from typing import Any
 
 from founder.paths import LakePaths
+from founder.portfolio_parts.clustering import ALGORITHM_VERSION as HRP_ALGORITHM_VERSION
+from founder.portfolio_parts.clustering import LINKAGE_METHOD as HRP_LINKAGE_METHOD
+from founder.portfolio_parts.clustering import TIE_BREAKING_POLICY as HRP_TIE_BREAKING_POLICY
+from founder.portfolio_parts.clustering import (
+    correlation_distance_matrix,
+    quasi_diagonal_order,
+    recursive_bisection,
+    single_linkage,
+)
 from founder.portfolio_parts.solvers import SOLVER_NAME as PGD_SOLVER_NAME
 from founder.portfolio_parts.solvers import SOLVER_VERSION as PGD_SOLVER_VERSION
 from founder.portfolio_parts.solvers import (
     SolverOutcome,
+    dense_covariance_matrix,
+    project_capped_simplex,
     solve_equal_risk_contribution,
     solve_minimum_variance,
 )
@@ -44,6 +55,11 @@ OPTIMIZER_ALGORITHM_VERSION = 1
 WEIGHT_SUM_TOLERANCE = 1e-9
 EQUAL_WEIGHT_FALLBACK_METHOD = "equal_weight_fallback"
 CANDIDATE_LIMIT_EXCEEDED_REASON = "candidate_limit_exceeded"
+# PR61: the naive midpoint-recursive-variance split is a labeled baseline;
+# only the real single-linkage/quasi-diagonal construction may be reported
+# as `hierarchical_risk_parity` in a production-facing artifact.
+HIERARCHICAL_RISK_PARITY_OBJECTIVE = "hierarchical_risk_parity"
+HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE = "hierarchical_risk_parity_baseline"
 
 
 @dataclass(frozen=True)
@@ -610,15 +626,59 @@ def write_optimized_weights(
     return rows
 
 
+def _hrp_clustering(
+    ordered: Sequence[ListingKey], covariances: Mapping[tuple[ListingKey, ListingKey], float]
+) -> tuple[tuple[int, ...], list[list[float]], tuple[Any, ...]]:
+    """Shared True HRP clustering step: dense matrix, linkage, quasi-diagonal order."""
+    matrix = dense_covariance_matrix(ordered, covariances)
+    distance_matrix = correlation_distance_matrix(matrix)
+    linkage = single_linkage(distance_matrix)
+    order = quasi_diagonal_order(linkage, len(ordered))
+    return order, matrix, linkage
+
+
 def hierarchical_risk_parity_weights(
     listings: Sequence[Mapping[str, Any]],
     covariance_rows: Sequence[Mapping[str, Any]],
     constraints: PortfolioConstraints,
 ) -> dict[str, float]:
+    """True Hierarchical Risk Parity: correlation-distance clustering, quasi-diagonal
+    ordering, and recursive bisection with inverse-variance intra-cluster weights.
+
+    See `hierarchical_risk_parity_baseline_weights` for the deterministic
+    midpoint-split baseline this replaces; that baseline must never be
+    labeled `hierarchical_risk_parity` in a production-facing artifact.
+    """
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
-    raw_weights = _recursive_hrp_weights(ordered, covariances)
+    order, matrix, _linkage = _hrp_clustering(ordered, covariances)
+    raw_index_weights, _splits = recursive_bisection(order, matrix)
+    raw_weights = [raw_index_weights[index] for index in range(len(ordered))]
+    projected = project_capped_simplex(
+        raw_weights, min_weight=constraints.min_weight, max_weight=constraints.max_weight
+    )
+    weights = {ordered[index][0]: value for index, value in enumerate(projected)}
+    validate_weights(weights, constraints)
+    return weights
+
+
+def hierarchical_risk_parity_baseline_weights(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    constraints: PortfolioConstraints,
+) -> dict[str, float]:
+    """Deterministic midpoint-recursive-variance baseline (pre-PR61 behavior).
+
+    Splits listings by canonical ISIN order rather than any correlation-based
+    clustering. Retained only for development and comparison; must always be
+    reported under the `hierarchical_risk_parity_baseline` label, never as
+    `hierarchical_risk_parity`.
+    """
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
+    raw_weights = _recursive_hrp_baseline_weights(ordered, covariances)
     capped = {
         isin: min(constraints.max_weight, max(constraints.min_weight, raw_weights[isin]))
         for isin, _, _ in ordered
@@ -641,26 +701,61 @@ def build_hrp_cluster_rows(
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
     require_complete_covariance(ordered, covariances)
+    order, matrix, _linkage = _hrp_clustering(ordered, covariances)
+    _weights, splits = recursive_bisection(order, matrix)
+    ordered_isins = ",".join(ordered[index][0] for index in order)
     rows: list[JsonRow] = []
-    for index, cluster in enumerate(_cluster_splits(ordered), start=1):
-        left, right = cluster
-        left_variance = _cluster_variance(left, covariances)
-        right_variance = _cluster_variance(right, covariances)
-        total = left_variance + right_variance
-        allocation = 0.5 if total == 0 else right_variance / total
+    for split in splits:
         rows.append(
             {
                 "evaluation_id": evaluation_id,
                 "portfolio_id": portfolio_id,
-                "cluster_id": f"cluster-{index:03d}",
-                "left_cluster": ",".join(item[0] for item in left),
-                "right_cluster": ",".join(item[0] for item in right),
-                "cluster_variance": left_variance + right_variance,
-                "allocation": allocation,
-                "ordered_isins": ",".join(item[0] for item in ordered),
+                "cluster_id": split.cluster_id,
+                "left_cluster": ",".join(ordered[index][0] for index in split.left_members),
+                "right_cluster": ",".join(ordered[index][0] for index in split.right_members),
+                "cluster_variance": split.left_variance + split.right_variance,
+                "allocation": split.left_allocation,
+                "ordered_isins": ordered_isins,
+                "linkage_method": HRP_LINKAGE_METHOD,
+                "tie_breaking_policy": HRP_TIE_BREAKING_POLICY,
+                "algorithm_version": HRP_ALGORITHM_VERSION,
             }
         )
     return rows
+
+
+def build_hrp_linkage_rows(
+    listings: Sequence[Mapping[str, Any]],
+    covariance_rows: Sequence[Mapping[str, Any]],
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+) -> list[JsonRow]:
+    """Persist the single-linkage dendrogram itself (the merge history)."""
+    ordered = _listing_keys(listings)
+    covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
+    _order, _matrix, linkage = _hrp_clustering(ordered, covariances)
+    leaf_count = len(ordered)
+
+    def label(cluster_id: int) -> str:
+        return ordered[cluster_id][0] if cluster_id < leaf_count else f"cluster-{cluster_id}"
+
+    return [
+        {
+            "evaluation_id": evaluation_id,
+            "portfolio_id": portfolio_id,
+            "step_index": step_index,
+            "left_cluster_id": label(step.left),
+            "right_cluster_id": label(step.right),
+            "distance": step.distance,
+            "size": step.size,
+            "linkage_method": HRP_LINKAGE_METHOD,
+            "tie_breaking_policy": HRP_TIE_BREAKING_POLICY,
+            "algorithm_version": HRP_ALGORITHM_VERSION,
+        }
+        for step_index, step in enumerate(linkage, start=1)
+    ]
 
 
 def write_hierarchical_risk_parity(
@@ -669,7 +764,7 @@ def write_hierarchical_risk_parity(
     evaluation_id: str,
     portfolio_id: str,
     constraints: PortfolioConstraints,
-) -> tuple[list[JsonRow], list[JsonRow]]:
+) -> tuple[list[JsonRow], list[JsonRow], list[JsonRow]]:
     matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
     listings = _listing_rows(matrix_rows)
     covariance_rows = _read_covariances(paths, listings)
@@ -678,7 +773,7 @@ def write_hierarchical_risk_parity(
         listings,
         weights,
         evaluation_id=evaluation_id,
-        objective="hierarchical_risk_parity",
+        objective=HIERARCHICAL_RISK_PARITY_OBJECTIVE,
         portfolio_id=portfolio_id,
         constraints=constraints,
         diagnostics={
@@ -687,10 +782,12 @@ def write_hierarchical_risk_parity(
                 covariance_rows,
                 {},
                 weights,
-                objective="hierarchical_risk_parity",
+                objective=HIERARCHICAL_RISK_PARITY_OBJECTIVE,
                 constraints=constraints,
             ),
             "ordered_isins": ",".join(sorted(weights)),
+            "linkage_method": HRP_LINKAGE_METHOD,
+            "tie_breaking_policy": HRP_TIE_BREAKING_POLICY,
         },
     )
     cluster_rows = build_hrp_cluster_rows(
@@ -699,13 +796,63 @@ def write_hierarchical_risk_parity(
         evaluation_id=evaluation_id,
         portfolio_id=portfolio_id,
     )
+    linkage_rows = build_hrp_linkage_rows(
+        listings,
+        covariance_rows,
+        evaluation_id=evaluation_id,
+        portfolio_id=portfolio_id,
+    )
     _replace_portfolio_rows(
-        paths.gold_optimized_weights("hierarchical_risk_parity", evaluation_id),
+        paths.gold_optimized_weights(HIERARCHICAL_RISK_PARITY_OBJECTIVE, evaluation_id),
         portfolio_id,
         weight_rows,
     )
     _replace_portfolio_rows(paths.gold_hrp_clusters(evaluation_id), portfolio_id, cluster_rows)
-    return weight_rows, cluster_rows
+    _replace_portfolio_rows(paths.gold_hrp_linkage(evaluation_id), portfolio_id, linkage_rows)
+    return weight_rows, cluster_rows, linkage_rows
+
+
+def write_hierarchical_risk_parity_baseline(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+    constraints: PortfolioConstraints,
+) -> list[JsonRow]:
+    """Write the deterministic midpoint-split HRP baseline for development/comparison.
+
+    Always labeled `hierarchical_risk_parity_baseline`; never the production
+    `hierarchical_risk_parity` objective (see PR61 amendment).
+    """
+    matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
+    listings = _listing_rows(matrix_rows)
+    covariance_rows = _read_covariances(paths, listings)
+    weights = hierarchical_risk_parity_baseline_weights(listings, covariance_rows, constraints)
+    weight_rows = build_target_weight_rows(
+        listings,
+        weights,
+        evaluation_id=evaluation_id,
+        objective=HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE,
+        portfolio_id=portfolio_id,
+        constraints=constraints,
+        diagnostics={
+            **build_optimizer_diagnostics(
+                listings,
+                covariance_rows,
+                {},
+                weights,
+                objective=HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE,
+                constraints=constraints,
+            ),
+            "ordered_isins": ",".join(sorted(weights)),
+        },
+    )
+    _replace_portfolio_rows(
+        paths.gold_optimized_weights(HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE, evaluation_id),
+        portfolio_id,
+        weight_rows,
+    )
+    return weight_rows
 
 
 def build_diversification_metric_rows(
@@ -1036,27 +1183,17 @@ def _diversification_ratio(
     return float(weighted_volatility / (portfolio_variance**0.5))
 
 
-def _cluster_splits(
-    listings: Sequence[ListingKey],
-) -> list[tuple[list[ListingKey], list[ListingKey]]]:
-    if len(listings) <= 1:
-        return []
-    midpoint = len(listings) // 2
-    left = list(listings[:midpoint])
-    right = list(listings[midpoint:])
-    return [(left, right), *_cluster_splits(left), *_cluster_splits(right)]
-
-
 def _cluster_variance(
     listings: Sequence[ListingKey], covariances: Mapping[tuple[ListingKey, ListingKey], float]
 ) -> float:
+    """Equal-weight cluster variance used by the baseline only (see PR61)."""
     if not listings:
         return 0.0
     weight = 1.0 / len(listings)
     return _portfolio_variance(listings, [weight] * len(listings), covariances)
 
 
-def _recursive_hrp_weights(
+def _recursive_hrp_baseline_weights(
     listings: Sequence[ListingKey], covariances: Mapping[tuple[ListingKey, ListingKey], float]
 ) -> dict[str, float]:
     if len(listings) == 1:
@@ -1070,9 +1207,9 @@ def _recursive_hrp_weights(
     left_allocation = 0.5 if total == 0 else right_variance / total
     right_allocation = 1.0 - left_allocation
     weights: dict[str, float] = {}
-    for isin, weight in _recursive_hrp_weights(left, covariances).items():
+    for isin, weight in _recursive_hrp_baseline_weights(left, covariances).items():
         weights[isin] = weight * left_allocation
-    for isin, weight in _recursive_hrp_weights(right, covariances).items():
+    for isin, weight in _recursive_hrp_baseline_weights(right, covariances).items():
         weights[isin] = weight * right_allocation
     return weights
 
