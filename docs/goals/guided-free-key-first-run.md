@@ -507,6 +507,16 @@ Founder must warn that limited history does not robustly establish:
 
 The limitation panel should be visible, concise, and attached to the recommendation rather than hidden in legal text.
 
+## Visual Design Goal
+
+The detailed interface, layout, motion, visualization, and responsive design requirements are defined in:
+
+```text
+docs/goals/visual-research-funnel.md
+```
+
+The visual goal is part of the first-run product requirement, not optional decoration. The research funnel should preserve the same analytical sequence while presenting one understandable question, visualization, insight, and action at a time.
+
 ## Design Principles
 
 The first-run experience should follow these rules:
