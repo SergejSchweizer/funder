@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
-from founder.logging import get_logger, setup_logging
+from founder.logging import get_logger, log_event, setup_logging
 from founder.univariate_statistics import DEFAULT_CONFIDENCE_LEVEL
 from founder.workflows import (
     run_bivariate_statistics_workflow,
@@ -244,7 +245,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         print("founder")
         return
     setup_logging(debug=getattr(args, "debug", False))
-    LOGGER.debug("parsed cli args command=%s", args.command)
+    log_event(
+        LOGGER,
+        logging.DEBUG,
+        module="cli",
+        event="args_parsed",
+        fields={"command": args.command},
+    )
     if args.command == "search":
         summary = run_search_workflow(
             root=Path(args.root),

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging as py_logging
 import zipfile
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import gmtime, struct_time
+from typing import Any
 
 LOG_DIR = Path(".logs")
 LOG_FORMAT = "%(asctime)sZ %(levelname)s %(name)s %(message)s"
@@ -25,6 +27,21 @@ class UtcFormatter(py_logging.Formatter):
 def get_logger(name: str) -> py_logging.Logger:
     """Return a Founder namespaced logger for a module."""
     return py_logging.getLogger(name if name.startswith("founder") else f"founder.{name}")
+
+
+def log_event(
+    logger: py_logging.Logger,
+    level: int,
+    *,
+    module: str,
+    event: str,
+    fields: Mapping[str, Any] | None = None,
+) -> None:
+    """Write one uniformly shaped Founder log message."""
+    message = f"module={module} event={event}"
+    if fields:
+        message = f"{message} {_format_fields(fields)}"
+    logger.log(level, message)
 
 
 def setup_logging(
@@ -57,7 +74,13 @@ def setup_logging(
     handler.setFormatter(UtcFormatter(LOG_FORMAT, LOG_DATE_FORMAT))
     handler._founder_file_handler = True  # type: ignore[attr-defined]
     logger.addHandler(handler)
-    logger.info("logging configured debug=%s log_dir=%s", debug, log_dir)
+    log_event(
+        logger,
+        py_logging.INFO,
+        module="logging",
+        event="configured",
+        fields={"debug": debug, "log_dir": log_dir},
+    )
     return logger
 
 
@@ -90,3 +113,20 @@ def _dated_log_file(path: Path, suffix: str) -> date | None:
         return datetime.fromisoformat(stem.removeprefix(prefix)).date()
     except ValueError:
         return None
+
+
+def _format_fields(fields: Mapping[str, Any]) -> str:
+    return " ".join(f"{key}={_format_value(value)}" for key, value in sorted(fields.items()))
+
+
+def _format_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, int | float):
+        return str(value)
+    text = str(value)
+    if not text:
+        return '""'
+    if any(character.isspace() for character in text):
+        return repr(text)
+    return text

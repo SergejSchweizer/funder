@@ -2,7 +2,7 @@ import logging
 import zipfile
 from datetime import UTC, datetime
 
-from founder.logging import get_logger, rotate_logs, setup_logging
+from founder.logging import get_logger, log_event, rotate_logs, setup_logging
 
 
 def test_setup_logging_writes_uniform_debug_log(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -11,15 +11,15 @@ def test_setup_logging_writes_uniform_debug_log(tmp_path) -> None:  # type: igno
     module_logger = get_logger("founder.test")
 
     assert logger.level == logging.DEBUG
-    module_logger.debug("debug details")
-    module_logger.info("hello")
+    log_event(module_logger, logging.DEBUG, module="test", event="debug", fields={"detail": "yes"})
+    log_event(module_logger, logging.INFO, module="test", event="hello")
 
     log_path = log_dir / "founder-2026-07-12.log"
     content = log_path.read_text(encoding="utf-8")
     assert "2026-" in content
-    assert " INFO founder logging configured debug=True" in content
-    assert " DEBUG founder.test debug details" in content
-    assert " INFO founder.test hello" in content
+    assert " INFO founder module=logging event=configured debug=true log_dir=" in content
+    assert " DEBUG founder.test module=test event=debug detail=yes" in content
+    assert " INFO founder.test module=test event=hello" in content
 
 
 def test_rotate_logs_zips_after_seven_days_and_deletes_after_month(tmp_path) -> None:  # type: ignore[no-untyped-def]

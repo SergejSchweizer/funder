@@ -8,12 +8,13 @@ non-empty ISIN, plus review artifacts that make missing identifiers visible.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from founder.logging import get_logger
+from founder.logging import get_logger, log_event
 from founder.paths import LakePaths
 from founder.schemas import required_fields
 from founder.table_io import JsonRow, read_json, read_rows, write_csv, write_json, write_rows
@@ -81,11 +82,16 @@ def write_search_run(
     """
     checked_date = run_date or date.today()
     checked_at = found_at or datetime.now(UTC)
-    LOGGER.debug(
-        "writing search run search_run_id=%s query=%s raw_candidates=%s",
-        search_run_id,
-        query,
-        len(raw_candidates),
+    log_event(
+        LOGGER,
+        logging.DEBUG,
+        module="search",
+        event="run_write_started",
+        fields={
+            "query": query,
+            "raw_candidates": len(raw_candidates),
+            "search_run_id": search_run_id,
+        },
     )
     bronze_path = paths.bronze_search_run(checked_date.isoformat()) / f"{search_run_id}.json"
     write_json(
@@ -103,7 +109,13 @@ def write_search_run(
         for candidate in raw_candidates
     ]
     write_rows(paths.candidates(search_run_id), rows)
-    LOGGER.info("search candidates written search_run_id=%s rows=%s", search_run_id, len(rows))
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="search",
+        event="candidates_written",
+        fields={"rows": len(rows), "search_run_id": search_run_id},
+    )
     return rows
 
 
@@ -157,8 +169,12 @@ def select_canonical(candidates: Iterable[Mapping[str, Any]]) -> list[JsonRow]:
         )
     if missing_isin:
         selected.sort(key=lambda row: str(row["isin"]))
-    LOGGER.debug(
-        "canonical selection complete rows=%s missing_isin=%s", len(selected), missing_isin
+    log_event(
+        LOGGER,
+        logging.DEBUG,
+        module="search",
+        event="canonical_selection_completed",
+        fields={"missing_isin": missing_isin, "rows": len(selected)},
     )
     return selected
 
@@ -185,8 +201,12 @@ def write_canonical_universe(paths: LakePaths, search_run_id: str) -> list[JsonR
         },
     )
     write_csv(paths.review_csv(search_run_id), canonical, required_fields("canonical_universe"))
-    LOGGER.info(
-        "canonical universe written search_run_id=%s rows=%s", search_run_id, len(canonical)
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="search",
+        event="canonical_universe_written",
+        fields={"rows": len(canonical), "search_run_id": search_run_id},
     )
     return canonical
 
@@ -206,7 +226,13 @@ def approve_universe(
         "approved_at": (approved_at or datetime.now(UTC)).replace(microsecond=0).isoformat(),
     }
     write_json(paths.current_universe(), pointer)
-    LOGGER.info("universe approved search_run_id=%s", search_run_id)
+    log_event(
+        LOGGER,
+        logging.INFO,
+        module="search",
+        event="universe_approved",
+        fields={"search_run_id": search_run_id},
+    )
     return pointer
 
 

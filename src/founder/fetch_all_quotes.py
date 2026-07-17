@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
-from founder.logging import get_logger, setup_logging
+from founder.logging import get_logger, log_event, setup_logging
 from founder.workflows import run_fetch_all_quotes_workflow
 
 DEFAULT_ROOT = Path("lake")
@@ -70,7 +71,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     setup_logging(debug=args.debug)
-    LOGGER.debug("parsed fetch-all-quotes args")
+    log_event(LOGGER, logging.DEBUG, module="fetch-all-quotes", event="args_parsed")
     summary = run_fetch_all_quotes_workflow(
         root=Path(args.root),
         run_id=args.run_id,
