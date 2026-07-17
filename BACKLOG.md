@@ -14,6 +14,7 @@ Last reviewed: 2026-07-17
 - [Production Portfolio Product PR Stack](#production-portfolio-product-pr-stack)
 - [Multivariate Statistics Module PR Stack](#multivariate-statistics-module-pr-stack)
 - [Generic Statistics Cache PR Stack](#generic-statistics-cache-pr-stack)
+- [Hosted Product And Goal Traceability PR Stack](#hosted-product-and-goal-traceability-pr-stack)
 - [Future Work After Finalization](#future-work-after-finalization)
 - [Update Rules](#update-rules)
 
@@ -1272,6 +1273,162 @@ Final branch: `feat/multivariate-selection-cache-consumption`.
 Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until PR73 and PR74 are merged or explicitly superseded in this backlog.
 
 Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, and cache-hit/cache-miss integration tests for Metadata Filter selections.
+
+## Hosted Product And Goal Traceability PR Stack
+
+Priority policy: This stack translates the remaining product and hosted-access goals in `GOALS.md` into implementable work after the local analytical core is production-safe. It must not weaken the local-first, user-owned-data model. Hosted work starts only after the production portfolio stack has clear production-candidate gates, and every hosted endpoint must preserve deterministic analysis ids, immutable artifacts, explicit user credentials boundaries, and no provider-data redistribution without a licensing decision. Each PR is stacked on the prior PR until merged.
+
+### PR76. Goal Traceability Matrix And Product Scope Gate
+
+Branch: `docs/goals-traceability-matrix`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 governance for product scope.
+
+Depends on: PR68, PR75.
+
+Scope: Add a maintained goal-to-backlog traceability matrix mapping `GOALS.md` sections to PR stacks, explicit production prerequisites, blocked hosted items, and out-of-scope broker-execution decisions. Add a machine-checkable documentation test that every active goal category has either an implemented PR, an open backlog PR, or an explicit deferred rationale.
+
+Acceptance: Tests fail when a new top-level goal is added without a linked backlog entry. The matrix links risk-first portfolio construction, income specialization, current-position analysis, monitoring, hosted BYOK, licensing/privacy, and architecture-growth goals to concrete PR numbers.
+
+Determinism: Goal anchors, backlog PR ids, and deferred statuses are sorted and validated from static Markdown content; validation cannot depend on timestamps or GitHub API state.
+
+Idempotency: Regenerating or validating the same traceability matrix leaves files unchanged and never mutates lake data or runtime state.
+
+### PR77. Local Portfolio Project And Analysis Manifest Catalog
+
+Branch: `feat/local-project-analysis-catalog`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 product data model.
+
+Depends on: PR76.
+
+Scope: Add a local product catalog for portfolio projects, positions, settings, analysis runs, and artifact references using SQLite for small application state and Parquet for analytical outputs. Keep Founder Core calculations in `src/founder` and expose a service boundary that records project metadata, current positions, run status, input identities, and artifact paths without duplicating portfolio math.
+
+Acceptance: Tests cover project creation, position updates, run manifest creation, immutable artifact references, SQLite migration bootstrap, missing artifact detection, no secret persistence, and deterministic serialization of project and run summaries.
+
+Determinism: Project ids, run ids, and artifact refs derive from normalized portfolio content, input dataset ids, analysis settings, and schema versions unless the user explicitly requests a new named project.
+
+Idempotency: Replaying the same project import or analysis registration reuses existing catalog rows or writes the same logical state without duplicate positions, duplicate run records, or rewritten analytical artifacts.
+
+### PR78. FastAPI BYOK Analysis Service Baseline
+
+Branch: `feat/hosted-api-byok-baseline`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 hosted API foundation.
+
+Depends on: PR77.
+
+Scope: Add `apps/api` with a FastAPI service exposing `/health`, `/portfolios`, `/portfolios/{portfolio_id}`, `/analyses`, `/analyses/{run_id}`, `/analyses/{run_id}/metrics`, `/analyses/{run_id}/returns`, and `/analyses/{run_id}/weights`. Execute small analyses synchronously at first, return run identifiers and status, pass user-supplied EODHD keys only through request/session scope, and store only non-secret project and artifact metadata.
+
+Acceptance: API tests cover request validation, health, portfolio CRUD, synchronous analysis run creation, status responses, artifact-backed metric responses, secret redaction, missing-key failures, invalid portfolio size, and no React-side financial calculations.
+
+Determinism: API run ids and response payload ordering derive from normalized request bodies, project ids, pinned input versions, and analysis settings; logs and operational timing cannot affect analytical identities.
+
+Idempotency: Repeating the same analysis request for unchanged project inputs and settings returns the same completed run or an explicit cache hit without duplicate artifacts or repeated provider fetches beyond declared Refresh policy.
+
+### PR79. Responsive Web UI Analysis Shell
+
+Branch: `feat/hosted-web-analysis-shell`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 user workflow surface.
+
+Depends on: PR78.
+
+Scope: Add `apps/web` with a Next.js and React UI for `/dashboard`, `/portfolio`, `/analysis/{run_id}`, and `/settings`. Use Plotly for charting, support desktop and mobile layouts, allow session-scoped EODHD key entry, portfolio input for an initial 3 to 10 funds, analysis submission, progress/status display, warnings, target weights, risk metrics, drawdowns, income summaries, and correlation views.
+
+Acceptance: UI tests cover route rendering, mobile and desktop layouts, form validation, no key logging or persistence, API error states, loading and completed analysis states, chart-ready payload rendering, warning visibility, and accessibility labels for core controls.
+
+Determinism: UI state transitions derive from API responses and stable route params; snapshot tests use fixed fixtures and never call providers or run portfolio math in the browser.
+
+Idempotency: Reopening or refreshing a completed analysis page refetches the same run artifacts and does not create a new analysis unless the user explicitly submits a new request.
+
+### PR80. Docker Compose BYOK Deployment Baseline
+
+Branch: `chore/hosted-docker-compose-baseline`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 operable hosted baseline.
+
+Depends on: PR79.
+
+Scope: Add Dockerfiles for `apps/api` and `apps/web`, a root `docker-compose.yml`, ignored runtime `data/` volume layout, environment variable contracts for `DATABASE_URL`, `FOUNDER_DATA_DIR`, and `NEXT_PUBLIC_API_URL`, plus local deployment docs. Keep the initial topology to one Web container, one API container, and one persistent data volume.
+
+Acceptance: CI or scripted tests build both containers, run `/health`, verify the Web container points at the API URL, verify runtime data is outside Git, and prove no PostgreSQL, Redis, queue, object storage, Kubernetes, or credential vault is required for the baseline.
+
+Determinism: Build inputs, exposed ports, environment names, and volume paths are explicit and documented; generated image tags in tests are content or commit based.
+
+Idempotency: Re-running compose setup with unchanged source reuses the same data volume and does not reset SQLite, lake artifacts, or analysis manifests unless an explicit clean command is invoked.
+
+### PR81. Licensing, Privacy, And Provider-Data Boundary Gate
+
+Branch: `docs/hosted-licensing-privacy-gate`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 hosted risk gate.
+
+Depends on: PR80.
+
+Scope: Add a mandatory hosted-readiness gate for market-data licensing, derived-data display, redistribution rights, user-key handling, privacy controls, backup boundaries, log redaction, and no broker execution. The gate must block public-hosted defaults until a decision record marks each requirement approved, local-only, or disabled.
+
+Acceptance: Tests or policy checks fail if hosted docs claim public availability while licensing, privacy, credential, and provider-data decisions are unresolved. API and Web docs include user-owned credential boundaries and no direct broker-order execution claims.
+
+Determinism: Gate status is read from versioned decision records and static configuration, not environment-specific secrets or live provider calls.
+
+Idempotency: Re-running the gate reports the same readiness status for unchanged decision records and does not alter runtime settings or user data.
+
+### PR82. Hosted Report Export And User-Facing Explanation Views
+
+Branch: `feat/hosted-report-explanation-views`.
+
+Git status: not started. PR: TBD.
+
+Priority: P2 product comprehension.
+
+Depends on: PR81.
+
+Scope: Add hosted report views and exports for selected and excluded instruments, target weights, risk contributions, expected income, drawdown, tail risk, concentration diagnostics, costs, turnover, model disadvantages, data-quality warnings, and current-versus-target differences when positions are supplied. Reports consume recommendation and analysis artifacts; they must not recompute formulas in Web UI code.
+
+Acceptance: Tests cover deterministic report payloads, no guaranteed-return language, unavailable metric display, warning propagation, current-position comparison, chart/table consistency, mobile report readability, and export filenames keyed by run id and template version.
+
+Determinism: Report ids and rendered sections derive from recommendation ids, analysis ids, project ids, position snapshot ids, and template versions.
+
+Idempotency: Re-exporting an unchanged report produces the same content and filename, updating only explicitly allowed generated-at metadata.
+
+### PR83. Hosted Monitoring And Architecture Growth Path
+
+Branch: `feat/hosted-monitoring-growth-path`.
+
+Git status: not started. PR: TBD.
+
+Priority: P3 hosted operations.
+
+Depends on: PR82.
+
+Scope: Add optional scheduled monitoring runs for hosted projects, including drift, drawdown, risk-limit, stale-data, distribution-cut, and NAV-erosion statuses. Document independent migration paths from SQLite to PostgreSQL, local filesystem to object storage, synchronous API to worker/queue, session key to encrypted credential vault, and single API to multiple instances without changing API contracts.
+
+Acceptance: Tests cover deterministic monitoring policies, unchanged-data no-op runs, alert-ready status payloads, disabled scheduling by default, stale data warnings, distribution-cut warnings, drift thresholds, and documented migration compatibility checks.
+
+Determinism: Monitoring ids include project id, current Refresh snapshot, position snapshot, analysis or recommendation id, monitoring policy, schedule id, and algorithm version.
+
+Idempotency: Re-running monitoring for unchanged inputs produces the same statuses and does not duplicate alerts, reports, provider downloads, or analysis runs.
+
+### Series Completion Gate
+
+Final branch: `feat/hosted-monitoring-growth-path`.
+
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. The final PR must not be merged until PR76 through PR82 are merged or explicitly superseded in this backlog.
+
+Required main merge gate: `merge-gate` must pass Ruff lint and format, architecture/import-boundary checks, Pyright strict, Pytest with at least 95% coverage, dataset schema-registry validation, API/UI contract tests, secret-redaction tests, and hosted-readiness policy checks. The series remains incomplete while hosted flows can persist provider keys by default, expose provider data without a licensing decision, run financial logic in the Web UI, or create broker orders.
 
 ## Future Work After Finalization
 
