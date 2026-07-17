@@ -10,7 +10,12 @@ from typing import Any
 
 from founder.gold import covariance
 from founder.paths import LakePaths
-from founder.portfolio import PortfolioConstraints, equal_weight_seed, optimize_portfolio
+from founder.portfolio import (
+    PortfolioConstraints,
+    equal_weight_seed,
+    optimize_portfolio,
+    require_complete_covariance,
+)
 from founder.return_quality import MIN_HISTORY_LONG, MIN_HISTORY_MEDIUM, MIN_HISTORY_SHORT
 from founder.table_io import JsonRow, read_rows, write_rows
 
@@ -942,10 +947,11 @@ def _portfolio_volatility(
     weights: Sequence[float],
     covariances: Mapping[tuple[tuple[str, str, str], tuple[str, str, str]], float],
 ) -> float:
+    require_complete_covariance(listings, covariances)
     variance = 0.0
     for left, left_weight in zip(listings, weights, strict=True):
         for right, right_weight in zip(listings, weights, strict=True):
-            variance += left_weight * right_weight * covariances.get((left, right), 0.0)
+            variance += left_weight * right_weight * covariances[(left, right)]
     return sqrt(max(0.0, variance))
 
 

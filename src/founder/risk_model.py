@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import sqrt
+from math import isfinite, sqrt
 from typing import Any
 
 from founder.contract_versioning import stable_contract_id
@@ -65,13 +65,18 @@ class RiskModelDiagnostics:
     observation_count: int
     listing_count: int
     missing_pair_count: int
+    non_finite_count: int
+    symmetry_residual: float
     is_positive_semidefinite: bool
     condition_number: float | None
+    minimum_eigenvalue: float | None
     stability_category: str
     shrinkage_intensity: float | None
     ewma_decay: float | None
     missing_observation_policy: str
     algorithm_version: int
+    production_eligible: bool
+    availability_reasons: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -149,6 +154,15 @@ def estimate_risk_model(
     eigenvalues = _jacobi_eigenvalues(matrix)
     is_psd = _is_positive_semidefinite(eigenvalues)
     condition_number, stability_category = _condition_diagnostics(eigenvalues, is_psd)
+    non_finite_count = sum(1 for row in matrix for value in row if not isfinite(value))
+    symmetry_residual = _symmetry_residual(matrix)
+    minimum_eigenvalue = min(eigenvalues) if eigenvalues else None
+    availability_reasons = _availability_reasons(
+        missing_pair_count=missing_pair_count,
+        non_finite_count=non_finite_count,
+        is_positive_semidefinite=is_psd,
+        stability_category=stability_category,
+    )
 
     diagnostics = RiskModelDiagnostics(
         estimator=estimator,
@@ -160,13 +174,18 @@ def estimate_risk_model(
         observation_count=len(windowed_dates),
         listing_count=len(resolved_listings),
         missing_pair_count=missing_pair_count,
+        non_finite_count=non_finite_count,
+        symmetry_residual=symmetry_residual,
         is_positive_semidefinite=is_psd,
         condition_number=condition_number,
+        minimum_eigenvalue=minimum_eigenvalue,
         stability_category=stability_category,
         shrinkage_intensity=shrinkage_intensity,
         ewma_decay=ewma_decay_used,
         missing_observation_policy=MISSING_OBSERVATION_POLICY,
         algorithm_version=ALGORITHM_VERSION,
+        production_eligible=not availability_reasons,
+        availability_reasons=availability_reasons,
     )
     return RiskModelResult(
         listings=resolved_listings,
@@ -418,6 +437,39 @@ def _condition_diagnostics(eigenvalues: Sequence[float], is_psd: bool) -> tuple[
     else:
         category = STABILITY_ILL_CONDITIONED
     return condition_number, category
+
+
+def _symmetry_residual(matrix: Sequence[Sequence[float]]) -> float:
+    n = len(matrix)
+    residual = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            residual = max(residual, abs(matrix[i][j] - matrix[j][i]))
+    return residual
+
+
+def _availability_reasons(
+    *,
+    missing_pair_count: int,
+    non_finite_count: int,
+    is_positive_semidefinite: bool,
+    stability_category: str,
+) -> tuple[str, ...]:
+    """Deterministic reasons a risk-model artifact is not production eligible.
+
+    Computed only from this module's own matrix diagnostics, never from
+    whether a downstream optimizer happened to return weights.
+    """
+    reasons: list[str] = []
+    if missing_pair_count > 0:
+        reasons.append("missing_pairs")
+    if non_finite_count > 0:
+        reasons.append("non_finite_values")
+    if not is_positive_semidefinite:
+        reasons.append("not_positive_semidefinite")
+    if stability_category in (STABILITY_ILL_CONDITIONED, STABILITY_SINGULAR):
+        reasons.append("unstable_condition_number")
+    return tuple(reasons)
 
 
 __all__ = [

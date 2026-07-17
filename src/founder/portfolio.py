@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import comb, isclose
+from math import comb, isclose, isfinite
 from typing import Any
 
 from founder.paths import LakePaths
@@ -73,6 +73,47 @@ class OptimizerDiagnostics:
             "input_listing_count": self.input_listing_count,
             "turnover_estimate": self.turnover_estimate,
         }
+
+
+def _covariance_completeness(
+    listings: Sequence[ListingKey],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> tuple[int, int]:
+    """Return (missing_pair_count, non_finite_pair_count) for the required set.
+
+    The required set is every ordered pair, including self-pairs (diagonal
+    variance terms), for the exact listing set a portfolio calculation needs.
+    """
+    missing = 0
+    non_finite = 0
+    for left in listings:
+        for right in listings:
+            key = (left, right)
+            if key not in covariances:
+                missing += 1
+            elif not isfinite(covariances[key]):
+                non_finite += 1
+    return missing, non_finite
+
+
+def require_complete_covariance(
+    listings: Sequence[ListingKey],
+    covariances: Mapping[tuple[ListingKey, ListingKey], float],
+) -> None:
+    """Fail closed instead of silently treating missing/non-finite covariance as zero.
+
+    Portfolio variance, marginal risk, diversification, and risk-parity
+    calculations must never substitute a plausible-looking zero for a
+    covariance element that is absent or non-finite in the exact Selection
+    calendar; doing so silently understates portfolio risk.
+    """
+    missing, non_finite = _covariance_completeness(listings, covariances)
+    if missing or non_finite:
+        raise ValueError(
+            "incomplete covariance matrix: "
+            f"{missing} missing pair(s), {non_finite} non-finite value(s) out of "
+            f"{len(listings) * len(listings)} required pairs for the exact listing set"
+        )
 
 
 def validate_weights(weights: dict[str, float], constraints: PortfolioConstraints) -> None:
@@ -143,6 +184,7 @@ def optimize_portfolio(
     target_value = 0.0 if target_return is None else target_return
 
     covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
     candidates = _candidate_weights(ordered, constraints, grid_step=grid_step)
     if not candidates:
         raise ValueError("no feasible weights for constraints")
@@ -213,23 +255,30 @@ def build_optimizer_diagnostics(
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
-    portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
     expected_return = _portfolio_return(ordered, ordered_weights, expected_returns)
     violations = _constraint_violations(weights, constraints)
-    missing_covariances = sum(
-        1 for left in ordered for right in ordered if (left, right) not in covariances
-    )
-    diagonal_values = [covariances.get((listing, listing), 0.0) for listing in ordered]
-    if missing_covariances:
-        covariance_condition = "missing_covariance"
-    elif all(value <= 0 for value in diagonal_values):
-        covariance_condition = "zero_variance"
+    missing_covariances, non_finite_covariances = _covariance_completeness(ordered, covariances)
+    if missing_covariances or non_finite_covariances:
+        # Fail closed: an incomplete or non-finite covariance matrix must never
+        # be silently treated as zero to produce a plausible-looking variance.
+        covariance_condition = (
+            "missing_covariance" if missing_covariances else "non_finite_covariance"
+        )
+        optimizer_status = "blocked_missing_covariance"
+        portfolio_variance = float("nan")
+        objective_value = float("nan")
     else:
-        covariance_condition = "ok"
+        diagonal_values = [covariances[(listing, listing)] for listing in ordered]
+        covariance_condition = (
+            "zero_variance" if all(value <= 0 for value in diagonal_values) else "ok"
+        )
+        optimizer_status = "feasible" if not violations else "constraint_violation"
+        portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
+        objective_value = _objective_value(objective, ordered, ordered_weights, covariances)
     diagnostics = OptimizerDiagnostics(
         optimizer_type=optimizer_type,
-        optimizer_status="feasible" if not violations else "constraint_violation",
-        objective_value=_objective_value(objective, ordered, ordered_weights, covariances),
+        optimizer_status=optimizer_status,
+        objective_value=objective_value,
         expected_return=expected_return,
         portfolio_variance=portfolio_variance,
         constraint_violations=tuple(violations),
@@ -371,6 +420,7 @@ def hierarchical_risk_parity_weights(
 ) -> dict[str, float]:
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
     raw_weights = _recursive_hrp_weights(ordered, covariances)
     capped = {
         isin: min(constraints.max_weight, max(constraints.min_weight, raw_weights[isin]))
@@ -393,6 +443,7 @@ def build_hrp_cluster_rows(
 ) -> list[JsonRow]:
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
     rows: list[JsonRow] = []
     for index, cluster in enumerate(_cluster_splits(ordered), start=1):
         left, right = cluster
@@ -470,11 +521,12 @@ def build_diversification_metric_rows(
 ) -> list[JsonRow]:
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
     ratio = _diversification_ratio(ordered, ordered_weights, covariances)
     portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
     asset_volatility = sum(
-        weight * (max(0.0, covariances.get((listing, listing), 0.0)) ** 0.5)
+        weight * (max(0.0, covariances[(listing, listing)]) ** 0.5)
         for listing, weight in zip(ordered, ordered_weights, strict=True)
     )
     return [
@@ -554,6 +606,7 @@ def build_risk_contribution_rows(
 ) -> list[JsonRow]:
     ordered = _listing_keys(listings)
     covariances = _covariance_map(covariance_rows)
+    require_complete_covariance(ordered, covariances)
     ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
     portfolio_variance = _portfolio_variance(ordered, ordered_weights, covariances)
     target_budget = 1.0 / len(ordered)
@@ -734,7 +787,7 @@ def _portfolio_variance(
     variance = 0.0
     for left, left_weight in zip(listings, weights, strict=True):
         for right, right_weight in zip(listings, weights, strict=True):
-            variance += left_weight * right_weight * covariances.get((left, right), 0.0)
+            variance += left_weight * right_weight * covariances[(left, right)]
     return variance
 
 
@@ -747,7 +800,7 @@ def _diversification_ratio(
     if portfolio_variance <= 0:
         return 0.0
     weighted_volatility = sum(
-        weight * (max(0.0, covariances.get((listing, listing), 0.0)) ** 0.5)
+        weight * (max(0.0, covariances[(listing, listing)]) ** 0.5)
         for listing, weight in zip(listings, weights, strict=True)
     )
     return float(weighted_volatility / (portfolio_variance**0.5))
@@ -801,7 +854,7 @@ def _marginal_risk_contribution(
     covariances: Mapping[tuple[ListingKey, ListingKey], float],
 ) -> float:
     return sum(
-        weight * covariances.get((listing, right), 0.0)
+        weight * covariances[(listing, right)]
         for right, weight in zip(listings, weights, strict=True)
     )
 

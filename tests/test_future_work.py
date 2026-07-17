@@ -26,6 +26,26 @@ from founder.trading import prepare_flatex_orders, write_flatex_orders
 from founder.universe_review import currency_exposure, missing_isin_rows, review_universe
 
 
+def _dense_covariance_rows(
+    listings: list[dict[str, str]], *, diagonal: float = 0.01, off_diagonal: float = 0.0
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for left in listings:
+        for right in listings:
+            rows.append(
+                {
+                    "left_isin": left["isin"],
+                    "left_exchange": left["exchange"],
+                    "left_code": left["code"],
+                    "right_isin": right["isin"],
+                    "right_exchange": right["exchange"],
+                    "right_code": right["code"],
+                    "covariance": diagonal if left["isin"] == right["isin"] else off_diagonal,
+                }
+            )
+    return rows
+
+
 def test_portfolio_constraints_validate_seed_and_two_asset_weights() -> None:
     constraints = PortfolioConstraints(max_weight=0.6)
     weights = equal_weight_seed(["IE3", "IE1", "IE2", "IE4", "IE5"], constraints)
@@ -166,10 +186,11 @@ def test_portfolio_objectives_reject_infeasible_constraints() -> None:
         {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},
         {"isin": "IE2", "exchange": "AS", "code": "BBB"},
     ]
+    covariance_rows = _dense_covariance_rows(listings)
     with pytest.raises(ValueError, match="no feasible weights"):
         optimize_portfolio(
             listings,
-            [],
+            covariance_rows,
             {"IE1": 0.01, "IE2": 0.02},
             objective="minimum_variance",
             constraints=PortfolioConstraints(max_weight=0.4),
@@ -178,7 +199,7 @@ def test_portfolio_objectives_reject_infeasible_constraints() -> None:
     with pytest.raises(ValueError, match="target_return is required"):
         optimize_portfolio(
             listings,
-            [],
+            covariance_rows,
             {"IE1": 0.01, "IE2": 0.02},
             objective="target_return_minimum_variance",
             constraints=PortfolioConstraints(max_weight=1.0),
@@ -186,7 +207,7 @@ def test_portfolio_objectives_reject_infeasible_constraints() -> None:
     with pytest.raises(ValueError, match="satisfy target_return"):
         optimize_portfolio(
             listings,
-            [],
+            covariance_rows,
             {"IE1": 0.01, "IE2": 0.02},
             objective="target_return_minimum_variance",
             constraints=PortfolioConstraints(max_weight=1.0),
@@ -202,7 +223,7 @@ def test_portfolio_objectives_use_bounded_large_universe_fallback() -> None:
 
     weights = optimize_portfolio(
         listings,
-        [],
+        _dense_covariance_rows(listings),
         {str(row["isin"]): 0.01 for row in listings},
         objective="minimum_variance",
         constraints=PortfolioConstraints(max_weight=0.5),

@@ -90,6 +90,28 @@ def test_missing_pair_count_reports_non_overlapping_listings() -> None:
         estimate_risk_model(rows, estimator="sample")
 
 
+def test_complete_well_behaved_matrix_is_production_eligible() -> None:
+    rows = _three_asset_rows(
+        {
+            "2026-01-01": (0.01, 0.02, -0.03),
+            "2026-01-02": (0.02, -0.01, 0.02),
+            "2026-01-03": (-0.01, 0.03, -0.01),
+            "2026-01-04": (0.03, -0.02, 0.03),
+            "2026-01-05": (0.00, 0.01, -0.02),
+        }
+    )
+
+    result = estimate_risk_model(rows, estimator="sample")
+
+    assert result.diagnostics.missing_pair_count == 0
+    assert result.diagnostics.non_finite_count == 0
+    assert result.diagnostics.symmetry_residual == 0.0
+    assert result.diagnostics.is_positive_semidefinite is True
+    assert result.diagnostics.production_eligible is True
+    assert result.diagnostics.availability_reasons == ()
+    assert result.diagnostics.minimum_eigenvalue is not None
+
+
 def test_ledoit_wolf_shrinks_more_with_less_history() -> None:
     small_rows = _three_asset_rows(
         {
@@ -306,6 +328,9 @@ def test_near_singular_covariance_reports_ill_conditioned_or_singular_category()
         STABILITY_MODERATE,
     }
     assert result.diagnostics.condition_number is None or result.diagnostics.condition_number > 1.0
+    if result.diagnostics.stability_category in {STABILITY_ILL_CONDITIONED, STABILITY_SINGULAR}:
+        assert result.diagnostics.production_eligible is False
+        assert "unstable_condition_number" in result.diagnostics.availability_reasons
 
 
 def test_deterministic_diagnostics_regardless_of_listing_order() -> None:
@@ -335,14 +360,16 @@ def test_deterministic_diagnostics_regardless_of_listing_order() -> None:
     assert forward.covariance[forward_ie1][forward_ie1] == pytest.approx(
         reversed_order.covariance[reversed_ie1][reversed_ie1]
     )
-    # Diagnostics must be order-independent; the condition number comes from
-    # an iterative eigenvalue solver, so allow floating-point tolerance there
-    # while every other diagnostic field must match exactly.
+    # Diagnostics must be order-independent; the condition number and minimum
+    # eigenvalue come from an iterative eigenvalue solver, so allow
+    # floating-point tolerance there while every other diagnostic field must
+    # match exactly.
     forward_diag = forward.diagnostics
     reversed_diag = reversed_order.diagnostics
     assert forward_diag.condition_number == pytest.approx(reversed_diag.condition_number)
-    assert forward_diag.__dict__ | {"condition_number": None} == (
-        reversed_diag.__dict__ | {"condition_number": None}
+    assert forward_diag.minimum_eigenvalue == pytest.approx(reversed_diag.minimum_eigenvalue)
+    assert forward_diag.__dict__ | {"condition_number": None, "minimum_eigenvalue": None} == (
+        reversed_diag.__dict__ | {"condition_number": None, "minimum_eigenvalue": None}
     )
 
 
