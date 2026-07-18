@@ -18,6 +18,12 @@ from founder.portfolio_parts.clustering import (
     recursive_bisection,
     single_linkage,
 )
+from founder.portfolio_parts.cvar import SOLVER_NAME as CVAR_SOLVER_NAME
+from founder.portfolio_parts.cvar import SOLVER_VERSION as CVAR_SOLVER_VERSION
+from founder.portfolio_parts.cvar import (
+    historical_var_and_cvar,
+    solve_minimum_cvar,
+)
 from founder.portfolio_parts.solvers import SOLVER_NAME as PGD_SOLVER_NAME
 from founder.portfolio_parts.solvers import SOLVER_VERSION as PGD_SOLVER_VERSION
 from founder.portfolio_parts.solvers import (
@@ -48,6 +54,11 @@ GRID_OBJECTIVES = frozenset(
 # maximum_sharpe, target_return_minimum_variance, and maximum_diversification
 # remain grid-only comparison methods until a later PR gives them a solver.
 SOLVER_BACKED_OBJECTIVES = frozenset({"minimum_variance", *RISK_PARITY_OBJECTIVES})
+# PR61: historical Minimum CVaR is a scenario-based objective (needs the full
+# aligned return matrix, not a covariance matrix) with its own solver, kept
+# separate from optimize_portfolio's covariance-based objectives.
+MINIMUM_CVAR_OBJECTIVE = "minimum_cvar"
+DEFAULT_CVAR_CONFIDENCE_LEVEL = 0.95
 PRODUCTION_SOLVER_MODE = "production"
 BASELINE_SOLVER_MODE = "baseline"
 SOLVER_MODES = (PRODUCTION_SOLVER_MODE, BASELINE_SOLVER_MODE)
@@ -849,6 +860,174 @@ def write_hierarchical_risk_parity_baseline(
     )
     _replace_portfolio_rows(
         paths.gold_optimized_weights(HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE, evaluation_id),
+        portfolio_id,
+        weight_rows,
+    )
+    return weight_rows
+
+
+def _aligned_return_matrix(
+    listings: Sequence[ListingKey], return_rows: Sequence[Mapping[str, Any]]
+) -> list[list[float]]:
+    """Build a dense `T x N` (dates x listings) matrix of aligned historical returns.
+
+    Only dates common to every listing are included, matching the "exact
+    Selection calendar" alignment used elsewhere (e.g. `require_complete_covariance`).
+    """
+    by_listing: dict[ListingKey, dict[str, float]] = {}
+    for row in return_rows:
+        key = (str(row["isin"]), str(row["exchange"]), str(row["code"]))
+        by_listing.setdefault(key, {})[str(row["date"])] = float(row["return"])
+    common_dates: set[str] | None = None
+    for listing in listings:
+        dates = set(by_listing.get(listing, {}))
+        common_dates = dates if common_dates is None else common_dates & dates
+    ordered_dates = sorted(common_dates or set())
+    return [[by_listing[listing][date] for listing in listings] for date in ordered_dates]
+
+
+def minimum_cvar_weights(
+    listings: Sequence[Mapping[str, Any]],
+    return_rows: Sequence[Mapping[str, Any]],
+    constraints: PortfolioConstraints,
+    *,
+    confidence_level: float = DEFAULT_CVAR_CONFIDENCE_LEVEL,
+) -> dict[str, float]:
+    """Historical Minimum CVaR: minimize Conditional Value-at-Risk over long-only,
+    bounded weights via the Rockafellar-Uryasev projected-subgradient solver.
+
+    Unlike the covariance-based objectives, this needs the full aligned
+    historical return matrix (the empirical loss distribution), not a
+    covariance matrix, so it is a standalone entry point rather than an
+    `optimize_portfolio` objective.
+    """
+    ordered = _listing_keys(listings)
+    returns_matrix = _aligned_return_matrix(ordered, return_rows)
+    if len(returns_matrix) < 2:
+        raise ValueError("at least two common historical return observations are required")
+    outcome = solve_minimum_cvar(
+        returns_matrix,
+        confidence_level=confidence_level,
+        min_weight=constraints.min_weight,
+        max_weight=constraints.max_weight,
+    )
+    if not outcome.converged:
+        raise ValueError(
+            f"solver_not_converged: the {CVAR_SOLVER_NAME} solver did not converge for "
+            f"minimum_cvar within {outcome.iteration_count} iterations; no production "
+            "weights are produced for this request"
+        )
+    weights = {isin: weight for (isin, _, _), weight in zip(ordered, outcome.weights, strict=True)}
+    validate_weights(weights, constraints)
+    return weights
+
+
+def build_minimum_cvar_diagnostics(
+    listings: Sequence[Mapping[str, Any]],
+    return_rows: Sequence[Mapping[str, Any]],
+    weights: Mapping[str, float],
+    *,
+    constraints: PortfolioConstraints,
+    confidence_level: float = DEFAULT_CVAR_CONFIDENCE_LEVEL,
+) -> JsonRow:
+    """Report VaR/CVaR and solver diagnostics for an already-computed minimum-CVaR
+    portfolio. Re-runs the solver and only trusts its convergence/iteration stats
+    when the given weights numerically match its own output (see PR60's
+    `build_optimizer_diagnostics` for the same weights-provenance safeguard).
+    """
+    ordered = _listing_keys(listings)
+    returns_matrix = _aligned_return_matrix(ordered, return_rows)
+    ordered_weights = tuple(float(weights[isin]) for isin, _, _ in ordered)
+    violations = _constraint_violations(weights, constraints)
+    outcome = (
+        solve_minimum_cvar(
+            returns_matrix,
+            confidence_level=confidence_level,
+            min_weight=constraints.min_weight,
+            max_weight=constraints.max_weight,
+        )
+        if len(returns_matrix) >= 2
+        else None
+    )
+    solver_matches_weights = outcome is not None and all(
+        abs(given - solved) < 1e-6
+        for given, solved in zip(ordered_weights, outcome.weights, strict=True)
+    )
+    if solver_matches_weights and outcome is not None:
+        var, cvar, iteration_count, converged = (
+            outcome.var,
+            outcome.cvar,
+            outcome.iteration_count,
+            outcome.converged,
+        )
+    else:
+        losses = [
+            -sum(value * weight for value, weight in zip(scenario, ordered_weights, strict=True))
+            for scenario in returns_matrix
+        ]
+        var, cvar, _tail_count = historical_var_and_cvar(losses, confidence_level)
+        iteration_count, converged = 0, False
+    if not solver_matches_weights:
+        solver_status = "unverified"
+    elif not converged:
+        solver_status = "solver_not_converged"
+    elif violations:
+        solver_status = "constraint_violation"
+    else:
+        solver_status = "feasible"
+    production_eligible = solver_matches_weights and converged and not violations
+    return {
+        "optimizer_type": PRODUCTION_OPTIMIZER_TYPE,
+        "optimizer_status": solver_status,
+        "requested_method": MINIMUM_CVAR_OBJECTIVE,
+        "actual_method": MINIMUM_CVAR_OBJECTIVE,
+        "solver_name": CVAR_SOLVER_NAME,
+        "solver_version": CVAR_SOLVER_VERSION,
+        "solver_status": solver_status,
+        "convergence_status": "converged" if converged else "not_converged",
+        "objective_value": cvar,
+        "var": var,
+        "cvar": cvar,
+        "confidence_level": confidence_level,
+        "constraint_violations": list(violations),
+        "input_listing_count": len(ordered),
+        "iteration_count": iteration_count,
+        "fallback_used": False,
+        "fallback_reason": "",
+        "production_eligible": production_eligible,
+    }
+
+
+def write_minimum_cvar_portfolio(
+    paths: LakePaths,
+    *,
+    evaluation_id: str,
+    portfolio_id: str,
+    constraints: PortfolioConstraints,
+    confidence_level: float = DEFAULT_CVAR_CONFIDENCE_LEVEL,
+) -> list[JsonRow]:
+    matrix_rows = read_rows(paths.gold_return_matrix(evaluation_id))
+    listings = _listing_rows(matrix_rows)
+    weights = minimum_cvar_weights(
+        listings, matrix_rows, constraints, confidence_level=confidence_level
+    )
+    weight_rows = build_target_weight_rows(
+        listings,
+        weights,
+        evaluation_id=evaluation_id,
+        objective=MINIMUM_CVAR_OBJECTIVE,
+        portfolio_id=portfolio_id,
+        constraints=constraints,
+        diagnostics=build_minimum_cvar_diagnostics(
+            listings,
+            matrix_rows,
+            weights,
+            constraints=constraints,
+            confidence_level=confidence_level,
+        ),
+    )
+    _replace_portfolio_rows(
+        paths.gold_optimized_weights(MINIMUM_CVAR_OBJECTIVE, evaluation_id),
         portfolio_id,
         weight_rows,
     )
