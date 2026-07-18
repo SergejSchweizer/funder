@@ -1324,6 +1324,8 @@ Determinism: Selection views are keyed by `selection_id`, source module, selecte
 
 Idempotency: Rebuilding an unchanged selection view produces byte-equivalent rows and does not rewrite canonical statistic rows.
 
+Progress note: `founder.statistics_views` (`build_selection_statistics_view`, `write_selection_statistics_view`, `read_selection_statistics`) is implemented and merged. It never recomputes a missing row: `build_selection_statistics_view` checks the existing PR73 generic Gold caches (`paths.gold_univariate_statistics(exchange, isin)` per listing; the bucketed `paths.gold_bivariate_statistics_bucket(version, bucket)` cache for every unordered listing pair, using the exact `pair_key` format `founder.bivariate_statistics` writes) and reports `missing_univariate_listings`/`missing_bivariate_pairs` deterministically rather than substituting a partial or fabricated result. `write_selection_statistics_view` persists the view to `paths.selection_statistics_view(source_module, selection_id)` (idempotent: an unchanged selection produces a byte-equivalent view). `read_selection_statistics` loads a selection's cached univariate/bivariate rows without recomputing, raising `ValueError` naming exactly what is missing when the cache is incomplete. A CLI summary command is not yet wired (a documented follow-up); the library API is the complete, tested surface for this PR.
+
 ### PR75. Multivariate Selection Cache Consumption
 
 Branch: `feat/multivariate-selection-cache-consumption`.

@@ -64,6 +64,9 @@ class LakePaths:
     def current_univariate_filter_selection(self) -> Path:
         return self.silver / "univariate_filter" / "current_selection.json"
 
+    def selection_statistics_view(self, source_module: str, selection_id: str) -> Path:
+        return self.silver / source_module / f"selection_id={selection_id}" / "statistics_view.json"
+
     def canonical_universe(self, search_run_id: str) -> Path:
         return self.silver_search_run(search_run_id) / "canonical_universe.parquet"
 
