@@ -1144,6 +1144,8 @@ Determinism: Split ids, scorecard rows, rankings, and model-comparison ids depen
 
 Idempotency: Re-running unchanged model comparison reuses completed split artifacts and produces the same scorecard, rank order, and availability reasons.
 
+Progress note: `founder.scorecard` (`ScorecardCandidate`, `build_model_comparison_scorecard`) is implemented and merged, reusing the existing `founder.evaluation.build_walk_forward_backtest` engine (which already covers rolling/expanding windows, information cutoffs, insufficient-window rejection, and cost-adjusted turnover) rather than re-implementing it. It runs multiple candidate objectives on identical pinned windows/rebalance policy/costs and reports one deterministically ranked scorecard row per candidate: median and adverse-quantile out-of-sample return, median Sharpe/Sortino, historical CVaR, whole-period max drawdown and recovery duration, concentration, weight stability (weight variance across splits), and a deterministic `model_comparison_id`. Ranking uses median out-of-sample Sharpe across completed splits (never a single split's or in-sample return) with a candidate-id tie-break; a candidate whose request is infeasible is reported `status="blocked"` rather than crashing the comparison. Income quality always reports `unavailable` pending PR62E. Monthly/quarterly re-estimation cadence beyond the existing rolling/expanding window modes is not separately modeled and remains a documented follow-up gap.
+
 ### PR65. Stress, Bootstrap, And Sensitivity Analysis
 
 Branch: `feat/stress-bootstrap-sensitivity`.
