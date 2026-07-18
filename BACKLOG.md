@@ -942,11 +942,13 @@ Idempotency: Recomputing unchanged risk models resolves to the same covariance, 
 
 Branch: `feat/optimizer-solver-boundary`.
 
-Git status: not started. PR: TBD.
+Git status: addressed (no dedicated PR under this branch name). See note below.
 
 Priority: P0 optimizer foundation.
 
 Depends on: PR58.
+
+Status note: The stop-the-line "Mandatory Amendments To PR59" in `docs/backlog/00-critical-correctness-priority-queue.md` were implemented and merged first, ahead of this canonical entry, via `fix/solver-boundary-no-silent-equal-weight-fallback` (https://github.com/SergejSchweizer/founder/pull/99): `optimize_portfolio` gained an explicit `mode` (`production`/`baseline`), `production` mode rejects `candidate_limit_exceeded` instead of silently substituting Equal Weight, and diagnostics record `requested_method`/`actual_method`/`solver_name`/`solver_version`/`solver_status`/`convergence_status`/`constraint_residuals`/`bound_activity`/`iteration_count`/`numeric_tolerances`/`risk_model_id`/`fallback_used`/`fallback_reason`/`production_eligible`. PR60 (`feat/production-risk-optimizers`, https://github.com/SergejSchweizer/founder/pull/101) then gave `minimum_variance` and `risk_parity`/`equal_risk_contribution` a real solver-backed production path (`founder.portfolio_parts.solvers`, projected gradient descent), removing the grid-search fallback entirely for those two objectives in production mode. Deliberate deviation from this entry's literal scope: no numerical optimization dependency (e.g. scipy) was added -- the repository intentionally has zero numerical runtime dependencies (pyarrow only; see `founder.risk_model`'s hand-implemented Jacobi eigenvalue solver), so the solver boundary is a hand-implemented pure-Python projected gradient descent instead. `maximum_sharpe`, `target_return_minimum_variance`, and `maximum_diversification` remain grid-only comparison methods in production mode (consistent with PR61's "keep as comparison methods unless production criteria are met").
 
 Scope: Add a numerical optimization dependency and a stable solver boundary for constrained convex portfolio problems. Separate deterministic baseline optimizers from production solver-backed optimizers, expose convergence status, objective value, constraint residuals, bound activity, iteration count, solver settings, and infeasibility reasons. Remove large-universe grid-search fallback behavior from production-labeled paths.
 
