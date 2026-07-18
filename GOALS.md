@@ -785,6 +785,10 @@ Plotly is the initial unified charting library. Responsiveness requires both flu
 
 ### Minimal Docker Compose direction
 
+The Web UI and API should be developed against the local Docker Compose topology from the start. Direct local
+commands may remain supported for fast debugging, but every UI-facing PR must keep `docker compose up web api`
+as the canonical local integration path.
+
 ```yaml
 services:
   web:

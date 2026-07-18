@@ -1401,25 +1401,43 @@ Determinism: Project ids, run ids, and artifact refs derive from normalized port
 
 Idempotency: Replaying the same project import or analysis registration reuses existing catalog rows or writes the same logical state without duplicate positions, duplicate run records, or rewritten analytical artifacts.
 
-### PR78. FastAPI BYOK Analysis Service Baseline
+### PR78. Local Docker Compose BYOK Development Baseline
 
-Branch: `feat/hosted-api-byok-baseline`.
+Branch: `chore/local-docker-compose-byok-dev`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 local development foundation.
+
+Depends on: PR77.
+
+Scope: Add the local Docker development baseline before any UI work: root `docker-compose.yml`, compose override or documented development profile, ignored runtime `data/` volume layout, environment variable contracts for `DATABASE_URL`, `FOUNDER_DATA_DIR`, `NEXT_PUBLIC_API_URL`, and session-scoped user key handling. Add placeholder build contexts for `apps/api` and `apps/web` only when the corresponding application directories are introduced by later PRs; the compose contract must be ready for local development from the first hosted PR.
+
+Acceptance: CI or scripted tests validate the compose file, assert runtime data paths are outside Git, verify documented environment names, prove no PostgreSQL, Redis, queue, object storage, Kubernetes, or credential vault is required for the baseline, and confirm placeholder services or profiles fail with explicit "service not implemented yet" messages rather than silently starting incomplete applications.
+
+Determinism: Build inputs, exposed ports, service names, environment names, and volume paths are explicit and documented; generated image tags in tests are content or commit based.
+
+Idempotency: Re-running compose setup with unchanged source reuses the same data volume and does not reset SQLite, lake artifacts, analysis manifests, or local secrets unless an explicit clean command is invoked.
+
+### PR79. FastAPI BYOK Analysis Service In Local Compose
+
+Branch: `feat/hosted-api-byok-compose-baseline`.
 
 Git status: not started. PR: TBD.
 
 Priority: P1 hosted API foundation.
 
-Depends on: PR77.
+Depends on: PR78.
 
-Scope: Add `apps/api` with a FastAPI service exposing `/health`, `/portfolios`, `/portfolios/{portfolio_id}`, `/analyses`, `/analyses/{run_id}`, `/analyses/{run_id}/metrics`, `/analyses/{run_id}/returns`, and `/analyses/{run_id}/weights`. Execute small analyses synchronously at first, return run identifiers and status, pass user-supplied EODHD keys only through request/session scope, and store only non-secret project and artifact metadata.
+Scope: Add `apps/api` with a FastAPI service exposed through the local Docker Compose stack. Provide `/health`, `/portfolios`, `/portfolios/{portfolio_id}`, `/analyses`, `/analyses/{run_id}`, `/analyses/{run_id}/metrics`, `/analyses/{run_id}/returns`, and `/analyses/{run_id}/weights`. Execute small analyses synchronously at first, return run identifiers and status, pass user-supplied EODHD keys only through request/session scope, and store only non-secret project and artifact metadata. The API must be runnable both by direct local command and through `docker compose up api`.
 
-Acceptance: API tests cover request validation, health, portfolio CRUD, synchronous analysis run creation, status responses, artifact-backed metric responses, secret redaction, missing-key failures, invalid portfolio size, and no React-side financial calculations.
+Acceptance: API tests cover request validation, health, portfolio CRUD, synchronous analysis run creation, status responses, artifact-backed metric responses, secret redaction, missing-key failures, invalid portfolio size, direct local startup, compose startup, and no React-side financial calculations.
 
-Determinism: API run ids and response payload ordering derive from normalized request bodies, project ids, pinned input versions, and analysis settings; logs and operational timing cannot affect analytical identities.
+Determinism: API run ids and response payload ordering derive from normalized request bodies, project ids, pinned input versions, and analysis settings; logs, container ids, host ports, and operational timing cannot affect analytical identities.
 
 Idempotency: Repeating the same analysis request for unchanged project inputs and settings returns the same completed run or an explicit cache hit without duplicate artifacts or repeated provider fetches beyond declared Refresh policy.
 
-### PR79. Responsive Web UI Analysis Shell
+### PR80. Responsive Web UI Analysis Shell In Local Compose
 
 Branch: `feat/hosted-web-analysis-shell`.
 
@@ -1427,33 +1445,15 @@ Git status: not started. PR: TBD.
 
 Priority: P1 user workflow surface.
 
-Depends on: PR78.
-
-Scope: Add `apps/web` with a Next.js and React UI for `/dashboard`, `/portfolio`, `/analysis/{run_id}`, and `/settings`. Use Plotly for charting, support desktop and mobile layouts, allow session-scoped EODHD key entry, portfolio input for an initial 3 to 10 funds, analysis submission, progress/status display, warnings, target weights, risk metrics, drawdowns, income summaries, and correlation views.
-
-Acceptance: UI tests cover route rendering, mobile and desktop layouts, form validation, no key logging or persistence, API error states, loading and completed analysis states, chart-ready payload rendering, warning visibility, and accessibility labels for core controls.
-
-Determinism: UI state transitions derive from API responses and stable route params; snapshot tests use fixed fixtures and never call providers or run portfolio math in the browser.
-
-Idempotency: Reopening or refreshing a completed analysis page refetches the same run artifacts and does not create a new analysis unless the user explicitly submits a new request.
-
-### PR80. Docker Compose BYOK Deployment Baseline
-
-Branch: `chore/hosted-docker-compose-baseline`.
-
-Git status: not started. PR: TBD.
-
-Priority: P1 operable hosted baseline.
-
 Depends on: PR79.
 
-Scope: Add Dockerfiles for `apps/api` and `apps/web`, a root `docker-compose.yml`, ignored runtime `data/` volume layout, environment variable contracts for `DATABASE_URL`, `FOUNDER_DATA_DIR`, and `NEXT_PUBLIC_API_URL`, plus local deployment docs. Keep the initial topology to one Web container, one API container, and one persistent data volume.
+Scope: Add `apps/web` with a Next.js and React UI developed and run through the local Docker Compose stack. Provide routes for `/dashboard`, `/portfolio`, `/analysis/{run_id}`, and `/settings`. Use Plotly for charting, support desktop and mobile layouts, allow session-scoped EODHD key entry, portfolio input for an initial 3 to 10 funds, analysis submission, progress/status display, warnings, target weights, risk metrics, drawdowns, income summaries, and correlation views. The UI must consume the PR79 API via `NEXT_PUBLIC_API_URL` and must be runnable both by direct local command and through `docker compose up web`.
 
-Acceptance: CI or scripted tests build both containers, run `/health`, verify the Web container points at the API URL, verify runtime data is outside Git, and prove no PostgreSQL, Redis, queue, object storage, Kubernetes, or credential vault is required for the baseline.
+Acceptance: UI tests cover route rendering, mobile and desktop layouts, form validation, no key logging or persistence, API error states, loading and completed analysis states, chart-ready payload rendering, warning visibility, accessibility labels for core controls, direct local startup, compose startup, Web-to-API URL wiring, and a smoke test that `docker compose up web api` serves the UI and API health endpoint together.
 
-Determinism: Build inputs, exposed ports, environment names, and volume paths are explicit and documented; generated image tags in tests are content or commit based.
+Determinism: UI state transitions derive from API responses and stable route params; snapshot tests use fixed fixtures and never call providers or run portfolio math in the browser. Container names, local ports, API URLs, and generated client configuration are explicit and documented.
 
-Idempotency: Re-running compose setup with unchanged source reuses the same data volume and does not reset SQLite, lake artifacts, or analysis manifests unless an explicit clean command is invoked.
+Idempotency: Reopening or refreshing a completed analysis page refetches the same run artifacts and does not create a new analysis unless the user explicitly submits a new request. Restarting the local compose stack preserves existing runtime data and does not create duplicate analyses.
 
 ### PR81. Licensing, Privacy, And Provider-Data Boundary Gate
 
