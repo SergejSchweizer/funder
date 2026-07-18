@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-18
 
 ## Table Of Contents
 
@@ -112,6 +112,8 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 `founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD. `founder.evaluation_parts` provides internal package-style boundaries while preserving the public `founder.evaluation` import surface. Portfolio wealth simulation compounds each asset's simple return, while Sharpe, Sortino, and other statistical metrics continue to use log returns; asset metrics expose explicit `meets_min_history_252/504/756` and `production_eligible` fields instead of silently treating short histories as production-ready.
 
 `founder.portfolio` owns optimization constraints, target weights, and risk-contribution diagnostics. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers. `founder.portfolio_parts` provides internal package-style boundaries while preserving the public `founder.portfolio` import surface. Existing optimizers are deterministic baseline decision-support outputs and include structured diagnostics; they are not execution approval by themselves.
+
+`founder.tax`, `founder.costs`, and `founder.cashflow` own jurisdiction-neutral after-tax, after-cost economics (PR62A; see [CONTRACTS.md](CONTRACTS.md) and `docs/backlog/eu-tax-cost-architecture.md`). `founder.tax` defines immutable tax contracts (`InvestorTaxProfile`, `TaxRuleSetRef`, `TaxEvent`, `TaxCalculationResult`), a `CountryTaxAdapter` protocol, a `CountryTaxRegistry` keyed by ISO country code with every EU member state registered as an explicit `unsupported` placeholder, and a `CostBasisStrategy` protocol for jurisdiction-specific disposal accounting. `founder.costs` defines composable broker/venue/execution/FX/jurisdiction-tax/recurring cost-component contracts and a `CostProfileRegistry`. `founder.cashflow` defines the neutral `CashFlowResult` contract that a future orchestration layer will populate from tax and cost results. None of these modules hard-code a concrete country's tax rate, allowance, or broker fee; every result carries an explicit `exact`/`verified_estimate`/`user_supplied_estimate`/`unavailable`/`unsupported` status (`founder.calculation_status`) so a missing or unverified rule is never silently treated as zero. Country-specific adapters (Austria and beyond) and real cost profiles are follow-up work (PR62B onward) gated on verified, source-attributed rule data.
 
 `founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
 

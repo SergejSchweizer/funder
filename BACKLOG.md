@@ -1,6 +1,6 @@
 # Backlog
 
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-18
 
 ## Table Of Contents
 
@@ -996,23 +996,115 @@ Determinism: HRP ordering, cluster ids, CVaR scenario ids, tail sets, and weight
 
 Idempotency: Re-running unchanged HRP or CVaR requests reuses existing matrices and writes the same cluster, tail-risk, diagnostic, and target-weight artifacts.
 
-### PR62. Income And Distribution Quality Metrics
+### PR62A. Jurisdiction-Neutral Tax And Cost Contracts
 
-Branch: `feat/income-distribution-quality`.
+Branch: `feat/tax-cost-neutral-contracts`.
 
 Git status: not started. PR: TBD.
 
-Priority: P2 income specialization.
+Priority: P1/P2 for the income product; blocks PR62B onward.
 
 Depends on: PR61.
 
-Scope: Introduce `founder.income` metrics for distribution history, trailing twelve-month distribution amount, trailing yield, average and median monthly distribution, conservative lower-percentile monthly distribution, distribution variability, coefficient of variation, distribution cuts, largest cut, longest falling sequence, distribution trend, price-return versus total-return gap, NAV erosion, income per Expected Shortfall, estimated gross and net income, sustainable income, and income efficiency.
+Scope: Create `founder.tax`, `founder.costs`, and `founder.cashflow` public contracts, a `CountryTaxAdapter` protocol and `CountryTaxRegistry` keyed by ISO country code with every EU member state registered as an explicit `unsupported` placeholder, a `CostBasisStrategy` protocol, composable broker/venue/execution/FX/jurisdiction-tax/recurring cost-component contracts and a `CostProfileRegistry`, a neutral `CashFlowResult` contract, and the shared `exact`/`verified_estimate`/`user_supplied_estimate`/`unavailable`/`unsupported` calculation-status vocabulary. No concrete tax rate, allowance, threshold, or broker fee may be hard-coded in core modules; see `docs/backlog/eu-tax-cost-architecture.md`.
 
-Acceptance: Tests cover monthly, quarterly, annual, irregular, missing, cut, and resumed distributions; ex-date/payment-date fallback; price erosion with positive total return; genuine NAV versus market-close behavior; tax and fee assumptions; insufficient income history; and warnings for unsupported high distribution rates.
+Acceptance: Tests cover contract field validation, the EU-27 country registry resolving every known code as unsupported by default, registering and resolving a stub adapter, rejecting registration for an unknown country code, the cost-profile registry's kind validation and unsupported-by-default resolution, a cost-basis strategy implementation satisfying the protocol end to end, and the cash-flow result's reinvested/withdrawn reconciliation and status validation.
 
-Determinism: Income artifacts key on listing id, dividend/NAV/quote input versions, tax and fee policy, date window, percentile policy, and algorithm version.
+Determinism: Contracts carry explicit rule-set/profile references, validity windows, and calculation statuses so no result depends on wall-clock time or unpinned defaults.
 
-Idempotency: Re-running income metrics with unchanged inputs reuses immutable raw and derived artifacts and never changes Selection predicates or Refresh data.
+Idempotency: These are contracts and registries only; there is no persisted lake artifact to reconcile in this PR.
+
+### PR62B. Austria Tax And Broker Reference Adapter
+
+Branch: `feat/tax-austria-adapter`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1/P2 for the income product.
+
+Depends on: PR62A.
+
+Scope: Implement Austria as the first verified `CountryTaxAdapter`, covering private-investor capital-income events, fund-tax facts (OeKB-derived where available), tax-year state, supported loss-offset behavior, Austrian cost-basis behavior, and an initial Flatex Austria cost profile. All concrete rates, thresholds, and fee schedules must be sourced, dated, versioned, and reviewed (`TaxRuleSetRef.source_refs`/`reviewed_at`) rather than invented; unsourced figures must resolve to `unavailable`/`unsupported`, never a plausible estimate.
+
+Acceptance: Tests cover Austria-specific event classification, distribution/deemed-income taxation, loss-offset and tax-year-close behavior, an Austria-versus-unsupported-country comparison producing different results from the same market events, and a Flatex Austria cost-profile estimate.
+
+Determinism: Austria rule-set and cost-profile references are versioned and effective-dated; historical simulations resolve the version valid at the simulated event date.
+
+Idempotency: Re-running unchanged Austria tax/cost calculations reuses the same rule-set/profile references and produces the same results.
+
+### PR62C. Historical Rule Resolution And Tax-Year Engine
+
+Branch: `feat/tax-rule-resolution-engine`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1/P2 for the income product.
+
+Depends on: PR62B.
+
+Scope: Add effective-dated rule lookup across historical rule versions, tax-year state (income/gains/losses by category, allowances used, foreign-tax credits used, carry-forward state), loss offsetting, foreign-tax-credit capping, and deterministic tax-year close. Walk-forward and rebalance simulations must resolve the rule version valid at each simulated event date, never today's rule set.
+
+Acceptance: Tests prove no future rule version is used before its `valid_from` date, a rule change produces different results across the effective date, loss-offset state does not leak between tax years, and foreign tax credits are capped per the selected country adapter.
+
+Determinism: Tax-year state transitions are a pure function of ordered tax events, the resolved rule-set version, and prior carry-forward state.
+
+Idempotency: Re-running an unchanged event sequence for a closed tax year reproduces the same tax-year-close result.
+
+### PR62D. Broker, Venue, FX, And Transaction-Cost Engine
+
+Branch: `feat/broker-venue-cost-engine`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1/P2 for the income product.
+
+Depends on: PR62A.
+
+Scope: Implement composable broker, venue, execution/slippage, FX, recurring-account, and jurisdiction-transaction-tax cost profiles registered through `CostProfileRegistry`, and compose them into a `CostBreakdown` per trade. Replace any remaining global transaction-cost-rate assumption in production paths with this engine.
+
+Acceptance: Tests cover independent broker/venue/execution/FX/recurring/transaction-tax profile composition, the same tax residence producing different costs under different brokers, the same broker producing different venue/execution costs across venues, and versioned/effective-dated profile resolution for historical trade dates.
+
+Determinism: Cost-profile references are versioned and effective-dated; historical simulations resolve the profile valid on the simulated trade date.
+
+Idempotency: Re-running an unchanged trade-cost request reuses the same profile references and produces the same `CostBreakdown`.
+
+### PR62E. Net Cash Flow And Sustainability Metrics
+
+Branch: `feat/cashflow-sustainability-metrics`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1/P2 for the income product; required before PR63 onward.
+
+Depends on: PR62C, PR62D.
+
+Scope: Populate the `founder.cashflow` orchestration layer to produce gross, after-tax, and after-cost cash flows using resolved tax and cost results; natural, synthetic, hybrid, and full-reinvestment income strategies; stable monthly net-spendable-income metrics; nominal and real capital preservation; tax drag; cost drag; and sustainable-withdrawal warnings. Gross, after-tax, and after-cost series must reconcile exactly and remain separately visible.
+
+Acceptance: Tests cover gross/after-tax/after-cost reconciliation, natural-versus-synthetic-versus-hybrid income comparison, tax-drag and cost-drag calculation, NAV erosion and real-capital-change reporting, and sustainable-withdrawal warning thresholds.
+
+Determinism: Cash-flow artifacts key on portfolio holdings, market/trade events, resolved tax-year state, cost-profile references, income policy, and algorithm version.
+
+Idempotency: Re-running unchanged cash-flow requests reuses existing tax/cost results and produces the same cash-flow and sustainability artifacts.
+
+### PR62F. EU Adapter Expansion Framework
+
+Branch: `feat/eu-adapter-expansion-framework`.
+
+Git status: not started. PR: TBD.
+
+Priority: P2/P3 EU rollout.
+
+Depends on: PR62E.
+
+Scope: Add country-adapter templates, source-reference and legal-review metadata requirements, adapter conformance tests, a country-readiness report (adapter status, supported investor/account/instrument types, fund-tax/loss-offset/cost-basis/broker-withholding status, last legal review, known limitations), and documentation for adding further EU jurisdictions without changing portfolio core code.
+
+Acceptance: Tests cover conformance-test enforcement for a new adapter template, readiness-report field completeness, and that an unsupported country never appears as supported in the readiness report.
+
+Determinism: Readiness-report rows are a pure function of registered adapters' declared metadata.
+
+Idempotency: Re-running the readiness report with unchanged adapter registrations produces the same rows.
+
+Series note: PR62A-PR62F replace the original single "PR62. Income And Distribution Quality Metrics" entry; distribution-quality metrics that do not require tax/cost integration are absorbed into PR62E's income-strategy comparison and monthly-income metrics. PR63 depends on PR62E, not on a standalone income-metrics PR.
 
 ### PR63. Portfolio Profiles, Constraints, And Ensemble Candidate
 
@@ -1022,7 +1114,7 @@ Git status: not started. PR: TBD.
 
 Priority: P2 recommendation foundation.
 
-Depends on: PR62.
+Depends on: PR62E.
 
 Scope: Add versioned Defensive, Balanced, Income, and Growth profile contracts with explicit objective sets, constraints, risk limits, income requirements, and production eligibility rules. Build the initial Balanced ensemble from True HRP, Equal Risk Contribution, and shrinkage Minimum Variance using per-asset median weights, normalization, and final constraint projection. Add Income-profile constraints for sustainable net income, NAV erosion, CVaR, concentration, and turnover.
 
