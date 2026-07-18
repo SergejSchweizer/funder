@@ -89,8 +89,15 @@ def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
         encoding="utf-8"
     )
 
-    assert "uv run founder-quality pr" in pr_workflow
-    assert "uv run founder-quality merge" in merge_gate_workflow
+    assert "pr-test-shard-${{ matrix.shard }}" in pr_workflow
+    assert "merge-test-shard-${{ matrix.shard }}" in merge_gate_workflow
+    assert "scripts/pytest_shard.py" in pr_workflow
+    assert "scripts/pytest_shard.py" in merge_gate_workflow
+    assert "uv run founder-quality --commits-only" in pr_workflow
+    assert "uv run founder-quality --commits-only" in merge_gate_workflow
+    assert "uv run python -m founder.schema_validation" in merge_gate_workflow
+    assert "uv run coverage combine coverage-shards" in merge_gate_workflow
+    assert "uv run coverage report --fail-under=95" in merge_gate_workflow
     assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in merge_gate_workflow
     assert "workflows: [merge-gate]" in merge_workflow
     assert "is still a draft; skipping auto-merge" in merge_workflow

@@ -36,6 +36,7 @@ MERGE_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "."),
     ("ruff", "format", "--check", "."),
     ("python", "-m", "founder.architecture_checks"),
+    ("python", "-m", "founder.schema_validation"),
     ("pyright",),
     MAIN_COVERAGE_COMMAND,
     ("git", "diff", "--quiet"),
@@ -172,6 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--squash-subject",
         help="Validate the PR title that will become the squash-merge commit subject.",
     )
+    parser.add_argument(
+        "--commits-only",
+        action="store_true",
+        help="Validate only branch commit subjects for CI workflows that run checks separately.",
+    )
     return parser
 
 
@@ -181,6 +187,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return validate_commit_message_file(args.commit_msg_file)
     if args.squash_subject:
         return validate_squash_subject(args.squash_subject)
+    if args.commits_only:
+        return validate_conventional_commits()
     if not args.layer:
         build_parser().error(
             "layer is required unless --commit-msg-file or --squash-subject is provided"

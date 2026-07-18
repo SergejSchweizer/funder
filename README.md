@@ -525,6 +525,10 @@ YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
 
 Founder uses two quality gates. [AGENTS.md](AGENTS.md) is the source of truth for branch protection and merge policy; this section only lists the commands a contributor should run locally.
 
+GitHub Actions runs the Pytest portion of both gates as four deterministic file shards. The final
+`pr-quality` and `merge-gate` jobs aggregate the shard results so branch protection can keep stable
+required check names.
+
 ### PR Gate
 
 Run this before every commit, push, or pull request update:
@@ -556,7 +560,9 @@ The protected merge gate requires all of the following checks to pass before mer
 - At least 95% test coverage.
 - Dataset schema-registry validation.
 
-It also validates Conventional Commit subjects and requires a clean tracked working tree. The coverage command is:
+It also validates Conventional Commit subjects and requires a clean tracked working tree. In GitHub
+Actions, coverage is collected per test shard, combined, and checked against the same threshold. The
+equivalent local coverage command is:
 
 ```text
 pytest --cov=founder --cov-report=term-missing --cov-fail-under=95

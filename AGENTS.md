@@ -27,8 +27,8 @@ This file is the workflow reference for coding agents and maintainers. It should
 - Replace `PR: TBD` with the pull request URL once the PR exists.
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
 - A PR that has run and passed `merge-gate` counts as approved for merge.
-- `pr-quality` is the fast branch and PR feedback gate. It runs `uv run founder-quality pr`, which performs Ruff lint and format checks, Pyright strict type checking, and the normal Pytest suite without coverage.
-- `merge-gate` is the required protected-main merge gate. It runs `uv run founder-quality merge` and must pass Ruff lint and format checks, architecture/import-boundary checks, Pyright strict type checking, Pytest with at least 95% coverage, and dataset schema-registry validation.
+- `pr-quality` is the fast branch and PR feedback gate. In GitHub Actions it aggregates independent Ruff, Pyright, Conventional Commit, and four deterministic Pytest shard jobs. Locally, `uv run founder-quality pr` runs the equivalent checks without sharding.
+- `merge-gate` is the required protected-main merge gate. In GitHub Actions it aggregates independent Ruff, architecture/import-boundary, Pyright, Conventional Commit, and four deterministic Pytest coverage shard jobs. Locally, `uv run founder-quality merge` runs the equivalent checks without sharding and must pass Ruff lint and format checks, architecture/import-boundary checks, Pyright strict type checking, Pytest with at least 95% coverage, and dataset schema-registry validation.
 - PR titles must follow `type(optional-scope): subject` because the title becomes the squash-merge commit subject.
 - Squash merges must set the final commit subject to the validated PR title; changing the title requires `merge-gate` to pass again.
 - GitHub branch protection should require `merge-gate` and should not require a separate approving review when `merge-gate` has passed.

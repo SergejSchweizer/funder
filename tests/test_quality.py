@@ -35,9 +35,10 @@ def test_merge_gate_extends_pr_gate_with_protected_checks() -> None:
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
         ("python", "-m", "founder.architecture_checks"),
-        ("pyright",),
+        ("python", "-m", "founder.schema_validation"),
     )
-    assert commands[4] == (
+    assert commands[4] == ("pyright",)
+    assert commands[5] == (
         "pytest",
         "--cov=founder",
         "--cov-report=term-missing",
@@ -145,6 +146,12 @@ def test_main_validates_commit_message_file(tmp_path: Path) -> None:
 
 def test_main_validates_squash_subject() -> None:
     assert main(["--squash-subject", "feat(cli): add command"]) == 0
+
+
+def test_main_validates_only_branch_commits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("founder.quality.validate_conventional_commits", lambda: 0)
+
+    assert main(["--commits-only"]) == 0
 
 
 def test_main_requires_layer_without_commit_message_file() -> None:
