@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from founder.calculation_status import UNAVAILABLE
 from founder.contract_versioning import stable_contract_id
 from founder.evaluation import (
     build_asset_metrics,
@@ -54,6 +55,7 @@ from founder.stress import (
     historical_stress_scenario,
 )
 from founder.table_io import JsonRow, read_rows, write_rows
+from founder.trading import prepare_flatex_orders, write_flatex_orders
 
 DEFAULT_OBJECTIVES: tuple[str, ...] = (
     "equal_weight",
@@ -570,12 +572,176 @@ def _quote_quality_by_listing(
     return {key: evaluate_quote_quality(rows) for key, rows in by_listing.items()}
 
 
+@dataclass(frozen=True)
+class TradingHandoffConfig:
+    """Configuration for one PR72 trading/monitoring handoff.
+
+    `approved_comparison_slot` (e.g. `"best_ensemble"`) must be explicitly
+    supplied and resolve to an included candidate; by default (`None`) the
+    handoff rejects trade preparation entirely -- this module never decides
+    which candidate to trade on behalf of the user.
+    """
+
+    recommendation_config: MultivariateRecommendationConfig = MultivariateRecommendationConfig()
+    approved_comparison_slot: str | None = None
+    current_weights: Mapping[str, float] | None = None
+    current_prices: Mapping[str, float] | None = None
+    portfolio_value: float = 0.0
+    cash_buffer: float = 0.0
+    drift_threshold: float = 0.05
+    monitoring_policy_id: str = "default-monitoring-v1"
+    report_template_version: int = 1
+
+
+def write_multivariate_trading_handoff(
+    paths: LakePaths,
+    selected_rows: Sequence[Mapping[str, Any]],
+    *,
+    config: TradingHandoffConfig | None = None,
+) -> JsonRow:
+    """Produce a trading/monitoring handoff for an approved recommendation slot.
+
+    Rejects (raises `ValueError`) by default when no `approved_comparison_slot`
+    is supplied or it has no included candidate -- this module never decides
+    broker execution or infers approval. When approved, it includes
+    current-versus-target weight differences (when `current_weights` is
+    supplied), links a deterministic Flatex export path (when
+    `current_prices` and a positive `portfolio_value` are supplied), and
+    reports monitoring-ready drift/risk/stale-data statuses. Distribution-cut
+    and NAV-erosion statuses always report `unavailable`: they require the
+    after-tax cash-flow stack (PR62E), which remains open, and are never
+    computed from an invented figure. Never alters current positions or
+    decides broker execution.
+    """
+    resolved_config = config or TradingHandoffConfig()
+    recommendation_config = resolved_config.recommendation_config
+    recommendation = write_multivariate_recommendation(
+        paths, selected_rows, config=recommendation_config
+    )
+
+    approved_candidate_id = (
+        recommendation["comparisons"].get(resolved_config.approved_comparison_slot)
+        if resolved_config.approved_comparison_slot is not None
+        else None
+    )
+    if not approved_candidate_id:
+        raise ValueError(
+            "recommendation_not_approved: no approved_comparison_slot was supplied, or "
+            f"{resolved_config.approved_comparison_slot!r} has no included candidate; "
+            "trade preparation requires an explicit, approved recommendation slot"
+        )
+    approved = next(
+        candidate
+        for candidate in recommendation["candidates"]
+        if candidate["candidate_id"] == approved_candidate_id
+    )
+    target_weights: dict[str, float] = dict(approved["weights"])
+
+    transition_rows: list[JsonRow] | None = None
+    if resolved_config.current_weights is not None:
+        isins = set(resolved_config.current_weights) | set(target_weights)
+        transition_rows = [
+            {
+                "isin": isin,
+                "current_weight": resolved_config.current_weights.get(isin, 0.0),
+                "target_weight": target_weights.get(isin, 0.0),
+                "delta": target_weights.get(isin, 0.0)
+                - resolved_config.current_weights.get(isin, 0.0),
+            }
+            for isin in sorted(isins)
+        ]
+
+    quotes = _filter_quotes_to_selection(read_silver_quotes(paths), selected_rows)
+    quality_by_listing = _quote_quality_by_listing(quotes)
+    stale_data_detected = any(
+        quality["stale_price_detected"] for quality in quality_by_listing.values()
+    )
+
+    flatex_export_path = None
+    flatex_order_count = 0
+    if resolved_config.current_prices is not None and resolved_config.portfolio_value > 0:
+        currency_by_isin = {str(row["isin"]): str(row["currency"]) for row in quotes}
+        listing_meta = {str(row["isin"]): row for row in selected_rows}
+        targets = [
+            {
+                "isin": isin,
+                "code": listing_meta[isin]["code"],
+                "exchange": listing_meta[isin]["exchange"],
+                "currency": currency_by_isin.get(isin, ""),
+                "weight": weight,
+                "price": resolved_config.current_prices[isin],
+            }
+            for isin, weight in target_weights.items()
+            if isin in resolved_config.current_prices and isin in listing_meta
+        ]
+        orders = prepare_flatex_orders(
+            targets,
+            portfolio_value=resolved_config.portfolio_value,
+            cash_buffer=resolved_config.cash_buffer,
+        )
+        flatex_export_path = paths.trading_flatex_export(
+            recommendation["evaluation_id"], approved_candidate_id
+        )
+        write_flatex_orders(flatex_export_path, orders)
+        flatex_order_count = len(orders)
+
+    approved_profile = _PROFILE_BUILDERS[approved["profile_name"]](
+        max_weight=recommendation_config.production_config.constraints.max_weight
+    )
+    risk_limit_max_cvar = approved_profile.risk_limits.max_cvar
+    sensitivity_worst_cvar = approved.get("sensitivity_worst_cvar")
+    risk_limit_breach = (
+        risk_limit_max_cvar is not None
+        and sensitivity_worst_cvar is not None
+        and sensitivity_worst_cvar > risk_limit_max_cvar
+    )
+    drift_detected = transition_rows is not None and any(
+        abs(row["delta"]) > resolved_config.drift_threshold for row in transition_rows
+    )
+
+    handoff_id = stable_contract_id(
+        "multivariate_trading_handoff",
+        {
+            "recommendation_id": recommendation["recommendation_id"],
+            "approved_candidate_id": approved_candidate_id,
+            "current_position_snapshot": dict(
+                sorted((resolved_config.current_weights or {}).items())
+            ),
+            "transition_plan": transition_rows or [],
+            "monitoring_policy_id": resolved_config.monitoring_policy_id,
+            "report_template_version": resolved_config.report_template_version,
+        },
+    )
+
+    return {
+        "handoff_id": handoff_id,
+        "recommendation_id": recommendation["recommendation_id"],
+        "approved_comparison_slot": resolved_config.approved_comparison_slot,
+        "approved_candidate_id": approved_candidate_id,
+        "target_weights": target_weights,
+        "transition_rows": transition_rows,
+        "flatex_export_path": str(flatex_export_path) if flatex_export_path else None,
+        "flatex_order_count": flatex_order_count,
+        "monitoring_statuses": {
+            "drift_status": "drift_detected" if drift_detected else "within_tolerance",
+            "risk_status": "risk_limit_breach" if risk_limit_breach else "within_limits",
+            "stale_data_status": "stale_data_detected" if stale_data_detected else "ok",
+            "distribution_cut_status": UNAVAILABLE,
+            "nav_erosion_status": UNAVAILABLE,
+        },
+        "monitoring_policy_id": resolved_config.monitoring_policy_id,
+        "report_template_version": resolved_config.report_template_version,
+    }
+
+
 __all__ = [
     "DEFAULT_OBJECTIVES",
     "MultivariateRecommendationConfig",
     "MultivariateStatisticsConfig",
     "ProductionMultivariateConfig",
+    "TradingHandoffConfig",
     "write_multivariate_recommendation",
     "write_multivariate_statistics",
+    "write_multivariate_trading_handoff",
     "write_production_multivariate_statistics",
 ]

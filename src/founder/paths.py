@@ -205,5 +205,8 @@ class LakePaths:
     def gold_diversification_metrics(self, evaluation_id: str) -> Path:
         return self.gold / "metrics" / "maximum_diversification" / f"{evaluation_id}.parquet"
 
+    def trading_flatex_export(self, evaluation_id: str, portfolio_id: str) -> Path:
+        return self.root / "trading" / "flatex" / f"{evaluation_id}-{portfolio_id}.csv"
+
     def current_universe(self) -> Path:
         return self.silver / "universe" / "current_universe.json"
