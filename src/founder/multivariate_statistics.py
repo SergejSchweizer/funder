@@ -39,10 +39,21 @@ from founder.profiles import (
     income_profile,
     write_profile_candidate,
 )
+from founder.recommendation import (
+    CandidateReport,
+    build_candidate_report,
+    build_recommendation_report,
+)
 from founder.return_quality import evaluate_quote_quality
 from founder.risk_model import estimate_risk_model
+from founder.scorecard import ScorecardCandidate, build_model_comparison_scorecard
 from founder.silver import read_silver_quotes
-from founder.table_io import JsonRow, write_rows
+from founder.stress import (
+    block_bootstrap_scenarios,
+    build_sensitivity_summary,
+    historical_stress_scenario,
+)
+from founder.table_io import JsonRow, read_rows, write_rows
 
 DEFAULT_OBJECTIVES: tuple[str, ...] = (
     "equal_weight",
@@ -438,6 +449,117 @@ def write_production_multivariate_statistics(
     }
 
 
+# Profiles whose single underlying objective is compatible with
+# founder.scorecard's walk-forward comparison (optimize_portfolio's
+# GRID_OBJECTIVES/solver-backed objectives). Defensive (shrinkage Minimum
+# Variance), Income (Minimum CVaR), and Balanced (a multi-objective
+# ensemble) are not single walk-forward-compatible objectives today; their
+# scorecard traceability is reported as unavailable (None) rather than
+# fabricated or silently skipped.
+_SCORECARD_COMPATIBLE_OBJECTIVES: dict[str, str] = {"growth": "equal_risk_contribution"}
+
+
+@dataclass(frozen=True)
+class MultivariateRecommendationConfig:
+    """Configuration for one PR71 recommendation run over a production adapter result."""
+
+    production_config: ProductionMultivariateConfig = ProductionMultivariateConfig()
+    scorecard_train_window: int = 20
+    scorecard_test_window: int = 10
+    scorecard_mode: str = "rolling"
+    scorecard_profile: str = "development"
+    stress_window_length: int = 10
+    stress_block_length: int = 5
+    stress_scenario_count: int = 5
+    stress_seed: int = 1
+    current_weights: Mapping[str, float] | None = None
+
+
+def write_multivariate_recommendation(
+    paths: LakePaths,
+    selected_rows: Sequence[Mapping[str, Any]],
+    *,
+    config: MultivariateRecommendationConfig | None = None,
+) -> JsonRow:
+    """Produce an explainable recommendation report for the selected membership.
+
+    Runs the PR70 production adapter first (which enforces every production
+    gate and writes profile weight rows), then adds PR64 walk-forward
+    scorecard traceability (where a profile's objective is scorecard
+    compatible) and PR65 stress/sensitivity summaries for every profile
+    candidate, and finally compares candidates via PR66's
+    `founder.recommendation` into one deterministic report.
+
+    Income quality, sustainable income, NAV erosion, and income efficiency
+    always report `unavailable`: they require the after-tax cash-flow stack
+    (PR62E), which remains open, and are never computed from an invented
+    figure.
+    """
+    resolved_config = config or MultivariateRecommendationConfig()
+    production_config = resolved_config.production_config
+    write_production_multivariate_statistics(paths, selected_rows, config=production_config)
+
+    matrix = read_rows(paths.gold_return_matrix(production_config.evaluation_id))
+    listings = listing_rows(matrix)
+    covariance_rows = read_covariances(paths, listings)
+
+    candidate_reports: list[CandidateReport] = []
+    for profile_name in production_config.profile_names:
+        max_weight = production_config.constraints.max_weight
+        profile = _PROFILE_BUILDERS[profile_name](max_weight=max_weight)
+        candidate = evaluate_profile_candidate(profile, listings, covariance_rows, matrix)
+
+        scorecard_row: JsonRow | None = None
+        objective = _SCORECARD_COMPATIBLE_OBJECTIVES.get(profile_name)
+        if objective is not None:
+            scorecard_rows = build_model_comparison_scorecard(
+                matrix,
+                run_id=f"{production_config.evaluation_id}-scorecard",
+                evaluation_id=production_config.evaluation_id,
+                candidates=[ScorecardCandidate(profile_name, objective, profile.constraints)],
+                train_window=resolved_config.scorecard_train_window,
+                test_window=resolved_config.scorecard_test_window,
+                mode=resolved_config.scorecard_mode,
+                profile=resolved_config.scorecard_profile,
+            )
+            scorecard_row = scorecard_rows[0]
+
+        sensitivity_summary: JsonRow | None = None
+        if candidate["weights"]:
+            scenario_results = [
+                historical_stress_scenario(
+                    matrix,
+                    candidate["weights"],
+                    candidate_id=profile_name,
+                    window_length=resolved_config.stress_window_length,
+                ),
+                *block_bootstrap_scenarios(
+                    matrix,
+                    candidate["weights"],
+                    candidate_id=profile_name,
+                    block_length=resolved_config.stress_block_length,
+                    scenario_count=resolved_config.stress_scenario_count,
+                    seed=resolved_config.stress_seed,
+                ),
+            ]
+            sensitivity_summary = build_sensitivity_summary(scenario_results)
+
+        candidate_reports.append(
+            build_candidate_report(
+                candidate,
+                scorecard_row=scorecard_row,
+                sensitivity_summary=sensitivity_summary,
+                current_weights=resolved_config.current_weights,
+            )
+        )
+
+    return build_recommendation_report(
+        evaluation_id=production_config.evaluation_id,
+        candidate_reports=candidate_reports,
+        current_weights=resolved_config.current_weights,
+    )
+
+
 def _quote_quality_by_listing(
     quotes: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[str, str, str], JsonRow]:
@@ -450,8 +572,10 @@ def _quote_quality_by_listing(
 
 __all__ = [
     "DEFAULT_OBJECTIVES",
+    "MultivariateRecommendationConfig",
     "MultivariateStatisticsConfig",
     "ProductionMultivariateConfig",
+    "write_multivariate_recommendation",
     "write_multivariate_statistics",
     "write_production_multivariate_statistics",
 ]

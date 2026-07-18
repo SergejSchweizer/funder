@@ -1254,6 +1254,8 @@ Determinism: Recommendation summaries derive only from pinned income artifacts, 
 
 Idempotency: Re-running unchanged income/recommendation multivariate analysis produces the same report artifacts and does not alter optimizer, backtest, Selection, Refresh, or Update artifacts.
 
+Progress note: `founder.multivariate_statistics.write_multivariate_recommendation`/`MultivariateRecommendationConfig` are implemented and merged. It runs the PR70 production adapter first (enforcing every production gate and writing profile weight rows), then adds PR64 walk-forward scorecard traceability where a profile's underlying objective is scorecard-compatible (currently only Growth, via `equal_risk_contribution`; Defensive's shrinkage Minimum Variance, Income's Minimum CVaR, and Balanced's multi-objective ensemble are not single walk-forward-compatible objectives today, so their `scorecard_rank` reports `None` rather than a fabricated comparison) and PR65 stress/sensitivity summaries for every profile candidate, then compares all candidates via PR66's `founder.recommendation` into one deterministic report. Income quality, sustainable income, NAV erosion, and income efficiency always report `unavailable` pending PR62E, never an invented figure.
+
 ### PR72. Multivariate Trading And Monitoring Handoff
 
 Branch: `feat/multivariate-trading-monitoring-handoff`.
