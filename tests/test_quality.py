@@ -24,7 +24,7 @@ def test_pr_gate_has_simple_checks() -> None:
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
         ("pyright",),
-        ("pytest", "-q"),
+        ("pytest", "-q", "-n", "auto"),
     )
 
 
@@ -40,6 +40,8 @@ def test_merge_gate_extends_pr_gate_with_protected_checks() -> None:
     assert commands[4] == ("pyright",)
     assert commands[5] == (
         "pytest",
+        "-n",
+        "auto",
         "--cov=founder",
         "--cov-report=term-missing",
         "--cov-fail-under=95",

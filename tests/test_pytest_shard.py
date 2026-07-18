@@ -42,8 +42,32 @@ def test_select_shard_partitions_files_deterministically() -> None:
     ]
 
 
+def test_filter_suite_splits_unit_and_integration_files() -> None:
+    files = [
+        Path("tests/test_cli.py"),
+        Path("tests/test_http.py"),
+        Path("tests/test_risk_model.py"),
+        Path("tests/test_portfolio_solvers.py"),
+    ]
+
+    assert PYTEST_SHARD.filter_suite(files, suite="integration") == [
+        Path("tests/test_cli.py"),
+        Path("tests/test_http.py"),
+    ]
+    assert PYTEST_SHARD.filter_suite(files, suite="unit") == [
+        Path("tests/test_risk_model.py"),
+        Path("tests/test_portfolio_solvers.py"),
+    ]
+    assert PYTEST_SHARD.filter_suite(files, suite="all") == files
+
+
 def test_select_shard_rejects_invalid_bounds() -> None:
     with pytest.raises(ValueError, match="shard_count"):
         PYTEST_SHARD.select_shard([], shard_index=1, shard_count=0)
     with pytest.raises(ValueError, match="shard_index"):
         PYTEST_SHARD.select_shard([], shard_index=0, shard_count=1)
+
+
+def test_filter_suite_rejects_unknown_suite() -> None:
+    with pytest.raises(ValueError, match="unknown test suite"):
+        PYTEST_SHARD.filter_suite([], suite="slow")

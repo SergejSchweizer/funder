@@ -525,9 +525,10 @@ YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
 
 Founder uses two quality gates. [AGENTS.md](AGENTS.md) is the source of truth for branch protection and merge policy; this section only lists the commands a contributor should run locally.
 
-GitHub Actions runs the Pytest portion of both gates as four deterministic file shards. The final
-`pr-quality` and `merge-gate` jobs aggregate the shard results so branch protection can keep stable
-required check names.
+GitHub Actions runs Lint, Type, Unit, and Integration as independent parallel gates. Unit and
+Integration each run four deterministic file shards, and each shard uses `pytest-xdist` with
+`pytest -n auto`. The final `pr-quality` and `merge-gate` jobs aggregate the gate results so branch
+protection can keep stable required check names.
 
 ### PR Gate
 
@@ -561,11 +562,11 @@ The protected merge gate requires all of the following checks to pass before mer
 - Dataset schema-registry validation.
 
 It also validates Conventional Commit subjects and requires a clean tracked working tree. In GitHub
-Actions, coverage is collected per test shard, combined, and checked against the same threshold. The
-equivalent local coverage command is:
+Actions, coverage is collected per Unit and Integration test shard, combined, and checked against the
+same threshold. The equivalent local coverage command is:
 
 ```text
-pytest --cov=founder --cov-report=term-missing --cov-fail-under=95
+pytest -n auto --cov=founder --cov-report=term-missing --cov-fail-under=95
 ```
 
 `uv run founder-quality main` remains a compatibility alias for `uv run founder-quality merge`.

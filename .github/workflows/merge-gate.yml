@@ -18,8 +18,8 @@ env:
   PYTEST_SHARD_COUNT: 4
 
 jobs:
-  merge-static-quality:
-    name: merge-static-quality
+  merge-lint-quality:
+    name: merge-lint-quality
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
 
@@ -53,9 +53,6 @@ jobs:
       - name: Dataset schema registry
         run: uv run python -m founder.schema_validation
 
-      - name: Pyright
-        run: uv run pyright
-
       - name: Validate branch commit subjects
         run: uv run founder-quality --commits-only
 
@@ -70,8 +67,34 @@ jobs:
           git diff --quiet
           git diff --cached --quiet
 
-  merge-test-shards:
-    name: merge-test-shard-${{ matrix.shard }}
+  merge-type-quality:
+    name: merge-type-quality
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Pyright
+        run: uv run pyright
+
+  merge-unit-tests:
+    name: merge-unit-tests-${{ matrix.shard }}
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     strategy:
@@ -97,32 +120,85 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Pytest shard with coverage
+      - name: Unit test shard with coverage
         env:
-          COVERAGE_FILE: .coverage.${{ matrix.shard }}
+          COVERAGE_FILE: .coverage.unit.${{ matrix.shard }}
         run: >-
           uv run python scripts/pytest_shard.py
+          --suite unit
           --shard-index ${{ matrix.shard }}
           --shard-count ${PYTEST_SHARD_COUNT}
           --
+          -q
+          -n auto
           --cov=founder
           --cov-report=
           --cov-fail-under=0
-          -q
 
       - name: Upload coverage shard
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.shard }}
-          path: .coverage.${{ matrix.shard }}
+          name: coverage-unit-${{ matrix.shard }}
+          path: .coverage.unit.${{ matrix.shard }}
+          include-hidden-files: true
+
+  merge-integration-tests:
+    name: merge-integration-tests-${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Integration test shard with coverage
+        env:
+          COVERAGE_FILE: .coverage.integration.${{ matrix.shard }}
+        run: >-
+          uv run python scripts/pytest_shard.py
+          --suite integration
+          --shard-index ${{ matrix.shard }}
+          --shard-count ${PYTEST_SHARD_COUNT}
+          --
+          -q
+          -n auto
+          --cov=founder
+          --cov-report=
+          --cov-fail-under=0
+
+      - name: Upload coverage shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration-${{ matrix.shard }}
+          path: .coverage.integration.${{ matrix.shard }}
           include-hidden-files: true
 
   merge-gate:
     name: merge-gate
     runs-on: ubuntu-latest
     needs:
-      - merge-static-quality
-      - merge-test-shards
+      - merge-lint-quality
+      - merge-type-quality
+      - merge-unit-tests
+      - merge-integration-tests
     if: always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
 
     steps:
@@ -152,11 +228,13 @@ jobs:
 
       - name: Verify merge gate jobs
         env:
-          STATIC_RESULT: ${{ needs.merge-static-quality.result }}
-          TEST_RESULT: ${{ needs.merge-test-shards.result }}
+          LINT_RESULT: ${{ needs.merge-lint-quality.result }}
+          TYPE_RESULT: ${{ needs.merge-type-quality.result }}
+          UNIT_RESULT: ${{ needs.merge-unit-tests.result }}
+          INTEGRATION_RESULT: ${{ needs.merge-integration-tests.result }}
         run: |
-          if [[ "$STATIC_RESULT" != "success" || "$TEST_RESULT" != "success" ]]; then
-            echo "merge-gate failed: static=$STATIC_RESULT tests=$TEST_RESULT" >&2
+          if [[ "$LINT_RESULT" != "success" || "$TYPE_RESULT" != "success" || "$UNIT_RESULT" != "success" || "$INTEGRATION_RESULT" != "success" ]]; then
+            echo "merge-gate failed: lint=$LINT_RESULT type=$TYPE_RESULT unit=$UNIT_RESULT integration=$INTEGRATION_RESULT" >&2
             exit 1
           fi
           echo "merge-gate prerequisites passed."

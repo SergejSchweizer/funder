@@ -89,10 +89,20 @@ def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
         encoding="utf-8"
     )
 
-    assert "pr-test-shard-${{ matrix.shard }}" in pr_workflow
-    assert "merge-test-shard-${{ matrix.shard }}" in merge_gate_workflow
+    assert "pr-lint-quality" in pr_workflow
+    assert "pr-type-quality" in pr_workflow
+    assert "pr-unit-tests-${{ matrix.shard }}" in pr_workflow
+    assert "pr-integration-tests-${{ matrix.shard }}" in pr_workflow
+    assert "merge-lint-quality" in merge_gate_workflow
+    assert "merge-type-quality" in merge_gate_workflow
+    assert "merge-unit-tests-${{ matrix.shard }}" in merge_gate_workflow
+    assert "merge-integration-tests-${{ matrix.shard }}" in merge_gate_workflow
     assert "scripts/pytest_shard.py" in pr_workflow
     assert "scripts/pytest_shard.py" in merge_gate_workflow
+    assert "--suite unit" in pr_workflow
+    assert "--suite integration" in pr_workflow
+    assert "-n auto" in pr_workflow
+    assert "-n auto" in merge_gate_workflow
     assert "uv run founder-quality --commits-only" in pr_workflow
     assert "uv run founder-quality --commits-only" in merge_gate_workflow
     assert "uv run python -m founder.schema_validation" in merge_gate_workflow

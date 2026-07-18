@@ -20,11 +20,13 @@ PR_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "."),
     ("ruff", "format", "--check", "."),
     ("pyright",),
-    ("pytest", "-q"),
+    ("pytest", "-q", "-n", "auto"),
 )
 
 MAIN_COVERAGE_COMMAND: Command = (
     "pytest",
+    "-n",
+    "auto",
     "--cov=founder",
     "--cov-report=term-missing",
     "--cov-fail-under=95",

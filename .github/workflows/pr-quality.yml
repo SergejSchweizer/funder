@@ -16,8 +16,8 @@ env:
   PYTEST_SHARD_COUNT: 4
 
 jobs:
-  pr-static-quality:
-    name: pr-static-quality
+  pr-lint-quality:
+    name: pr-lint-quality
     runs-on: ubuntu-latest
 
     steps:
@@ -44,9 +44,6 @@ jobs:
       - name: Ruff format
         run: uv run ruff format --check .
 
-      - name: Pyright
-        run: uv run pyright
-
       - name: Validate branch commit subjects
         run: uv run founder-quality --commits-only
 
@@ -56,8 +53,33 @@ jobs:
           SQUASH_SUBJECT: ${{ github.event.pull_request.title }}
         run: uv run founder-quality --squash-subject "$SQUASH_SUBJECT"
 
-  pr-test-shards:
-    name: pr-test-shard-${{ matrix.shard }}
+  pr-type-quality:
+    name: pr-type-quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Pyright
+        run: uv run pyright
+
+  pr-unit-tests:
+    name: pr-unit-tests-${{ matrix.shard }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -82,30 +104,72 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Pytest shard
+      - name: Unit test shard
         run: >-
           uv run python scripts/pytest_shard.py
+          --suite unit
           --shard-index ${{ matrix.shard }}
           --shard-count ${PYTEST_SHARD_COUNT}
           --
           -q
+          -n auto
+
+  pr-integration-tests:
+    name: pr-integration-tests-${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Integration test shard
+        run: >-
+          uv run python scripts/pytest_shard.py
+          --suite integration
+          --shard-index ${{ matrix.shard }}
+          --shard-count ${PYTEST_SHARD_COUNT}
+          --
+          -q
+          -n auto
 
   pr-quality:
     name: pr-quality
     runs-on: ubuntu-latest
     needs:
-      - pr-static-quality
-      - pr-test-shards
+      - pr-lint-quality
+      - pr-type-quality
+      - pr-unit-tests
+      - pr-integration-tests
     if: always()
 
     steps:
       - name: Verify PR quality gates
         env:
-          STATIC_RESULT: ${{ needs.pr-static-quality.result }}
-          TEST_RESULT: ${{ needs.pr-test-shards.result }}
+          LINT_RESULT: ${{ needs.pr-lint-quality.result }}
+          TYPE_RESULT: ${{ needs.pr-type-quality.result }}
+          UNIT_RESULT: ${{ needs.pr-unit-tests.result }}
+          INTEGRATION_RESULT: ${{ needs.pr-integration-tests.result }}
         run: |
-          if [[ "$STATIC_RESULT" != "success" || "$TEST_RESULT" != "success" ]]; then
-            echo "pr-quality failed: static=$STATIC_RESULT tests=$TEST_RESULT" >&2
+          if [[ "$LINT_RESULT" != "success" || "$TYPE_RESULT" != "success" || "$UNIT_RESULT" != "success" || "$INTEGRATION_RESULT" != "success" ]]; then
+            echo "pr-quality failed: lint=$LINT_RESULT type=$TYPE_RESULT unit=$UNIT_RESULT integration=$INTEGRATION_RESULT" >&2
             exit 1
           fi
           echo "pr-quality passed."
