@@ -1184,6 +1184,8 @@ Determinism: Recommendation ids derive from scorecard, stress results, income ar
 
 Idempotency: Re-running unchanged recommendations produces the same structured report artifacts and does not alter optimizer, backtest, Selection, Refresh, or Update artifacts.
 
+Progress note: `founder.recommendation` is implemented and merged: `build_candidate_report` explains one `founder.profiles.evaluate_profile_candidate` output (inclusion/exclusion reasons, constraint violations, concentration, turnover versus an optional current-position snapshot, disadvantages) with optional `founder.scorecard`/`founder.stress` traceability (`scorecard_rank`, `sensitivity_worst_drawdown`/`sensitivity_worst_cvar`); `build_recommendation_report` compares candidates into best-Defensive/best-Diversified/best-Income/best-Total-Return/best-Ensemble slots plus an Equal Weight baseline already embedded per candidate, with a deterministic `recommendation_id` and a fixed `NO_GUARANTEE_DISCLAIMER`; `render_recommendation_markdown` produces deterministic, HTML-escaped Markdown. `requires_user_approval` is always `True`. Income and broker-cost quality always report `unavailable` pending PR62E/PR62D, never an invented figure; this module never fabricates an excluded-instrument or data-quality-warning reason, it only propagates reasons supplied by the caller from an upstream gate. Risk contributions and per-scenario tail-risk/drawdown detail beyond the aggregated scorecard/sensitivity summaries are not separately recomputed in this report and remain a documented follow-up if a future consumer needs the full row-level detail.
+
 ### Series Completion Gate
 
 Final branch: `feat/recommendation-explanation-report`.
