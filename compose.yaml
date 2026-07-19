@@ -97,6 +97,12 @@ services:
     environment:
       NODE_ENV: development
       FOUNDER_API_BASE_URL: http://api:8000
+      FOUNDER_AUTH_MODE: ${FOUNDER_AUTH_MODE:-auto}
+      FOUNDER_GOOGLE_CLIENT_ID: ${FOUNDER_GOOGLE_CLIENT_ID:-}
+      FOUNDER_GOOGLE_REDIRECT_URI: ${FOUNDER_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/google/callback}
+      FOUNDER_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+    secrets:
+      - google_client_secret
     depends_on:
       api:
         condition: service_healthy
