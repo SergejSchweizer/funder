@@ -48,18 +48,19 @@ const designTokens = {
     gap: "12px",
   },
   color: {
-    canvas: "#f8faf9",
+    canvas: "#f8fafd",
     surface: "#ffffff",
-    ink: "#18211d",
-    muted: "#64736b",
-    line: "#d7dfda",
-    accent: "#0f766e",
-    focus: "#2563eb",
-    warning: "#b45309",
-    danger: "#b91c1c",
-    stale: "#6d5d10",
-    running: "#1d4ed8",
-    complete: "#166534",
+    ink: "#202124",
+    muted: "#5f6368",
+    line: "#dadce0",
+    accent: "#1a73e8",
+    accentHover: "#1765cc",
+    focus: "#1a73e8",
+    warning: "#f9ab00",
+    danger: "#d93025",
+    stale: "#b06000",
+    running: "#1a73e8",
+    complete: "#188038",
   },
   radius: {
     panel: "8px",
@@ -129,6 +130,7 @@ function renderStyles() {
   --muted: ${designTokens.color.muted};
   --line: ${designTokens.color.line};
   --accent: ${designTokens.color.accent};
+  --accent-hover: ${designTokens.color.accentHover};
   --focus: ${designTokens.color.focus};
   --warning: ${designTokens.color.warning};
   --danger: ${designTokens.color.danger};
@@ -170,6 +172,9 @@ button.primary {
   border-color: var(--accent);
   color: #fff;
 }
+button.primary:hover {
+  background: var(--accent-hover);
+}
 button.danger {
   border-color: var(--danger);
   color: var(--danger);
@@ -194,6 +199,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .3), 0 1px 3px rgba(60, 64, 67, .15);
   padding: 22px;
   display: grid;
   gap: 14px;
@@ -212,7 +218,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   height: 100vh;
   overflow: auto;
   border-right: 1px solid var(--line);
-  background: #eef4f1;
+  background: #f1f3f4;
   padding: 18px;
 }
 .brand {
@@ -259,7 +265,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-radius: var(--radius-control);
   text-decoration: none;
 }
-.nav-link:hover { background: #dfeae5; }
+.nav-link:hover { background: #e8f0fe; }
 .nav-dot {
   width: 8px;
   height: 8px;
@@ -348,6 +354,7 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   border-radius: var(--radius-panel);
   background: var(--surface);
   padding: var(--space-panel);
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
 }
 .route-panel__header {
   display: flex;
@@ -483,8 +490,7 @@ ${renderStyles()}
         <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
       </div>
       <div class="actions">
-        <a href="/auth/google/start"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
-        <button type="button" data-action="logout">Logout</button>
+        <a href="/auth/logout"><button type="button" data-action="logout">Logout</button></a>
       </div>
     </header>
 
@@ -629,6 +635,8 @@ function mountAuthenticatedShell(session) {
   const template = document.querySelector("[data-authenticated-template]");
   if (!root || !template || root.childElementCount > 0) return;
   root.appendChild(template.content.cloneNode(true));
+  const csrfMeta = document.querySelector('meta[name="founder-csrf-token"]');
+  if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
   if (gate) gate.hidden = true;
   writeJson("[data-analysis-output]", { session });
   bindAuthenticatedHandlers();

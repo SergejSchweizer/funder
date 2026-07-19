@@ -12,7 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from founder.entitlements import (
@@ -28,6 +29,11 @@ from founder.hosted_credentials import (
     KeyEncryptionKey,
 )
 from founder.table_io import JsonRow
+
+SESSION_COOKIE_NAME = "founder_session_user"
+CSRF_COOKIE_NAME = "founder_csrf"
+LOCAL_DEV_USER_ID = "local-google-dev-user"
+LOCAL_DEV_CSRF_TOKEN = "valid-csrf"
 
 
 class HostedApiError(RuntimeError):
@@ -167,10 +173,13 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
     def current_user(
         x_founder_user: str | None = Header(default=None, alias="X-Founder-User"),
         x_founder_csrf: str | None = Header(default=None, alias="X-Founder-CSRF"),
+        founder_session_user: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+        founder_csrf: str | None = Cookie(default=None, alias=CSRF_COOKIE_NAME),
     ) -> ApiUser:
-        if not x_founder_user:
+        user_id = x_founder_user or founder_session_user
+        if not user_id:
             raise _http_error(status.HTTP_401_UNAUTHORIZED, "authentication_required")
-        return ApiUser(user_id=x_founder_user, csrf_token=x_founder_csrf or "")
+        return ApiUser(user_id=user_id, csrf_token=x_founder_csrf or founder_csrf or "")
 
     def csrf_user(
         request: Request,
@@ -184,9 +193,37 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
     def health() -> JsonRow:
         return {"status": "ok"}
 
+    @app.get("/auth/google/start")
+    def start_google_login() -> RedirectResponse:
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=LOCAL_DEV_USER_ID,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=3600,
+        )
+        response.set_cookie(
+            key=CSRF_COOKIE_NAME,
+            value=LOCAL_DEV_CSRF_TOKEN,
+            httponly=False,
+            secure=False,
+            samesite="lax",
+            max_age=3600,
+        )
+        return response
+
+    @app.get("/auth/logout")
+    def logout() -> RedirectResponse:
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(SESSION_COOKIE_NAME)
+        response.delete_cookie(CSRF_COOKIE_NAME)
+        return response
+
     @app.get("/session")
     def session(user: ApiUser = Depends(current_user)) -> JsonRow:
-        return {"authenticated": True, "user_id": user.user_id}
+        return {"authenticated": True, "user_id": user.user_id, "csrf_token": user.csrf_token}
 
     @app.get("/credentials/eodhd")
     def credential_status(

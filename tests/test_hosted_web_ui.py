@@ -49,6 +49,8 @@ def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
     assert "initializeAuthGate()" in source
     assert "mountAuthenticatedShell(session)" in source
     assert "bindAuthenticatedHandlers()" in source
+    assert 'meta[name="founder-csrf-token"]' in source
+    assert "session.csrf_token" in source
     assert "Google login is required before the dashboard is shown." in source
     assert source.index("data-auth-gate") < source.index("data-authenticated-template")
 
@@ -87,6 +89,23 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
         assert f'id: "{route}"' in source
 
     assert 'data-route-skeleton="${route.id}"' in source
+
+
+def test_web_shell_uses_google_style_material_color_tokens() -> None:
+    source = _web_source()
+
+    for token in (
+        "#1a73e8",
+        "#202124",
+        "#5f6368",
+        "#dadce0",
+        "#188038",
+        "#f9ab00",
+        "#d93025",
+        "rgba(60, 64, 67",
+        "#e8f0fe",
+    ):
+        assert token in source
 
 
 def test_web_shell_models_complete_funnel_order_and_status_states() -> None:

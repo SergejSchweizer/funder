@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from founder.hosted_api import HostedApiState, create_app
+from founder.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
 
 
 def _client() -> TestClient:
@@ -35,8 +35,35 @@ def test_session_requires_authentication() -> None:
     assert client.get("/session").status_code == 401
     assert _json(client.get("/session", headers=_headers(csrf=False))) == {
         "authenticated": True,
+        "csrf_token": "",
         "user_id": "user-a",
     }
+
+
+def test_google_login_route_creates_cookie_session_for_local_web_runtime() -> None:
+    client = _client()
+
+    response = client.get("/auth/google/start", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert SESSION_COOKIE_NAME in response.cookies
+    assert CSRF_COOKIE_NAME in response.cookies
+    assert _json(client.get("/session")) == {
+        "authenticated": True,
+        "csrf_token": "valid-csrf",
+        "user_id": "local-google-dev-user",
+    }
+
+
+def test_logout_clears_cookie_session() -> None:
+    client = _client()
+    client.get("/auth/google/start", follow_redirects=False)
+
+    response = client.get("/auth/logout", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert client.get("/session").status_code == 401
 
 
 def test_state_changing_routes_require_csrf() -> None:
