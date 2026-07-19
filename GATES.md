@@ -18,6 +18,7 @@ The shard count is intentionally kept at `4` for Unit and Integration tests. Cur
 Required check families:
 
 - Ruff lint and format.
+- Hosted public-repository security gates.
 - Pyright strict typing.
 - Pytest Unit and Integration shards.
 - Coverage threshold enforcement on `main`.
@@ -86,6 +87,7 @@ pr-quality
     +-- pr-lint-quality
     |       ruff check .
     |       ruff format --check .
+    |       python -m founder.security_gates
     |       founder-quality --commits-only
     |       founder-quality --squash-subject "$SQUASH_SUBJECT"
     |
@@ -135,6 +137,7 @@ merge-gate
     |       ruff format --check .
     |       python -m founder.architecture_checks
     |       python -m founder.schema_validation
+    |       python -m founder.security_gates
     |       founder-quality --commits-only
     |       git diff --quiet
     |       git diff --cached --quiet

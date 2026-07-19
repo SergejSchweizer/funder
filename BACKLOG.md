@@ -412,7 +412,7 @@ Idempotency: Page refresh and navigation reload existing runs and snapshots with
 
 Branch: `chore/public-repo-security-hardening`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 before public deployment.
 

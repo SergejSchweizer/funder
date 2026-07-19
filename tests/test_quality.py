@@ -23,6 +23,7 @@ def test_pr_gate_has_simple_checks() -> None:
     assert commands_for_layer("pr") == (
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
+        ("python", "-m", "founder.security_gates"),
         ("pyright",),
         ("pytest", "-q", "-n", "auto"),
     )
@@ -37,8 +38,9 @@ def test_merge_gate_extends_pr_gate_with_protected_checks() -> None:
         ("python", "-m", "founder.architecture_checks"),
         ("python", "-m", "founder.schema_validation"),
     )
-    assert commands[4] == ("pyright",)
-    assert commands[5] == (
+    assert commands[4] == ("python", "-m", "founder.security_gates")
+    assert commands[5] == ("pyright",)
+    assert commands[6] == (
         "pytest",
         "-n",
         "auto",

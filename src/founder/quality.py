@@ -19,6 +19,7 @@ CONVENTIONAL_COMMIT_PATTERN = re.compile(
 PR_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "check", "."),
     ("ruff", "format", "--check", "."),
+    ("python", "-m", "founder.security_gates"),
     ("pyright",),
     ("pytest", "-q", "-n", "auto"),
 )
@@ -39,6 +40,7 @@ MERGE_GATE_COMMANDS: tuple[Command, ...] = (
     ("ruff", "format", "--check", "."),
     ("python", "-m", "founder.architecture_checks"),
     ("python", "-m", "founder.schema_validation"),
+    ("python", "-m", "founder.security_gates"),
     ("pyright",),
     MAIN_COVERAGE_COMMAND,
     ("git", "diff", "--quiet"),

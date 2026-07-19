@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "mode": "public-repository-hardening",
+  "required_scanners": [
+    "founder.security_gates.secret_patterns",
+    "github-push-protection",
+    "dependency-scanning",
+    "container-scanning",
+    "sbom-generation"
+  ],
+  "protected_secret_names": [
+    "FOUNDER_EODHD_KEK_FILE",
+    "FOUNDER_GOOGLE_CLIENT_SECRET_FILE",
+    "FOUNDER_POSTGRES_PASSWORD_FILE",
+    "FOUNDER_SESSION_SECRET_FILE"
+  ],
+  "required_workflow_permissions": [
+    "contents: read",
+    "contents: write",
+    "pull-requests: write"
+  ],
+  "forbidden_paths": [
+    ".env",
+    ".env.local",
+    ".secrets/",
+    ".logs/",
+    "lake/",
+    "data/",
+    "*.duckdb",
+    "*.parquet",
+    "*.sqlite",
+    "*.key",
+    "*.pem"
+  ],
+  "secret_patterns": [
+    {
+      "name": "eodhd_api_token",
+      "pattern": "(?i)(eodhd|api[_-]?token|api[_-]?key)[^\\n]{0,40}[:=][^\\n]{0,8}[A-Za-z0-9_-]{20,}"
+    },
+    {
+      "name": "founder_kek_material",
+      "pattern": "(?i)(kek|key[_-]?encryption[_-]?key|session[_-]?secret)[^\\n]{0,40}[:=][^\\n]{0,8}[A-Za-z0-9+/=_-]{24,}"
+    },
+    {
+      "name": "private_key_block",
+      "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    }
+  ],
+  "synthetic_secret_fixtures": {
+    "eodhd": "EODHD_API_TOKEN=syntheticTokenValue1234567890",
+    "kek": "FOUNDER_EODHD_KEK=syntheticKeyEncryptionMaterial123456",
+    "private_key": "-----BEGIN PRIVATE KEY-----"
+  },
+  "fork_safety": {
+    "pull_request_target_allowed": false,
+    "production_secrets_available_to_forks": false,
+    "trusted_deployment_source": "protected-main"
+  },
+  "deployment_credentials": {
+    "long_lived_cloud_keys_allowed": false,
+    "preferred_cloud_identity": "short-lived-oidc",
+    "nas_deployment": "trusted-commit-runtime-host-secrets"
+  }
+}

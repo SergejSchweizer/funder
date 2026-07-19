@@ -195,6 +195,11 @@ financial calculations or authorization decisions; it derives state from hosted 
 mutating requests, uses generated idempotency keys for retry-sensitive actions, and does not persist secrets or tokens in
 browser storage or URLs.
 
+`founder.security_gates` and `docs/security/hosted_security_policy.json` own the PR98 public-repository hardening
+boundary. They validate synthetic secret detection, deny-by-default runtime artifact ignores, fork-safe workflow triggers,
+explicit workflow permissions, full-SHA action pins, protected secret names, and the required scanner inventory before PR
+or merge gates can pass.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
