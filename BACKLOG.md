@@ -452,7 +452,7 @@ Idempotency: Re-running the gate does not mutate production data, rotate keys, o
 
 Branch: `feat/hosted-multitenant-cutover`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/147.
 
 Priority: P0 final integration and release proof.
 
