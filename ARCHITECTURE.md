@@ -188,6 +188,13 @@ all mutating routes require CSRF, write routes accept idempotency keys where ret
 resource lookup resolves through the authenticated user's repository scope rather than through storage paths or shared
 artifact ids.
 
+`apps/web/server.js` owns the PR97 local hosted Web boundary. It serves the Google-authenticated research workspace
+surface for dashboard, credentials, downloads, visible coverage, metadata filtering, univariate and bivariate statistics
+workflow controls, multivariate portfolio analysis, reports, logout, and account deletion. The browser performs no
+financial calculations or authorization decisions; it derives state from hosted API responses, sends CSRF headers on
+mutating requests, uses generated idempotency keys for retry-sensitive actions, and does not persist secrets or tokens in
+browser storage or URLs.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
