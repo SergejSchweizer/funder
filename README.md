@@ -542,6 +542,19 @@ The hosted development runtime is defined in [compose.yaml](compose.yaml). It st
 docker compose --env-file .env.local up --build
 ```
 
+During local UI development, keep a second terminal running:
+
+```bash
+uv run founder-compose-web-watch
+```
+
+The watcher tracks `apps/web`, `apps/api`, `src`, `compose.yaml`, `.dockerignore`, `pyproject.toml`, and `uv.lock`.
+Whenever one of those inputs changes, it automatically runs:
+
+```bash
+docker compose --env-file .env.local up --build -d web
+```
+
 The hosted API is exposed by `founder.hosted_api` and mounted in the API container. It provides user-scoped session, credential, download, dataset, project, selection, analysis, metrics, returns, weights, report, and account-deletion routes for the Web UI.
 
 The hosted Web container serves the local research workspace from `apps/web/server.js`. It provides the production shell baseline with Google-style Material color tokens, restrained elevation, responsive navigation, project snapshot indicator, and the persisted funnel routes `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. The dashboard shell is mounted only after the Web surface verifies an authenticated session through its same-origin `/api/session` proxy. In the local Compose runtime, `/auth/google/start` creates a clearly scoped development session so the authenticated shell can be exercised without committing Google OAuth secrets. Browser state is derived from API responses, and the Web surface must not store EODHD keys, Google tokens, session tokens, ciphertext, fingerprints, or sensitive API responses in `localStorage`, `sessionStorage`, URLs, analytics, logs, or rendered error output.

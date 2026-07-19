@@ -21,6 +21,7 @@ founder = "founder.cli:main"
 founder-docs-refresh = "founder.docs_refresh:main"
 founder-fetch-all-quotes = "founder.fetch_all_quotes:main"
 founder-quality = "founder.quality:main"
+founder-compose-web-watch = "founder.compose_web_watch:main"
 
 [dependency-groups]
 dev = [

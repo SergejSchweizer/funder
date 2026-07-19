@@ -28,6 +28,7 @@ def test_founder_console_scripts_are_registered() -> None:
     names = {name for name, _value in FOUNDER_ENTRY_POINTS}
     assert names == {
         "founder",
+        "founder-compose-web-watch",
         "founder-docs-refresh",
         "founder-fetch-all-quotes",
         "founder-quality",
