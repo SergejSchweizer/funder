@@ -477,7 +477,7 @@ PR97 remains the minimum functional hosted Web UI required by PR100. The followi
 
 Branch: `feat/web-design-system-app-shell`.
 
-Git status: in progress locally. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/152.
 
 Priority: P1 UI foundation.
 
