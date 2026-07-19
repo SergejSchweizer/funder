@@ -109,7 +109,8 @@ def test_quality_gates_are_documented_centrally() -> None:
     gates = (REPOSITORY_ROOT / "GATES.md").read_text(encoding="utf-8")
 
     for backlog_text in (
-        "Final branch: `feat/hosted-multitenant-cutover`.",
+        "Final hosted-security branch: `feat/hosted-multitenant-cutover`.",
+        "Final UI branch: `feat/web-ui-production-cutover`.",
         "type(optional-scope): subject",
         "[GATES.md](GATES.md)",
     ):

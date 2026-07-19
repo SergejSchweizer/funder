@@ -8,6 +8,7 @@ Last reviewed: 2026-07-19
 - [Completed PR History](#completed-pr-history)
 - [Current Architectural Decision](#current-architectural-decision)
 - [Hosted Multi-Tenant Founder PR Stack](#hosted-multi-tenant-founder-pr-stack)
+- [Founder Research Funnel UI PR Stack](#founder-research-funnel-ui-pr-stack)
 - [Series Completion Gate](#series-completion-gate)
 - [Update Rules](#update-rules)
 
@@ -468,15 +469,181 @@ Determinism: Replaying identical user snapshots, selections, settings, and algor
 
 Idempotency: Retrying the complete workflow creates no duplicate users, credentials, observations, grants, snapshots, calculations, analyses, or reports.
 
+## Founder Research Funnel UI PR Stack
+
+PR97 remains the minimum functional hosted Web UI required by PR100. The following post-cutover series turns that baseline into the approved Founder product interface: a simple Google- and Apple-inspired research workspace built around the persisted funnel `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. These PRs must not move financial calculations or authorization decisions into the browser, weaken the PR99 readiness gate, or replace immutable project, snapshot, selection, and run identities with client-only state.
+
+### PR101. Web Design System, Application Shell, And Visual Baseline
+
+Branch: `feat/web-design-system-app-shell`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 UI foundation.
+
+Depends on: PR100.
+
+Scope: Replace the hosted Web placeholder and ad hoc styles with the production Next.js application shell and a small versioned design system. Define typography, spacing, color, border, elevation, focus, motion, density, chart, table, badge, warning, empty-state, and loading-state tokens. Add the responsive sidebar, top bar, project context, snapshot indicator, persistent eight-step funnel navigation, page frame, error boundary, and route skeletons for dashboard, projects, data, metadata, univariate, filter, diversification, portfolio, validation, report, and settings. Use a restrained light-first visual language matching the approved mockup; avoid decorative gradients, neon effects, financial ticker clutter, and business logic inside visual components.
+
+Acceptance: Component and screenshot tests cover desktop, tablet, and mobile shells; funnel states for not-started, ready, running, complete, warning, failed, and stale; keyboard-visible focus; reduced-motion behavior; long project names; narrow viewports; loading and empty states; and consistent chart/table typography. Docker Compose serves the real Next.js shell rather than the Node placeholder.
+
+Security: Fixtures contain only synthetic users, opaque ids, and synthetic financial values. Components never render secrets, internal paths, database ids, provider request details, or raw exception payloads. The Web container continues to mount no credential secret or shared-data volume.
+
+Determinism: Design tokens, route definitions, formatter rules, icon mappings, funnel ordering, and screenshot fixtures are committed and versioned. Identical props produce stable accessible markup and chart-ready layout.
+
+Idempotency: Reloading or revisiting a route reconstructs the same shell from server state without creating projects, selections, downloads, or analyses.
+
+### PR102. Project Dashboard, First-Run Onboarding, And Persisted Funnel State
+
+Branch: `feat/web-project-dashboard-funnel-state`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 usable product navigation.
+
+Depends on: PR101.
+
+Scope: Implement the project dashboard, recent-project table, continue-research action, data-status summary, portfolio-monitoring summary, warnings, account navigation, and first-run onboarding. Guide a new Google-authenticated user through EODHD credential setup, Free-versus-paid capability discovery, creation of a starter project, first permitted refresh, and entry into the research funnel. Persist and display the current project snapshot, universe version, candidate selection, analysis runs, completed steps, warnings, and stale downstream steps when an upstream snapshot or filter changes. The Free-key starter path must show a meaningful supported example without exposing pre-existing data the user has not refreshed with their own key.
+
+Acceptance: End-to-end tests cover a new empty user, returning user, missing credential, invalid credential, Free key, paid key, interrupted onboarding, multiple projects, continue from each funnel step, stale downstream states after metadata or threshold changes, deleted credential, and account deletion. The dashboard uses real API state and never fabricates portfolio or data availability.
+
+Security: Project and onboarding responses are resolved through the authenticated session and RLS. No project name, snapshot status, warning, or recent activity from another user can appear through guessed ids, browser cache, prefetching, or stale client state.
+
+Determinism: Funnel status is derived from persisted project pointers, immutable snapshots, selections, run status, and explicit dependency rules. The same server state produces the same current step and stale-step markings.
+
+Idempotency: Refreshing, returning after logout, or repeating the continue action reopens the existing project state and does not create duplicate projects, refreshes, selections, or analyses.
+
+### PR103. Data Coverage Workspace And Metadata Universe Builder
+
+Branch: `feat/web-data-metadata-universe-builder`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 first analytical funnel stages.
+
+Depends on: PR102.
+
+Scope: Implement the Data and Metadata stages. The Data workspace shows credential status, visible dataset coverage, per-dataset date ranges, listing counts, quality warnings, refresh planning, quota/capability messaging, run progress, partial failures, and resulting User Data Snapshot. The Metadata workspace adds server-backed search, faceted filters, sorting, bounded pagination or virtualization, column configuration, bulk selection, filter counts, eligibility warnings, and explicit creation of a versioned universe. Supported facets include instrument type, exchange, listing currency, domicile, distribution policy, history, coverage, and data-quality eligibility where available.
+
+Acceptance: Tests cover empty data, thousands of listings, Free-key limits, refresh success and partial failure, corrected provider rows, a newer user snapshot, server pagination, stable sorting, combined facets, no-result filters, bulk selection across pages, data-quality exclusions, and creation/reopening of a universe version. The UI prominently shows `visible instruments -> eligible instruments` and the exact snapshot used.
+
+Security: Queries operate only on the authenticated user's entitled snapshot. Search counts, facets, autocomplete, exports, and error messages must not disclose instruments, dates, revisions, or coverage visible only to another user.
+
+Determinism: Canonical filter serialization, sort keys, pagination cursors, column formatters, and universe summaries are stable. The same snapshot and filter definition produce the same ordered eligible membership and selection identity.
+
+Idempotency: Reapplying an unchanged filter to the same snapshot reuses the existing logical universe or returns the same identity; repeated refresh-page requests do not submit a provider call or duplicate membership rows.
+
+### PR104. Univariate Research Workspace, Fund Detail, And Metric Filter
+
+Branch: `feat/web-univariate-research-filter`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 core fund research workflow.
+
+Depends on: PR103.
+
+Scope: Implement separate Univariate Analysis and Univariate Filter stages. Provide overview, return, risk, income, drawdown, and data-quality metric groups; sortable and filterable metric tables; an income-versus-tail-risk scatterplot; fund detail drawer; total-return, price-return, drawdown, rolling-risk, and distribution-history charts; confidence and track-record warnings; metric definitions; and artifact/run provenance. Add a threshold workbench for minimum history, sustainable income, maximum drawdown, Expected Shortfall, distribution variability, NAV erosion, liquidity, and data-quality confidence. Show exclusion counts by reason, multiple reasons per fund, and an inspectable `why excluded` explanation before creating the versioned candidate set.
+
+Acceptance: Tests cover unavailable metrics, short history, invalid-price quality failures, stable and unstable distributions, NAV erosion, multiple simultaneous exclusions, boundary values, changed thresholds, cached artifact reuse, stale results after an upstream universe change, chart keyboard summaries, table exports, and deep links that reopen the same user-owned run. The browser only renders API-produced values and never recalculates financial statistics.
+
+Security: Metric and chart requests require access to the project, snapshot, universe, and user-owned run. Direct shared artifact ids, listing ids outside the snapshot, or stale project pointers cannot retrieve details or influence exclusion counts.
+
+Determinism: Metric group order, units, precision, warning classification, threshold operators, exclusion-reason ordering, and chart series ordering are versioned. Identical snapshot, universe, parameters, and algorithm versions produce the same candidate membership and presentation values.
+
+Idempotency: Reopening the stage or resubmitting identical thresholds returns the existing completed run and candidate selection without duplicate artifacts or analysis records.
+
+### PR105. Diversification Clusters, Redundancy Review, And Pair Inspector
+
+Branch: `feat/web-diversification-pair-analysis`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 bivariate decision workflow.
+
+Depends on: PR104.
+
+Scope: Implement the Diversification stage around decision-relevant pair analysis rather than a matrix-only dashboard. Add cluster summaries, cluster membership tables, correlation heatmap, top redundant pairs, diversification candidates, and a pair inspector with Pearson, Spearman, covariance, bidirectional beta, downside correlation, stress correlation, rolling correlation, common-observation count, common date range, return comparison, drawdown comparison, and data-quality warnings. Support top-k and threshold-backed API views so large candidate sets never require all pair rows in browser memory. Allow the user to mark preferred or excluded instruments within a cluster and persist the resulting pre-portfolio selection.
+
+Acceptance: Tests cover reversed pair orientation, insufficient overlap, missing metrics, large sparse candidate sets, top-k pagination, heatmap ordering, cluster labels, changed pair artifacts after corrected values, redundant-fund review, preferred-instrument persistence, stale bivariate runs, and reopening the exact pair through a stable project route. The UI remains usable without materializing a dense matrix for the broad universe.
+
+Security: Pair search, cluster counts, heatmap cells, and inspector details require authorization to both underlying return artifacts and the owning project run. Autocomplete and top-k results do not reveal inaccessible instruments or pair histories.
+
+Determinism: Cluster order, within-cluster ordering, pair orientation, heatmap axes, correlation formatting, and redundancy ranking use committed stable rules and exact artifact identities.
+
+Idempotency: Repeating the same pair query or cluster decision reuses existing artifacts and persisted selections; navigation does not schedule new pair computation unless the authorized inputs or parameters changed.
+
+### PR106. Portfolio Model Comparison And Constraint Workbench
+
+Branch: `feat/web-portfolio-model-constraint-workbench`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 multivariate portfolio decision workflow.
+
+Depends on: PR105.
+
+Scope: Implement the Portfolio stage with comparable model cards for Equal Weight, Inverse Volatility, shrinkage Minimum Variance, Equal Risk Contribution, True HRP, Maximum Diversification, Minimum CVaR, Income, and configured ensemble candidates. Add target-weight bars, risk contributions, concentration diagnostics, expected income, volatility, CVaR, drawdown, turnover, solver diagnostics, and model trade-offs. Add an understandable constraint workbench for instrument, issuer, asset-class, country, sector, currency, strategy, short-history, crypto, liquidity, income, volatility, drawdown, CVaR, turnover, and current-weight limits, with advanced risk-model and estimation settings separated from the default experience. Detect infeasible constraints and explain the conflicting limits without silently relaxing them.
+
+Acceptance: Tests cover every supported model, unavailable models, solver failure, infeasible constraints, constraint boundary values, stable model comparison ordering, selected profile defaults, cached portfolio artifacts, current versus target weights, whole-share preparation inputs, changed settings producing a new run, and unchanged settings reusing the prior run. No model is labelled universally best; baselines remain visible.
+
+Security: Every model and diagnostic response resolves through a user-owned project run and authorized dependency closure. Constraint payloads are validated server-side; the browser cannot request internal paths, override ownership, or use shared artifact ids as authorization.
+
+Determinism: Model-card order, metric definitions, constraint serialization, units, precision, weight and risk-contribution ordering, and selected-candidate rules are versioned and independent of browser locale or worker completion order.
+
+Idempotency: Repeated identical model comparisons return the existing run or join the active computation. Saving unchanged constraints does not create duplicate configurations, runs, weights, or reports.
+
+### PR107. Validation, Report, And Flatex Trade-Preparation Workspace
+
+Branch: `feat/web-validation-report-trade-preparation`.
+
+Git status: not started. PR: TBD.
+
+Priority: P1 final decision and handoff workflow.
+
+Depends on: PR106.
+
+Scope: Implement the Validation and Report stages. Add historical and walk-forward tabs, stress and bootstrap summaries, sensitivity views, costs and turnover, current-versus-target comparison, drawdown and recovery charts, risk-limit checks, model scorecards, assumptions, limitations, and an explicit Founder assessment with passed checks and warnings. Render the explainable recommendation report and support authorized HTML/PDF download. Add Flatex-oriented trade preparation with current positions, target weights, estimated trades, whole-share rounding, minimum trade size, fees, taxes where configured, residual cash, and export; retain explicit user approval and no automatic broker execution.
+
+Acceptance: Tests cover walk-forward availability, weak out-of-sample evidence, stress failures, cost-sensitive ranking changes, current-portfolio absence, whole-share rounding, insufficient cash, tax/cost adapter differences, report regeneration, authorized download, expired/stale run handling, export contents, and explicit no-order-execution language. Reports include selected and excluded instruments with reasons, target weights, risk contributions, income, drawdown, costs, stress results, assumptions, and warnings.
+
+Security: Report and export downloads require a current authenticated user-owned run and use opaque download routes. Generated documents contain no provider key material, session token, internal path, database identity, hidden cross-user data, or unredacted exception details.
+
+Determinism: Report sections, metric precision, chart ordering, trade-rounding rules, export columns, and file naming derive from versioned templates and exact immutable run inputs.
+
+Idempotency: Repeated report or export generation for the same completed run reuses the existing authorized artifact or produces byte-stable content where timestamps are explicitly excluded; it never creates broker orders.
+
+### PR108. Responsive Accessibility, Visual Regression, Performance, And UI Cutover
+
+Branch: `feat/web-ui-production-cutover`.
+
+Git status: not started. PR: TBD.
+
+Priority: P0 final UI quality and deployment proof.
+
+Depends on: PR107.
+
+Scope: Complete the approved visual baseline across desktop, tablet, and mobile; add mobile-specific layouts rather than scaled desktop pages; finish keyboard navigation, semantic landmarks, accessible names, table and chart alternatives, contrast, focus management, reduced motion, and screen-reader announcements. Add visual-regression coverage, browser end-to-end tests for the full funnel, realistic large-table performance tests, API cancellation/retry behavior, route-level loading and error states, bundle and rendering budgets, supported-browser policy, and clean-host Docker Compose installation proof. Remove obsolete placeholder Web code and make the real Founder UI the canonical hosted route.
+
+Acceptance: A clean checkout with documented external synthetic secret files can run `docker compose up --build`, complete Google/EODHD-mocked end-to-end scenarios, and reach the responsive GUI. Tests cover new user, returning user, Free key, paid key, two isolated users, all funnel stages, upstream invalidation, cached reuse, restart persistence, mobile navigation, keyboard-only use, automated accessibility checks, visual baselines, large datasets, slow/failed API calls, report download, logout, and account deletion. Documented performance budgets pass on representative fixtures.
+
+Security: Browser storage, URLs, client logs, screenshots, test traces, source maps, analytics, downloaded reports, and CI artifacts are scanned for provider keys, tokens, ciphertext, fingerprints, internal paths, and cross-user content. Production error pages remain redacted and authenticated data is not cached publicly.
+
+Determinism: Visual baselines use pinned browsers, fonts supplied by standard image packages rather than committed proprietary font files, fixed viewport fixtures, stable synthetic data, fixed locale/time zone, and disabled nondeterministic animation. E2E routes resolve exact snapshots, selections, and runs.
+
+Idempotency: Re-running the complete UI funnel against unchanged authorized inputs creates no duplicate projects, refreshes, selections, analyses, reports, or exports; restart and browser refresh resume persisted state.
+
 ## Series Completion Gate
 
-Final branch: `feat/hosted-multitenant-cutover`.
+Final hosted-security branch: `feat/hosted-multitenant-cutover`.
 
-Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 are stacked on their declared dependencies and must be restacked after predecessor merges.
+Final UI branch: `feat/web-ui-production-cutover`.
+
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 remain stacked on their declared dependencies. PR101 through PR108 form a sequential post-PR100 UI stack and must be restacked after predecessor merges.
 
 Required gates: Use the current pre-merge, post-merge, auto-merge, branch-protection, shard, and coverage policy documented in [GATES.md](GATES.md).
 
-The series is incomplete while any of these conditions remains true:
+The hosted-security series is incomplete while any of these conditions remains true:
 
 - a provider key or KEK can enter Git, PostgreSQL plaintext, images, logs, browser storage, URLs, or CI;
 - shared physical data existence can create access without a successful user-key-backed request;
@@ -486,6 +653,17 @@ The series is incomplete while any of these conditions remains true:
 - a new user can see pre-existing provider data;
 - one user's refresh can silently expand another user's visible date range or revision set;
 - public-hosted mode can start while licensing, privacy, credential, backup, or security gates are unresolved.
+
+The UI series is incomplete while any of these conditions remains true:
+
+- Docker Compose still serves a placeholder instead of the real Next.js Founder application;
+- the persisted funnel cannot be resumed from Data through Report with immutable project, snapshot, selection, and run identities;
+- changing an upstream snapshot or filter does not mark dependent downstream results stale;
+- the browser performs financial calculations or authorization decisions;
+- data tables, search, facets, pair views, charts, reports, or exports can reveal rows outside the authenticated user's entitlement;
+- the UI cannot explain why an instrument was excluded, why a model differs, or which assumptions and constraints produced the result;
+- desktop, tablet, mobile, keyboard, screen-reader, error, loading, empty, and large-dataset paths are not covered by automated tests;
+- a clean documented Docker Compose startup cannot reach the production UI without editing repository source files.
 
 ## Update Rules
 
