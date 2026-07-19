@@ -152,6 +152,22 @@ Required shared-store behavior:
 Shared storage paths, segment hashes, and observation ids are catalog identities only. They must not be accepted as
 authorization credentials and must not be returned from unauthenticated endpoints.
 
+## User Entitlement And Snapshot Baseline
+
+PR89 introduces entitlement and immutable snapshot contracts in `founder.entitlements`.
+
+Required entitlement behavior:
+
+- A new user starts with no visible provider observations.
+- A grant may be created only from a `succeeded` provider-backed download run for the same authenticated user.
+- Failed, partial, planned, running, or empty provider runs cannot publish grants.
+- Shared object existence, listing identity, date range, or content hash never creates access.
+- User Data Snapshots contain the exact sorted observation ids visible to the user under a revision policy.
+- Snapshot hashes are deterministic and independent of grant publication order.
+- Old snapshots remain immutable when later refreshes add observations.
+- Account deletion removes user grants and current pointers without deleting shared physical observations still
+  referenced by other users.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

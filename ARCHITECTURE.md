@@ -156,6 +156,11 @@ provider observations, rejects user/credential/session fields in shared payloads
 provider, dataset type, listing identity, business key, payload hash, and schema version, publishes immutable Parquet
 segments through temporary files and atomic rename, and records segment manifests without granting user access.
 
+`founder.entitlements` owns the PR89 user data entitlement and immutable snapshot boundary. It publishes user grants
+only from successful provider-backed download runs, resolves user-owned snapshots, keeps new users empty, prevents
+shared-object existence from creating access, and deletes user grants/snapshot pointers without deleting shared
+physical observations still referenced by other users.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -238,6 +243,11 @@ The fourth hosted implementation boundary is the shared market observation store
 deduplicate physically; appended date ranges and corrected historical payloads create distinct content-addressed
 segments and object identities. Shared object presence is never authorization evidence, and segment payloads must not
 contain user ids, credential ids, session tokens, or credential fingerprints.
+
+The fifth hosted implementation boundary is user data entitlement. A grant can be created only from a successful
+current-user provider run, and every hosted analysis must use an immutable User Data Snapshot rather than object
+existence, date range, listing identity, content hash, or another user's run. Replaying the same successful response for
+one user returns the same logical snapshot without duplicating grants.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit

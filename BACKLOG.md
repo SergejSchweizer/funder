@@ -232,7 +232,7 @@ Idempotency: Re-ingesting identical observations produces no duplicate physical 
 
 Branch: `feat/user-data-entitlement-snapshots`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/132.
 
 Priority: P0 authorization semantics.
 
