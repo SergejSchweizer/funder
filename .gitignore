@@ -20,6 +20,13 @@
 !.github/
 !.github/workflows/
 !.github/workflows/**
+!compose.yaml
+!compose.*.yaml
+!docker/
+!docker/**
+!apps/
+!apps/**
+!GATES.md
 
 # Public examples are allowed; local secrets stay ignored.
 !.env.example

@@ -178,6 +178,10 @@ user ids in their cache keys. User-visible return, univariate, and bivariate ref
 dependency authorization; portfolio artifacts are served only through user/project-owned analysis-run references whose
 project snapshot pointer is still current.
 
+`compose.yaml`, `apps/api/Dockerfile`, and `apps/web/Dockerfile` own the PR95 hosted development runtime contract.
+PostgreSQL is internal-only with a named persistent volume, API owns shared analytical storage and required secrets,
+and Web exposes only the browser surface without mounting shared data or credential secrets.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.

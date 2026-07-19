@@ -534,6 +534,14 @@ YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
 
 [GATES.md](GATES.md) is the source of truth for GitHub quality gates, branch protection, auto-merge, shard layout, coverage policy, and local validation commands.
 
+## Hosted Development Runtime
+
+The hosted development runtime is defined in [compose.yaml](compose.yaml). It starts internal PostgreSQL, the API container, and the Web container with named persistent PostgreSQL and shared-data volumes. Runtime secret file paths come from `.env.example` variables and must point to absolute host paths outside this repository.
+
+```bash
+docker compose --env-file .env.local up --build
+```
+
 Install dependencies with:
 
 ```bash

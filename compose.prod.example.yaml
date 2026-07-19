@@ -1,0 +1,18 @@
+services:
+  api:
+    environment:
+      FOUNDER_ENV: production
+    ports: []
+    read_only: true
+
+  web:
+    environment:
+      NODE_ENV: production
+      FOUNDER_TLS_TERMINATION_REQUIRED: "true"
+    ports:
+      - "127.0.0.1:3000:3000"
+    read_only: true
+
+  postgres:
+    ports: []
+    read_only: true
