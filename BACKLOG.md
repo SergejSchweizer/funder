@@ -392,7 +392,7 @@ Idempotency: Idempotency keys and logical request hashes prevent duplicate crede
 
 Branch: `feat/hosted-web-user-research-funnel`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/143.
 
 Priority: P2 end-user workflow.
 
