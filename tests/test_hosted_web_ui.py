@@ -200,6 +200,9 @@ def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
 def test_web_server_handles_local_google_session_same_origin_before_auth_proxy() -> None:
     source = _web_source()
 
+    assert 'process.env.FOUNDER_AUTH_MODE || "google"' in source
+    assert 'authMode === "local-dev"' in source
+    assert 'authMode === "auto"' not in source
     assert 'requestUrl.pathname === "/auth/google/start"' in source
     assert 'requestUrl.pathname === "/auth/logout"' in source
     assert "startLocalGoogleLogin(response)" in source

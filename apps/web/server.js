@@ -9,7 +9,7 @@ if (process.argv.includes("--health")) {
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
-const authMode = process.env.FOUNDER_AUTH_MODE || "auto";
+const authMode = process.env.FOUNDER_AUTH_MODE || "google";
 const googleClientId = process.env.FOUNDER_GOOGLE_CLIENT_ID || "";
 const googleRedirectUri =
   process.env.FOUNDER_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
@@ -119,7 +119,7 @@ function stableGoogleUserId(subject) {
 
 function localDevAuthEnabled() {
   if (authMode === "local-dev") return true;
-  return authMode === "auto" && process.env.NODE_ENV === "development" && !googleClientId;
+  return false;
 }
 
 function googleAuthConfigured() {
