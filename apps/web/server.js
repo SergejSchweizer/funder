@@ -978,8 +978,13 @@ const server = http.createServer((request, response) => {
     proxyAuthRequest(request, response);
     return;
   }
+  const session = sessionFromRequest(request);
+  if (requestUrl.pathname === "/" && session === null) {
+    void startGoogleLogin(response);
+    return;
+  }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end(renderAppShell(apiBaseUrl, sessionFromRequest(request)));
+  response.end(renderAppShell(apiBaseUrl, session));
 });
 
 server.listen(port, "0.0.0.0");

@@ -205,12 +205,14 @@ def test_web_server_handles_local_google_session_same_origin_before_auth_proxy()
     assert 'authMode === "auto"' not in source
     assert 'requestUrl.pathname === "/auth/google/start"' in source
     assert 'requestUrl.pathname === "/auth/logout"' in source
+    assert 'requestUrl.pathname === "/" && session === null' in source
     assert "startLocalGoogleLogin(response)" in source
     assert "logoutLocalGoogleSession(response)" in source
     assert "function cookieHeader(name, value, options = {})" in source
     assert "function parseCookies(cookieHeaderValue)" in source
     assert "function sessionFromRequest(request)" in source
-    assert "renderAppShell(apiBaseUrl, sessionFromRequest(request))" in source
+    assert "const session = sessionFromRequest(request)" in source
+    assert "renderAppShell(apiBaseUrl, session)" in source
     assert "founder_session_user" in source
     assert "founder_csrf" in source
     assert "FOUNDER_LOCAL_DEV_GOOGLE_EMAIL" in source
