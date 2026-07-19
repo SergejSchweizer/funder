@@ -544,6 +544,8 @@ docker compose --env-file .env.local up --build
 
 The hosted API is exposed by `founder.hosted_api` and mounted in the API container. It provides user-scoped session, credential, download, dataset, project, selection, analysis, metrics, returns, weights, report, and account-deletion routes for the Web UI.
 
+The hosted Web container serves the local research workspace from `apps/web/server.js`. It provides the Google login entrypoint, dashboard, credential settings, download workflow, visible-data coverage, metadata filtering, univariate and bivariate statistics workflow controls, multivariate portfolio analysis, reports, logout, and account-deletion actions. Browser state is derived from API responses, and the Web surface must not store EODHD keys, Google tokens, session tokens, ciphertext, fingerprints, or sensitive API responses in `localStorage`, `sessionStorage`, URLs, analytics, logs, or rendered error output.
+
 Install dependencies with:
 
 ```bash

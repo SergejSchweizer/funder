@@ -372,7 +372,7 @@ Idempotency: Re-running Compose with unchanged source reuses persistent state an
 
 Branch: `feat/hosted-fastapi-service`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/142.
 
 Priority: P1 hosted application service.
 
@@ -392,7 +392,7 @@ Idempotency: Idempotency keys and logical request hashes prevent duplicate crede
 
 Branch: `feat/hosted-web-user-research-funnel`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P2 end-user workflow.
 
