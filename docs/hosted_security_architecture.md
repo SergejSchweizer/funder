@@ -168,6 +168,22 @@ Required entitlement behavior:
 - Account deletion removes user grants and current pointers without deleting shared physical observations still
   referenced by other users.
 
+## User-Key-Backed Ingestion Baseline
+
+PR90 introduces user-scoped provider planning in `founder.user_ingestion`.
+
+Required ingestion behavior:
+
+- Plans are derived from authenticated user id, credential id, dataset type, requested listings, capability tier,
+  requested as-of date, and optional prior snapshot.
+- Free and paid capabilities bound symbol counts and whether gap refresh is allowed.
+- Plaintext provider keys are unwrapped only immediately before the outbound provider call.
+- Provider errors are redacted before they cross the ingestion boundary.
+- Rate-limited, partial, failed, or empty responses cannot publish grants or snapshots.
+- Existing shared physical observations can deduplicate writes, but the current user's provider request must still run
+  before access is granted.
+- Usage accounting records successful provider requests.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

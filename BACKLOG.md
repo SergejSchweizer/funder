@@ -252,7 +252,7 @@ Idempotency: Replaying the same successful response for the same user resolves t
 
 Branch: `feat/user-scoped-eodhd-ingestion`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/133.
 
 Priority: P0 usable BYOK download path.
 
