@@ -17,6 +17,7 @@
 # Local quality tooling.
 !.pre-commit-config.yaml
 !.python-version
+!.dockerignore
 !.github/
 !.github/workflows/
 !.github/workflows/**

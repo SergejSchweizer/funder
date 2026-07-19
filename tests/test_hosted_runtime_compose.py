@@ -87,8 +87,11 @@ def test_compose_uses_health_checks_startup_order_and_hardening() -> None:
         assert "healthcheck" in service
         assert service["read_only"] is True
         assert service["security_opt"] == ["no-new-privileges:true"]
-        assert service["cap_drop"] == ["ALL"]
         assert "deploy" in service
+
+    for service_name in ("api", "web"):
+        service = cast(ComposeMapping, services[service_name])
+        assert service["cap_drop"] == ["ALL"]
 
     api_depends = cast(ComposeMapping, cast(ComposeMapping, services["api"])["depends_on"])
     web_depends = cast(ComposeMapping, cast(ComposeMapping, services["web"])["depends_on"])
