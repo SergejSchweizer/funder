@@ -199,7 +199,8 @@ Required scoped-input behavior:
 
 ## Return And Univariate Artifact Cache Baseline
 
-PR92 introduces the first shared analytical cache in `founder.artifact_cache`.
+PR92 introduces the first shared analytical cache in `founder.artifact_cache`; PR93 extends the same authorization
+boundary to bivariate pair artifacts.
 
 Required cache behavior:
 
@@ -211,6 +212,12 @@ Required cache behavior:
 - User-visible artifact references are separate from physical artifacts.
 - Direct artifact ids or paths are not authorization evidence.
 - A univariate artifact can be created only when the user has a visible reference to its return artifact dependency.
+- Bivariate artifact ids include the canonical unordered pair of return artifact ids, the exact common-date alignment
+  hash, metric parameters, minimum-observation policy, and algorithm version.
+- Bivariate alignment hashes include aligned dates and both return values, so same-count date windows with corrected
+  values or newly common dates produce different artifacts.
+- A bivariate artifact can be created only when the user has visible references to both return artifact dependencies.
+- Bucketed pair storage must fail closed when the expected bivariate artifact id is absent from the resolved bucket.
 
 ## Prohibited Designs
 

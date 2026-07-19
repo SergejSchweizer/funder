@@ -292,7 +292,7 @@ Idempotency: Re-resolving unchanged authorized inputs returns the same immutable
 
 Branch: `feat/content-addressed-univariate-cache`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/135.
 
 Priority: P1 reusable analytical cache.
 
@@ -312,7 +312,7 @@ Idempotency: Concurrent or repeated requests compute or publish one artifact and
 
 Branch: `feat/content-addressed-bivariate-cache`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/136.
 
 Priority: P1 pair-statistics reuse without leakage.
 
