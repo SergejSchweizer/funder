@@ -548,6 +548,8 @@ During local UI development, start the Web service with Compose watch:
 docker compose --env-file .env.local up --build --watch web
 ```
 
+For stacked UI PR development, check out the active UI branch before starting Compose watch. The Web container rebuilds from that branch state, so each UI stack change is visible locally without landing the branch on `main`.
+
 The Compose watch contract rebuilds and reinstalls the local Web container when `apps/web`, `apps/web/Dockerfile`, or `compose.yaml` changes. If Compose watch is not available, keep a second terminal running:
 
 ```bash

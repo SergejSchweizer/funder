@@ -473,6 +473,8 @@ Idempotency: Retrying the complete workflow creates no duplicate users, credenti
 
 PR97 remains the minimum functional hosted Web UI required by PR100. The following post-cutover series turns that baseline into the approved Founder product interface: a simple Google- and Apple-inspired research workspace built around the persisted funnel `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. These PRs must not move financial calculations or authorization decisions into the browser, weaken the PR99 readiness gate, or replace immutable project, snapshot, selection, and run identities with client-only state.
 
+PR102 through PR108 are a stacked UI branch tree. PR102 starts from the current post-PR101 `main`, and each following UI PR starts from the previous UI branch until the tree is explicitly landed. Do not merge any UI stack branch into `main` unless the maintainer explicitly requests that `main` merge. During UI stack development, run `docker compose --env-file .env.local up --build --watch web` from the active UI branch so every local UI change is visible in Docker; use `uv run founder-compose-web-watch` when Compose watch is unavailable.
+
 ### PR101. Web Design System, Application Shell, And Visual Baseline
 
 Branch: `feat/web-design-system-app-shell`.
@@ -640,6 +642,10 @@ Final hosted-security branch: `feat/hosted-multitenant-cutover`.
 Final UI branch: `feat/web-ui-production-cutover`.
 
 Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 remain stacked on their declared dependencies. PR101 through PR108 form a sequential post-PR100 UI stack and must be restacked after predecessor merges.
+
+Main-merge rule: No branch or pull request is merged into `main` unless the maintainer explicitly requests that `main` merge in the current task. Backlog continuation and UI work produce stacked, pushed PR branches by default; they remain open until the maintainer asks to land a PR or the full stack.
+
+Local UI stack runtime: While editing any UI stack branch, run `docker compose --env-file .env.local up --build --watch web` from that active branch. This makes the local Docker Web container rebuild from the current branch state after UI source changes. If Compose watch is not available, run `uv run founder-compose-web-watch` from the active branch.
 
 Required gates: Use the current pre-merge, post-merge, auto-merge, branch-protection, shard, and coverage policy documented in [GATES.md](GATES.md).
 

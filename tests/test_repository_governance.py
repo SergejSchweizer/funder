@@ -131,6 +131,22 @@ def test_quality_gates_are_documented_centrally() -> None:
         assert gates_text in gates
 
 
+def test_stacked_ui_workflow_requires_explicit_main_merge_and_local_docker_watch() -> None:
+    agents = (REPOSITORY_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    backlog = (REPOSITORY_ROOT / "BACKLOG.md").read_text(encoding="utf-8")
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    expected_watch_command = "docker compose --env-file .env.local up --build --watch web"
+
+    for text in (agents, backlog):
+        assert "unless the maintainer explicitly requests that `main` merge" in text
+        assert "stacked" in text
+        assert expected_watch_command in text
+        assert "uv run founder-compose-web-watch" in text
+
+    assert "For stacked UI PR development" in readme
+    assert expected_watch_command in readme
+
+
 def test_hosted_security_architecture_maps_goals_to_active_prs() -> None:
     architecture = (REPOSITORY_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
     decisions = (REPOSITORY_ROOT / "DECISIONS.md").read_text(encoding="utf-8")

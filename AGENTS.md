@@ -22,6 +22,10 @@ This file is the workflow reference for coding agents and maintainers. It should
 - Use `feat/` for new behavior, `fix/` for defect correction, `refactor/` for behavior-preserving structural or performance work, `docs/` for documentation-only changes, and `chore/` for build, CI, test-only, style, dependency, or repository-maintenance work.
 - The branch path type must reflect the primary PR purpose. The PR title and final squash subject must use the most precise compatible Conventional Commit type.
 - Every open PR series in `BACKLOG.md` must end with an explicit `Series Completion Gate` that references [GATES.md](GATES.md) for the current required pre-merge and post-merge quality gates.
+- Do not merge any branch or pull request into `main` unless the maintainer explicitly requests that `main` merge in the current task.
+- When continuing backlog or UI work without an explicit `main` merge request, create, push, and publish stacked PR branches, then leave them open for later landing.
+- UI work must stay on the active UI branch stack until the maintainer asks to land it. Base each follow-up UI branch on the previous UI branch, and run `docker compose --env-file .env.local up --build --watch web` from the active branch so local Docker shows the current UI stack state.
+- If Compose watch is unavailable during UI stack work, run `uv run founder-compose-web-watch` from the active branch as the local Docker rebuild fallback.
 - Use `Branch: <type>/<scope>-<short-description>` until a planned branch is created, then keep the exact published branch path in the backlog entry.
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.
