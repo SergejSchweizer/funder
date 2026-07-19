@@ -212,7 +212,7 @@ Idempotency: Re-submitting the same valid key updates permitted metadata or reus
 
 Branch: `feat/shared-market-observation-store`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/131.
 
 Priority: P0 shared physical data foundation.
 

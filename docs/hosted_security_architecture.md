@@ -134,6 +134,24 @@ Plaintext provider keys may exist only in bounded process memory during set, val
 rotation. They must never be persisted, logged, returned to clients, or passed to workers that do not perform provider
 access.
 
+## Shared Market Observation Store Baseline
+
+PR88 introduces the shared immutable observation store in `founder.shared_observations`.
+
+Required shared-store behavior:
+
+- Normalize provider observations into canonical payload ordering.
+- Reject shared payloads containing `user_id`, `credential_id`, `session_token`, or credential fingerprint fields.
+- Derive observation ids from provider, dataset type, listing identity, business key, payload hash, and schema version.
+- Retain corrected historical values as new content identities instead of overwriting prior observations.
+- Deduplicate identical observations and identical segments by content hash.
+- Publish Parquet segments through temporary writes and atomic rename.
+- Write deterministic segment manifests with row count, segment hash, storage URI, and observation ids.
+- Validate segment hashes when reading previously published shared content.
+
+Shared storage paths, segment hashes, and observation ids are catalog identities only. They must not be accepted as
+authorization credentials and must not be returned from unauthenticated endpoints.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

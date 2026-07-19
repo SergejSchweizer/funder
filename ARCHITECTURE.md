@@ -151,6 +151,11 @@ to credential id, user id, provider, and schema version as authenticated associa
 metadata, and fails closed when tampering, wrong user context, unavailable KEK versions, revoked/deleted state, or
 authentication failure is detected.
 
+`founder.shared_observations` owns the PR88 shared content-addressed market observation store boundary. It normalizes
+provider observations, rejects user/credential/session fields in shared payloads, derives stable observation ids from
+provider, dataset type, listing identity, business key, payload hash, and schema version, publishes immutable Parquet
+segments through temporary files and atomic rename, and records segment manifests without granting user access.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -228,6 +233,11 @@ The third hosted implementation boundary is the encrypted EODHD credential vault
 during set, validation, unwrap-for-provider-call, and key rotation operations. Stored rows contain ciphertext, nonce,
 wrapped data key, wrap nonce, KEK version, associated data, keyed fingerprint, and masked label; database dumps and
 shared storage do not contain plaintext or independently reusable credential material.
+
+The fourth hosted implementation boundary is the shared market observation store. Identical normalized observations
+deduplicate physically; appended date ranges and corrected historical payloads create distinct content-addressed
+segments and object identities. Shared object presence is never authorization evidence, and segment payloads must not
+contain user ids, credential ids, session tokens, or credential fingerprints.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
