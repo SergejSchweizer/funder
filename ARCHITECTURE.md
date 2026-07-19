@@ -5,339 +5,1134 @@ Last reviewed: 2026-07-19
 ## Table Of Contents
 
 - [Purpose](#purpose)
-- [Module Overview](#module-overview)
-- [Current Shape](#current-shape)
-- [Module Boundary](#module-boundary)
-- [Simple Lake Layout](#simple-lake-layout)
-- [Portfolio Analysis And Evaluation](#portfolio-analysis-and-evaluation)
-- [Hosted Multi-Tenant Architecture](#hosted-multi-tenant-architecture)
-- [Boundaries](#boundaries)
-- [Validation Boundary](#validation-boundary)
+- [Read This First: What Founder Is Today](#read-this-first-what-founder-is-today)
+- [System At A Glance](#system-at-a-glance)
+- [Repository Map](#repository-map)
+- [Execution Mode 1: Local CLI And Data Lake](#execution-mode-1-local-cli-and-data-lake)
+- [Local Research Funnel](#local-research-funnel)
+- [Local Lake Layout](#local-lake-layout)
+- [Analytical And Portfolio Stack](#analytical-and-portfolio-stack)
+- [Execution Mode 2: Hosted Development Runtime](#execution-mode-2-hosted-development-runtime)
+- [Hosted Authorization Model](#hosted-authorization-model)
+- [Shared Storage And Artifact Reuse](#shared-storage-and-artifact-reuse)
+- [Docker Compose Topology](#docker-compose-topology)
+- [Current Hosted Wiring Status](#current-hosted-wiring-status)
+- [Security Boundaries](#security-boundaries)
+- [Module Catalogue](#module-catalogue)
+- [Dependency Direction](#dependency-direction)
+- [Determinism, Idempotency, And Concurrency](#determinism-idempotency-and-concurrency)
+- [Quality And Release Gates](#quality-and-release-gates)
+- [Where A New Contributor Should Make Changes](#where-a-new-contributor-should-make-changes)
+- [Known Current Limitations](#known-current-limitations)
+- [Documentation Map](#documentation-map)
 - [Update Rules](#update-rules)
 
 ## Purpose
 
-This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund portfolio weights. The architecture should keep instrument discovery, quote ingestion, storage contracts, transformation logic, portfolio evaluation, optimization, and validation gates separated so changes can be tested locally and reviewed safely.
+Founder is a risk-aware ETF and fund research system built around EODHD end-of-day market data. It discovers and filters instruments, ingests and validates market history, computes reusable statistics, compares portfolio construction methods, produces explainable recommendations, and prepares Flatex-oriented trade rows without executing broker orders.
 
-## Module Overview
+This document describes the architecture that exists on `main` now. It deliberately separates:
+
+- code that is the active runtime;
+- code that is an implemented and tested contract or adapter boundary;
+- code that is not yet connected to the active runtime.
+
+That distinction is essential because Founder currently contains both a mature local analytical pipeline and a hosted multi-tenant architecture whose security contracts are further developed than its production runtime wiring.
+
+## Read This First: What Founder Is Today
+
+Founder has two related execution modes.
 
 ```text
-		  secret config / EODHD token
-			   |
-			   v
-		 +--------------------+
-		 | config + http      |
-		 | load settings and  |
-		 | pace API requests  |
-		 +---------+----------+
-			   |
-			   v
-+----------+      +------------------+
-| paths,   |<---->| fetch_all_isins  |
-| schemas, |      | full metadata    |
-| table_io |      | reference        |
-+----+-----+      +--------+---------+
-     |                     |
-     |                     v
-     |            +--------+---------+
-     +----------->| metadata_filter  |
-     |            | metadata         |
-     |            | selections       |
-     |            +--------+---------+
-     |                     |
-     |                     v
-     |            +--------+---------+
-     +----------->| univariate_      |
-     |            | statistics       |
-     |            +--------+---------+
-     |                     |
-     |                     v
-     |            +--------+---------+
-     +----------->| univariate_      |
-     |            | filter           |
-     |            +--------+---------+
-     |                     |
-     |                     v
-     |            +--------+---------+
-     +----------->| bivariate_       |
-		  | statistics       |
-		  +--------+---------+
-			   |
-			   v
-		  +--------+---------+
-		  | evaluation +     |
-		  | portfolio        |
-		  +--------+---------+
-
-	quality + docs_refresh validate and document the whole flow
++-----------------------------------------------------------------------+
+|                         Founder repository                            |
++-----------------------------------------------------------------------+
+|                                                                       |
+|  1. LOCAL ANALYTICAL MODE              2. HOSTED DEVELOPMENT MODE     |
+|                                                                       |
+|  Python CLI                            Browser research workspace      |
+|       |                                      |                         |
+|       v                                      v                         |
+|  File-based lake                       Node Web container              |
+|  Bronze / Silver / Gold                     |                         |
+|       |                                      v                         |
+|       v                                 FastAPI container              |
+|  Statistics / portfolio                     |                         |
+|  recommendation / CSV                       +--> in-memory API state   |
+|                                             +--> PostgreSQL container  |
+|                                                  exists, but is not    |
+|                                                  the active API store  |
+|                                                                       |
++-----------------------------------------------------------------------+
 ```
 
-`founder.config` owns environment configuration. It loads EODHD settings, request timeouts, retry counts, request spacing, and backoff values without exposing secrets to logs or generated artifacts.
-
-`founder.http` owns EODHD HTTP access. It builds tokenized requests, redacts secrets from errors, spaces requests, retries transient failures, and honors `Retry-After` for rate-limit responses.
-
-`founder.logging` owns uniform module logging. It configures `.logs/founder-YYYY-MM-DD.log`, supports DEBUG verbosity for CLI commands, zips plain logs older than seven days, and deletes zip archives older than one month.
-
-`founder.run_locks` owns per-layer process locks. It serializes Bronze, Silver, and Gold commands per lake root with stable OS locks so standalone commands and fetch-all-quotes runs cannot overlap the same layer.
-
-`founder.__init__` owns the package import surface. It keeps the package importable and exposes the package version without triggering configuration loading, API calls, or lake writes.
-
-`founder.contracts` owns typed cross-module data contracts. It defines validated dataclasses for selection rows, bronze runs, and bronze errors when code needs stronger structure than plain row dictionaries.
-
-`founder.paths` owns lake artifact locations. It keeps Bronze, Silver, and Gold path construction deterministic so modules do not hard-code filesystem layouts.
-
-`founder.schemas` owns dataset contracts. It gives Fetch All ISINs, Metadata Filter, Univariate Statistics, Univariate Filter, Bivariate Statistics, Bronze, Silver, Evaluation, Portfolio, and tests one registry for dataset ownership, schema versions, required fields, and stable sort keys before data moves between layers.
-
-`founder.run_state` owns shared job manifests. It records deterministic job ids, job type, run id, status, input and output paths, row counts, concurrency, resume markers, and redacted error summaries without replacing module-specific compatibility manifests in one step.
-
-`founder.table_io` owns current table serialization. It reads and writes JSON objects, physical Parquet row tables, and review CSVs behind helper functions so storage details stay out of module logic.
-
-`founder.fetch_all_isins` owns full EODHD metadata reference refreshes. It enumerates exchange symbol lists, keeps ISIN-bearing listing metadata, and writes the single reusable all-ISIN source under `lake/reference/all_isins/`.
-
-`founder.metadata_filter` owns metadata-only selections. It reads the all-ISIN reference, applies conjunctive predicates, and writes hash-addressable `isins.parquet` and `manifest.json` selection artifacts. Its public CLI filters are `--where`, `--name-contains`, `--selection-name`, `--root`, and `--debug`; `--where` predicates may use `=`, `!=`, `~`, `>`, `>=`, `<`, and `<=` against the `all_isins` fields `isin`, `exchange`, `code`, `name`, `instrument_type`, `country`, `currency`, `source_exchange`, and `fetched_at`.
-
-`founder.univariate_statistics` owns reusable per-listing statistics from validated quote history.
-
-`founder.univariate_filter` owns metric-based selections. It reads Gold univariate statistics, applies conjunctive predicates, and writes the same selection artifact shape as `metadata_filter`.
-
-`founder.bivariate_statistics` owns pairwise statistics for persisted selections. Pair metrics are computed once per unordered pair, skip duplicate same-ISIN listings by default, and use only the common return-date intersection for each pair.
-
-`founder.statistics_views` owns Selection Statistics Views (PR74): read-only materialization of which cached univariate/bivariate Gold rows belong to a Metadata Filter or Univariate Filter selection. It never recomputes a missing row -- it reports `missing_univariate_listings`/`missing_bivariate_pairs` deterministically and lets the caller decide whether to run `write_univariate_statistics`/`write_bivariate_statistics`. `read_selection_statistics` loads a selection's cached rows without recomputing, raising when the cache is incomplete rather than returning a partial result.
-
-`founder.multivariate_statistics` owns portfolio-level analytics for a selected ISIN membership (PR69). It defaults to the latest ready `univariate_filter` selection, filters Silver quotes to that selection, and writes selected Gold/Evaluation/Portfolio artifacts. `write_multivariate_statistics` runs the deterministic baseline objectives (Equal Weight, grid-based Minimum Variance/Maximum Sharpe/Risk Parity, HRP baseline, Maximum Diversification, efficient frontier, walk-forward backtest, rebalancing, tail risk). It defaults to all visible CPU cores for selected Gold input generation, and cache mode passes the same worker count to univariate and bivariate cache refreshes; `--concurrency` caps worker processes when needed. With `use_selection_statistics_cache=True` (CLI `--use-selection-statistics-cache`, PR75), it first consumes PR74 Selection Statistics Views and PR73 generic Gold caches, fills only missing/stale selected listing and pair deltas, reconstructs selected covariance/correlation inputs from cached rows, and reuses an unchanged portfolio run when its deterministic `portfolio_run_id` manifest and artifacts are complete. `write_production_multivariate_statistics` (PR70) is an additive production-mode entry point that refuses -- rather than silently falling back to a baseline -- when the selection's quote history fails `founder.return_quality.evaluate_quote_quality`'s production data-quality gate, the aligned return matrix is empty, `founder.risk_model.estimate_risk_model`'s diagnostics are not production eligible, a requested `founder.profiles` candidate is infeasible, or a candidate is missing its baseline comparison; on success it writes weight rows for every requested profile via `founder.profiles.write_profile_candidate` with a deterministic `production_adapter_id`. `write_multivariate_recommendation` (PR71) runs the production adapter, then adds `founder.scorecard` walk-forward traceability where a profile's objective is scorecard-compatible (Growth only today) and `founder.stress` sensitivity summaries for every candidate, before comparing all candidates via `founder.recommendation` into one deterministic report; income quality, sustainable income, NAV erosion, and income efficiency always report `unavailable` pending PR62E. `write_multivariate_trading_handoff` (PR72) rejects trade preparation by default unless an explicit `approved_comparison_slot` resolves to an included recommendation candidate, then optionally includes a current-versus-target transition plan, a deterministic `founder.trading` Flatex export, and drift/risk/stale-data monitoring statuses (distribution-cut/NAV-erosion always `unavailable` pending PR62E); it never decides broker execution or alters current positions.
-
-`founder.bronze` owns data loading for the approved universe. It validates canonical rows, builds EODHD symbols, writes bronze plans, archives quote, dividends, and splits payloads, logs non-secret errors, and writes operational coverage manifests. It is designed for unattended cron execution with bounded EODHD parallelism, default concurrency `2`, shared request pacing, `Retry-After` handling, resumable runs, and no overlapping Bronze writes for the same lake root.
-
-`founder.silver` owns Bronze-to-Silver market data builds. It reads archived quote rows, validates schema and merge keys, and writes one Silver quote file per exchange and ISIN without calling EODHD. Silver writes listing files with bounded parallelism and defaults to two worker threads.
-
-`founder.universe_review` owns pre-optimization universe checks. It summarizes missing ISINs, currency exposure, and survivorship-bias warnings so weak inputs are visible before portfolio weights are trusted.
-
-`founder.gold` owns portfolio-ready risk inputs. It builds daily adjusted-close log returns and simple returns, incremental Pearson correlations, online sample covariance rows, correlation edge rows, and per-asset feature rows from validated Silver quote history. Gold processes listings with worker processes across all CPU cores visible to the system by default, avoids duplicate symmetric pair calculations, accepts explicit concurrency caps, and uses a per-listing Gold run manifest to resume unchanged input snapshots. `founder.return_quality` is the shared price-quality gate that Gold and Univariate Statistics both use: it quarantines non-positive or duplicate-date prices instead of fabricating a zero return, flags stale-price runs and unexplained calendar gaps, and defines the 252/504/756 observation-day minimum-history thresholds used for production-eligibility labeling.
-
-`founder.evaluation` owns portfolio analysis datasets that compare candidate portfolios and optimization techniques. It consumes Gold return inputs and writes aligned return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics today; later evaluation work extends this boundary with efficient-frontier points, walk-forward backtests, rebalancing simulations, and tail-risk diagnostics without calling EODHD. `founder.evaluation_parts` provides internal package-style boundaries while preserving the public `founder.evaluation` import surface. Portfolio wealth simulation compounds each asset's simple return, while Sharpe, Sortino, and other statistical metrics continue to use log returns; asset metrics expose explicit `meets_min_history_252/504/756` and `production_eligible` fields instead of silently treating short histories as production-ready.
-
-`founder.portfolio` owns optimization constraints, target weights, and risk-contribution diagnostics. It validates long-only bounds, minimum and maximum weights, quote-coverage assumptions, and objective settings for constrained minimum variance, risk parity, hierarchical risk parity, maximum diversification, CVaR, and related optimizers. `founder.portfolio_parts` provides internal package-style boundaries while preserving the public `founder.portfolio` import surface. Existing optimizers are deterministic baseline decision-support outputs and include structured diagnostics; they are not execution approval by themselves.
-
-`founder.tax`, `founder.costs`, and `founder.cashflow` own jurisdiction-neutral after-tax, after-cost economics (PR62A; see [CONTRACTS.md](CONTRACTS.md) and `docs/backlog/eu-tax-cost-architecture.md`). `founder.tax` defines immutable tax contracts (`InvestorTaxProfile`, `TaxRuleSetRef`, `TaxEvent`, `TaxCalculationResult`), a `CountryTaxAdapter` protocol, a `CountryTaxRegistry` keyed by ISO country code with every EU member state registered as an explicit `unsupported` placeholder, and a `CostBasisStrategy` protocol for jurisdiction-specific disposal accounting. `founder.costs` defines composable broker/venue/execution/FX/jurisdiction-tax/recurring cost-component contracts and a `CostProfileRegistry`. `founder.cashflow` defines the neutral `CashFlowResult` contract that a future orchestration layer will populate from tax and cost results. None of these modules hard-code a concrete country's tax rate, allowance, or broker fee; every result carries an explicit `exact`/`verified_estimate`/`user_supplied_estimate`/`unavailable`/`unsupported` status (`founder.calculation_status`) so a missing or unverified rule is never silently treated as zero. Country-specific adapters (Austria and beyond) and real cost profiles are follow-up work (PR62B onward) gated on verified, source-attributed rule data.
-
-`founder.profiles` owns versioned Defensive/Balanced/Income/Growth portfolio profile contracts and ensemble candidate construction (PR63). It composes already-merged production optimizers -- True HRP, Equal Risk Contribution, and a new shrinkage Minimum Variance that wires `founder.risk_model`'s Ledoit-Wolf estimator through PR60's solver -- into the initial Balanced ensemble via per-asset median aggregation, normalization, and a final capped-simplex projection. Profile candidates report Equal Weight and Inverse Volatility baseline comparisons, constraint violations, and a deterministic candidate id, and never raise for expected fail-closed conditions (insufficient history, solver non-convergence); they report an explicit `infeasible` status with reasons instead. The Income profile's net-income and NAV-erosion risk limits always report `unavailable` because they require the after-tax cash-flow stack (PR62E), never an invented income figure; group and issuer concentration limits are out of scope until group/issuer metadata is plumbed through the lake.
-
-`founder.scorecard` owns the walk-forward model comparison scorecard (PR64). It runs `founder.evaluation.build_walk_forward_backtest` for multiple candidate objectives on identical pinned windows, rebalance policy, and costs, then reports one deterministically ranked row per candidate: median and adverse-quantile out-of-sample return, median Sharpe/Sortino, historical CVaR, whole-period max drawdown and recovery duration, concentration, and weight stability. Ranking uses median out-of-sample Sharpe across completed splits -- never a single split's or an in-sample return -- with a candidate-id tie-break, and a candidate whose request is infeasible is reported `status="blocked"` rather than crashing the whole comparison. Income quality always reports `unavailable` pending PR62E.
-
-`founder.stress` owns stress, bootstrap, and sensitivity analysis for an already-computed candidate portfolio (PR65). It reuses `founder.evaluation.build_portfolio_returns`/`build_drawdowns` and `founder.portfolio_parts.cvar.historical_var_and_cvar` for return-series-based scenarios (historical stress replay, distribution cuts, seeded block bootstrap) rather than a new simulation engine. Covariance-only scenarios (correlation convergence, covariance perturbation) have no return series to replay, so they report a hand-implemented parametric Gaussian VaR/CVaR from the stressed portfolio volatility instead. The "historical stress period" is always the worst-drawdown window of a requested length detected deterministically within the caller's own data -- never a hardcoded or asserted crash date. `build_sensitivity_summary` aggregates median/worst-case metrics across scenario results for one candidate.
-
-`founder.recommendation` owns the explainable recommendation report (PR66). It compares already-computed `founder.profiles` candidates -- with optional `founder.scorecard`/`founder.stress` traceability and an optional current-position snapshot -- into best-Defensive/best-Diversified/best-Income/best-Total-Return/best-Ensemble slots, propagating (never inventing) exclusion reasons, constraint violations, and data-quality warnings supplied by the caller. Every report carries a fixed no-guaranteed-return disclaimer and `requires_user_approval=True`; income and broker-cost quality always report `unavailable` pending PR62E/PR62D. `render_recommendation_markdown` produces deterministic, HTML-escaped Markdown output.
-
-`founder.trading` owns Flatex trade-preparation exports. It converts approved target weights, latest prices, and canonical listing metadata into broker-ready CSV order rows without calling broker APIs or deciding the optimization objective.
-
-`founder.pipeline` owns deterministic dry-run workflows. It should stitch Fetch All ISINs, selection, quote building, coverage, and statistics inputs together with sample data so users can verify the architecture without credentials.
-
-`founder.cli` owns command-line entry points. It parses user commands and routes them to repeatable workflows such as `founder dry-run` without embedding business logic in the CLI layer.
-
-`founder.quality` owns repository validation commands. It runs the local PR and main gates used by GitHub workflows. The gate topology, required checks, shard layout, coverage threshold, and auto-merge policy are documented in [GATES.md](GATES.md).
-
-`founder.docs_refresh` owns documentation review reporting. It scans tracked documentation files for review markers and writes `docs/docs_refresh_report.json` so docs-heavy changes can verify that documentation stayed current.
-
-`founder.hosted_catalog` owns the PR85 hosted PostgreSQL catalog contract. It defines the user/project/credential/grant/snapshot/analysis/artifact/audit schema, role boundaries, Row-Level Security policies, transaction-local authenticated user setting, and deterministic migration plan. It exposes a minimal connection protocol so migrations can be tested without binding the analytical core to a specific PostgreSQL driver.
-
-`founder.hosted_auth` owns the PR86 Google-only authentication boundary. It builds OIDC authorization requests with
-PKCE, state, and nonce; consumes an injected token exchanger and ID-token verifier; maps Google's stable `sub` claim to
-one internal hosted user; and issues opaque server-side sessions with CSRF validation, expiry, rotation, and
-revocation. It stores no Google tokens or provider secrets after session establishment.
-
-`founder.hosted_credentials` owns the PR87 encrypted EODHD credential vault boundary. It encrypts one active credential
-per user with a random data-encryption key, wraps that key with an externally supplied versioned KEK, binds ciphertext
-to credential id, user id, provider, and schema version as authenticated associated data, returns only masked status
-metadata, and fails closed when tampering, wrong user context, unavailable KEK versions, revoked/deleted state, or
-authentication failure is detected.
-
-`founder.shared_observations` owns the PR88 shared content-addressed market observation store boundary. It normalizes
-provider observations, rejects user/credential/session fields in shared payloads, derives stable observation ids from
-provider, dataset type, listing identity, business key, payload hash, and schema version, publishes immutable Parquet
-segments through temporary files and atomic rename, and records segment manifests without granting user access.
-
-`founder.entitlements` owns the PR89 user data entitlement and immutable snapshot boundary. It publishes user grants
-only from successful provider-backed download runs, resolves user-owned snapshots, keeps new users empty, prevents
-shared-object existence from creating access, and deletes user grants/snapshot pointers without deleting shared
-physical observations still referenced by other users.
-
-`founder.user_ingestion` owns the PR90 user-key-backed EODHD ingestion planning boundary. It builds deterministic
-capability-aware full or gap-refresh plans, unwraps a user's encrypted credential only immediately before a provider
-request, redacts provider errors, rejects partial/rate-limited/empty responses before entitlement publication, writes
-returned observations through the shared store, records usage, and publishes snapshots only for returned observations.
-
-`founder.scoped_inputs` owns the PR91 scoped analytical input boundary. It defines `UserDataSnapshotRef`,
-`SelectionInputRef`, `ScopedMarketInputs`, and `SnapshotReader` ports; hosted readers resolve rows only through
-user-owned immutable snapshots, while local readers preserve explicit-file CLI compatibility.
-
-`founder.artifact_cache` owns the PR92-PR94 shared analytical artifact cache boundary. It builds exact
-content-addressed identities from scoped input hashes, return-artifact dependencies, pair alignment hashes, selection
-definition and membership hashes, return matrices, risk models, constraints, optimizer settings, costs, walk-forward
-windows, stress settings, recommendation templates, and algorithm versions. Physical artifacts are stored once without
-user ids in their cache keys. User-visible return, univariate, and bivariate references require scoped input or
-dependency authorization; portfolio artifacts are served only through user/project-owned analysis-run references whose
-project snapshot pointer is still current.
-
-`compose.yaml`, `apps/api/Dockerfile`, and `apps/web/Dockerfile` own the PR95 hosted development runtime contract.
-PostgreSQL is internal-only with a named persistent volume, API owns shared analytical storage and required secrets,
-and Web exposes only the browser surface without mounting shared data or credential secrets.
-
-`founder.hosted_api` owns the PR96 FastAPI application boundary. It exposes user-scoped session, credential,
-download, dataset, project, selection, analysis, metrics, returns, weights, report, and account-deletion routes;
-all mutating routes require CSRF, write routes accept idempotency keys where retries can duplicate work, and every
-resource lookup resolves through the authenticated user's repository scope rather than through storage paths or shared
-artifact ids.
-
-`apps/web/server.js` owns the PR97 local hosted Web boundary. It serves the Google-authenticated research workspace
-surface for dashboard, credentials, downloads, visible coverage, metadata filtering, univariate and bivariate statistics
-workflow controls, multivariate portfolio analysis, reports, logout, and account deletion. The browser performs no
-financial calculations or authorization decisions; it derives state from hosted API responses, sends CSRF headers on
-mutating requests, uses generated idempotency keys for retry-sensitive actions, and does not persist secrets or tokens in
-browser storage or URLs.
-
-`founder.security_gates` and `docs/security/hosted_security_policy.json` own the PR98 public-repository hardening
-boundary. They validate synthetic secret detection, deny-by-default runtime artifact ignores, fork-safe workflow triggers,
-explicit workflow permissions, full-SHA action pins, protected secret names, and the required scanner inventory before PR
-or merge gates can pass.
-
-`founder.hosted_readiness`, `docs/security/hosted_readiness.json`, and `docs/security/hosted_readiness.md` own the PR99
-hosted release-readiness boundary. They encode licensing, privacy, retention, account deletion, encrypted backup,
-restore, KEK recovery, key rotation, database-role, incident-response, and no-automatic-broker-execution decisions.
-Normal CI validates complete records while local-only mode remains available; release cutover can additionally require
-public-hosted mode to pass every approved, unexpired decision.
-
-`founder.hosted_cutover` owns the PR100 end-to-end hosted cutover proof. It composes the hosted credential vault,
-entitlement snapshots, scoped input reader, artifact cache, Web storage contract, local CLI compatibility contract, and
-readiness gate into one deterministic multi-user scenario. The proof uses no provider, broker, cloud, or production
-secret calls; it validates authorization and idempotency invariants against the same local contracts used by tests.
-
-## Current Shape
-
-- **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
-- **Metadata Filter**: Conjunctive metadata predicates turn the all-ISIN reference into persisted selections.
-- **Bronze**: Raw EODHD API responses and quote ingestion outputs.
-- **Silver**: Normalized ETF quote and instrument datasets with stable identifiers, schema checks, and coverage metadata.
-- **Univariate Statistics**: Portfolio-ready one-listing metrics derived from validated Silver quote inputs.
-- **Univariate Filter**: Conjunctive metric predicates turn univariate statistics into persisted selections.
-- **Bivariate Statistics**: Pairwise covariance and correlation metrics for selected listings, aligned by common return dates.
-- **Evaluation**: Return matrices, asset metrics, portfolio return series, drawdowns, and portfolio metrics consume Gold inputs and stay separate from market-data ingestion. Efficient-frontier points, robust optimization diagnostics, walk-forward backtests, rebalancing simulations, and tail-risk analysis build on that boundary.
-- **Portfolio**: Constraint validation and target weights consume Gold evaluation inputs and stay separate from market-data ingestion.
-- **Trading**: Flatex export helpers turn approved target weights into broker-ready order rows without calling broker APIs.
-- **Validation**: Focused tests first, then the repository quality gates documented in [GATES.md](GATES.md).
-- **Operations**: Long-running jobs can write shared deterministic job manifests alongside compatibility module manifests.
-- **Configuration**: Secrets and local credentials live in ignored local secret files such as `.secrets/eodhd.yaml`, with `.env.local` available for fallback and local tuning.
-- **Logging**: Shared Founder logging writes uniformly formatted `.logs/` files with debug verbosity and retention.
-- **Run locks**: Stable layer locks under `lake/{bronze,silver,gold}/runs/*.lock` prevent duplicate same-layer commands on one host.
-- **Dry run**: `founder dry-run` should execute the mocked pipeline from Fetch All ISINs through statistics inputs without credentials.
-- **Docs refresh**: `founder-docs-refresh` writes a generated documentation review report for tracked repository docs.
-
-## Module Boundary
-
-- **fetch_all_isins module**: owns full EODHD metadata reference refreshes and must not compute statistics or portfolio metrics.
-- **metadata_filter module**: owns metadata-only selection predicates and must not call EODHD or compute price-derived metrics.
-- **univariate_statistics module**: owns one-listing metrics from Silver quotes and must not perform pairwise analysis.
-- **univariate_filter module**: owns metric-only selection predicates and must not call EODHD or recompute statistics.
-- **bivariate_statistics module**: owns pairwise statistics for explicit selections and must align every pair on common return dates.
-- **Bronze module**: owns bronze planning, EOD quotes, additional EODHD listing datasets, Bronze writes, operational coverage, and bronze error logging.
-- **Silver module**: owns Bronze-to-Silver quote builds and analytical Silver quote files.
-- **Universe review module**: owns missing-ISIN, currency-exposure, and survivorship-bias review summaries before optimization consumes a universe.
-- **Evaluation module**: owns portfolio analytics and comparison datasets derived from Gold returns, correlation, and covariance.
-- **Portfolio module**: owns explicit optimization constraints and selected target weights.
-- **Trading module**: owns Flatex CSV order preparation from approved target weights and latest prices.
-- **Contract**: Downstream work consumes persisted selection artifacts; selection modules must not perform fuzzy discovery, and Fetch All ISINs must not bronze full quote history.
-
-## Simple Lake Layout
-
-- **Bronze**: raw or near-raw EODHD quote, dividends, splits, and mapping payloads.
-- **Silver**: normalized candidates, canonical universe, one quote file per exchange and ISIN, and coverage-ready tables.
-- **Gold**: portfolio-ready returns, correlation, covariance, evaluation metrics, frontier points, backtests, risk inputs, and portfolio weights.
-- **Silver operational datasets**: active universe pointer, bronze plans, bronze runs, coverage, errors, shared job manifests, and dataset version metadata stored under focused Silver directories.
-
-## Portfolio Analysis And Evaluation
-
-Portfolio evaluation should be reproducible from existing statistics and risk inputs and should not require Fetch All ISINs, Bronze, EODHD credentials, or broker access. The planned analysis scope is risk-first because the ETF universe is large, return forecasts are noisy, and many UCITS ETF listings are highly correlated.
-
-The evaluation layer computes aligned return matrices, per-ISIN Sharpe, Sortino, and historical daily-loss CVaR metrics, portfolio return series, cumulative wealth, drawdown series, maximum drawdown, drawdown duration, recovery duration, Calmar ratio, ulcer index, efficient-frontier points, frontier weights, walk-forward backtests, rebalancing simulations, and portfolio tail scenario diagnostics from Gold return files.
-
-The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, and maximum diversification today. CVaR-aware target weights remain a tail-risk extension after historical CVaR evaluation. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
-
-Portfolio target-weight outputs include optimizer diagnostics such as optimizer type, status, objective value, covariance condition, missing covariance count, input listing count, and constraint violations. The current optimizer type is `deterministic_baseline`; future solver-backed optimizers must use the same diagnostics contract before any output can be treated as production execution input.
-
-## Hosted Multi-Tenant Architecture
-
-Founder's hosted architecture is PostgreSQL-first and user-key-backed. Google is the only end-user authentication
-provider, PostgreSQL is the primary application catalog, EODHD credentials are envelope-encrypted with an external
-key-encryption key, and shared market observations or derived artifacts never grant access by their physical existence.
-
-The complete hosted trust-boundary baseline, threat model, data classification, prohibited designs, User Data Snapshot
-semantics, artifact reuse semantics, and PR84-PR100 backlog mapping live in
-[docs/hosted_security_architecture.md](docs/hosted_security_architecture.md).
-
-The first hosted implementation boundary is the PostgreSQL application catalog. It creates separate owner, migrator,
-application, and read-only roles; gives the application role no table ownership and no RLS bypass; stores encrypted
-credential material only as ciphertext, nonces, wrapped data keys, key versions, associated data, HMAC fingerprints,
-and masked labels; and records shared market/artifact identities without putting large analytical tables in
-PostgreSQL.
-
-The second hosted implementation boundary is Google-only authentication. OIDC callback handling must validate state,
-nonce, issuer, audience, expiry, and verified email before it creates or updates a user. The Google email may change
-without changing the internal user because the stable Google `sub` claim is the identity key. Browser-visible sessions
-are opaque cookies backed by server-side state; CSRF, expiry, revocation, and rotation are enforced by the server.
-
-The third hosted implementation boundary is the encrypted EODHD credential vault. Plaintext provider keys exist only
-during set, validation, unwrap-for-provider-call, and key rotation operations. Stored rows contain ciphertext, nonce,
-wrapped data key, wrap nonce, KEK version, associated data, keyed fingerprint, and masked label; database dumps and
-shared storage do not contain plaintext or independently reusable credential material.
-
-The fourth hosted implementation boundary is the shared market observation store. Identical normalized observations
-deduplicate physically; appended date ranges and corrected historical payloads create distinct content-addressed
-segments and object identities. Shared object presence is never authorization evidence, and segment payloads must not
-contain user ids, credential ids, session tokens, or credential fingerprints.
-
-The fifth hosted implementation boundary is user data entitlement. A grant can be created only from a successful
-current-user provider run, and every hosted analysis must use an immutable User Data Snapshot rather than object
-existence, date range, listing identity, content hash, or another user's run. Replaying the same successful response for
-one user returns the same logical snapshot without duplicating grants.
-
-The sixth hosted implementation boundary is user-scoped ingestion. A hosted refresh must execute a provider request
-with the current user's active key even when the requested observations already exist physically, because shared object
-deduplication is not authorization. Partial or failed provider responses cannot publish a snapshot.
-
-The seventh hosted implementation boundary is scoped analytical input resolution. Hosted analytics must receive a
-resolved `ScopedMarketInputs` value and must not scan unrestricted global Silver/Gold paths or current-selection
-pointers. The mathematical core receives rows and hashes, not database credentials or broad filesystem access.
-
-The eighth hosted implementation boundary is content-addressed return and univariate artifacts. Hosted cache discovery
-does not grant access: every artifact read must resolve through a user-owned snapshot reference and artifact reference,
-while identical exact inputs across users may reuse one physical artifact.
-
-Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
-paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
-local adapters that are not authorization evidence for hosted users.
-
-## Boundaries
-
-- Discovery, bronze planning, checkpointing, bounded parallelism, layer locking, retries, and completeness reporting belong near ingestion code.
-- Selection and downstream statistics communicate through explicit versioned contracts, not shared mutable state.
-- Dataset names, lake paths, contracts, manifests, CLI choices, and tests must move together.
-- Transformation code should depend on explicit inputs and contracts, not hidden global state.
-- Evaluation and optimization code should consume Gold return, correlation, covariance, and metric datasets with explicit constraints, not raw API responses.
-- Trade-preparation code should consume approved weights, prices, and canonical listing metadata; it must not decide the optimization objective.
-- Documentation snapshots must state their review date or be regenerated from source data.
-- Table serialization is isolated behind `founder.table_io` so modules write physical Parquet tables without embedding storage-engine details.
-
-## Validation Boundary
-
-Validation belongs at module boundaries and repository gates. Module-level tests should prove contracts, paths, and side effects close to the owning code. Repository-level commands and GitHub merge policy are documented in [GATES.md](GATES.md), so this architecture document does not repeat the full quality-gate checklist.
+### Current-state summary
+
+| Area | Status on `main` | What that means |
+| --- | --- | --- |
+| Local CLI research pipeline | Active | The primary end-to-end analytical implementation uses deterministic files under `lake/`. |
+| Bronze, Silver, and Gold storage | Active | Parquet and JSON artifacts are the local source of truth. |
+| Portfolio, backtest, stress, recommendation, and Flatex export logic | Active | These are Python library and CLI workflows; they do not execute broker orders. |
+| Docker Compose topology | Active development runtime | PostgreSQL, API, and Web containers start with health checks and hardened mounts. |
+| Hosted FastAPI route surface | Active local-development API | It currently uses deterministic in-memory repositories and development request headers. |
+| Hosted browser workspace | Active local-development UI | It is served by `apps/web/server.js`, not Next.js or React. |
+| PostgreSQL schema, roles, migrations, and RLS | Implemented contract | `founder.hosted_catalog` defines and tests them, but the active FastAPI state is not yet backed by PostgreSQL. |
+| Google OIDC and server-side sessions | Implemented contract | `founder.hosted_auth` is tested, but it is not yet connected to the active Web/API request flow. |
+| Encrypted EODHD credential vault | Implemented contract and local adapter | The API uses a deterministic in-memory development vault, not a production secret-manager-backed repository. |
+| Shared observations, entitlements, scoped inputs, and artifact cache | Implemented contracts and proofs | They are tested independently and by the hosted cutover proof, but are not fully connected to the active API runtime. |
+| Public production service | Not equivalent to current Compose runtime | Security/readiness gates and a deterministic cutover proof exist; live production adapters still require integration. |
+
+A new contributor should therefore avoid two common mistakes:
+
+1. Do not treat the local lake as a multi-user authorization mechanism.
+2. Do not treat the presence of PostgreSQL and Google/OIDC contracts as proof that the active API already uses them.
+
+## System At A Glance
+
+```text
+                                      EODHD
+                                        |
+                    +-------------------+-------------------+
+                    |                                       |
+                    v                                       v
+          LOCAL CONFIG + HTTP                    HOSTED CREDENTIAL CONTRACT
+                    |                             + USER INGESTION CONTRACT
+                    v                                       |
+       +--------------------------+                          v
+       | Local discovery and lake |                SHARED OBSERVATION CONTRACT
+       +--------------------------+                          |
+                    |                                       v
+                    v                              USER ENTITLEMENT SNAPSHOT
+       REFERENCE -> BRONZE -> SILVER                          |
+                    |                                       v
+                    v                               SCOPED MARKET INPUTS
+          UNIVARIATE STATISTICS                              |
+                    |                                       v
+                    v                              CONTENT-ADDRESSED ARTIFACTS
+          UNIVARIATE FILTER                                  |
+                    |                                       v
+                    v                               USER-OWNED ANALYSIS RUN
+          BIVARIATE STATISTICS                               |
+                    |                                       v
+                    +-------------------+-------------------+
+                                        |
+                                        v
+                         MULTIVARIATE / PORTFOLIO CORE
+                                        |
+                 +----------------------+----------------------+
+                 |                      |                      |
+                 v                      v                      v
+             SCORECARD               STRESS             PROFILE CANDIDATES
+                 +----------------------+----------------------+
+                                        |
+                                        v
+                                RECOMMENDATION
+                                        |
+                                        v
+                         FLATEX TRADE PREPARATION CSV
+                              no broker API execution
+```
+
+The mathematical core is shared conceptually by both modes. The local mode supplies explicit files. The hosted architecture is designed to supply already-authorized immutable rows. Hosted authorization must remain outside the mathematical functions.
+
+## Repository Map
+
+```text
+founder/
+|
+|-- apps/
+|   |-- api/
+|   |   `-- Dockerfile              API container image
+|   `-- web/
+|       |-- Dockerfile              Web container image
+|       |-- package.json            Minimal Node package
+|       `-- server.js               Current browser workspace and client code
+|
+|-- src/founder/
+|   |-- local pipeline modules      discovery, lake, statistics, portfolio
+|   |-- hosted_* modules            hosted contracts, API, readiness, cutover
+|   |-- portfolio_parts/            internal optimizer implementations
+|   |-- evaluation_parts/           internal evaluation implementations
+|   `-- cli.py                      local command-line entry point
+|
+|-- tests/                          unit, integration, security, and governance tests
+|-- docs/
+|   |-- hosted_security_architecture.md
+|   |-- security/                   machine-readable hosted policy/readiness records
+|   `-- backlog/                    detailed future-work design documents
+|
+|-- compose.yaml                    development topology
+|-- compose.prod.example.yaml       production hardening example
+|-- pyproject.toml                  package, dependencies, scripts, import rules
+|-- CONTRACTS.md                    persisted data and table contracts
+|-- GATES.md                        CI, branch protection, and quality gates
+|-- DECISIONS.md                    durable architecture decisions
+|-- RISKS.md                        active risks and mitigations
+|-- BACKLOG.md                      PR-sized implementation plan and history
+`-- AGENTS.md                       contributor and coding-agent workflow
+```
+
+The Python package targets Python 3.14. Core runtime dependencies are intentionally small: PyArrow for physical tables, FastAPI/Uvicorn for the hosted API, Psycopg for PostgreSQL integration, and Cryptography for hosted credential encryption.
+
+## Execution Mode 1: Local CLI And Data Lake
+
+The local pipeline is the most complete execution path. It uses explicit commands, deterministic selection artifacts, and a file-based lake.
+
+### CLI boundary
+
+`founder.cli` parses commands and delegates to `founder.workflows`. Business logic should not be added directly to argument parsing.
+
+Current primary commands are:
+
+```text
+founder search
+founder fetch-all-isins
+founder metadata-filter
+founder fetch-all-quotes
+founder univariate-statistics
+founder univariate-filter
+founder bivariate-statistics
+founder multivariate-statistics
+```
+
+The intended research sequence is:
+
+```text
+fetch-all-isins
+      |
+      v
+metadata-filter
+      |
+      v
+fetch-all-quotes
+      |
+      v
+Bronze + Silver quote build
+      |
+      v
+univariate-statistics
+      |
+      v
+univariate-filter
+      |
+      v
+bivariate-statistics
+      |
+      v
+multivariate-statistics
+      |
+      v
+portfolio comparison -> recommendation -> optional Flatex export
+```
+
+### Two discovery paths
+
+Founder currently contains two discovery mechanisms:
+
+```text
+Legacy/local fixture path                 Current live metadata path
+-------------------------                 --------------------------
+founder search                            founder fetch-all-isins
+checked-in CSV/JSON input                 EODHD exchange symbol lists
+        |                                         |
+        v                                         v
+search candidates and                     reference/all_isins
+canonical universe                                 |
+                                                  v
+                                           metadata-filter
+```
+
+`founder.search` remains useful for deterministic samples and compatibility. `founder.fetch_all_isins` is the live EODHD metadata reference path used by the newer five-stage ISIN workflow.
+
+## Local Research Funnel
+
+### 1. Instrument reference
+
+`founder.fetch_all_isins` enumerates EODHD exchange symbol lists and stores ISIN-bearing listing metadata once under the reference area. This stage does not download full quote history and does not compute financial statistics.
+
+### 2. Metadata selection
+
+`founder.metadata_filter` reads the all-ISIN reference and applies conjunctive predicates. It writes an immutable selection directory containing:
+
+```text
+isins.parquet
+manifest.json
+```
+
+A local convenience pointer identifies the latest selection. That pointer is acceptable for single-user local mode but is never authorization evidence for hosted mode.
+
+### 3. Quote ingestion
+
+`founder.fetch_all_quotes` and `founder.workflows.run_fetch_all_quotes_workflow` read an explicit or latest metadata selection, create a Bronze plan, call EODHD through the shared HTTP client, write quotes and companion raw dividends/splits, rebuild Silver quotes, and update coverage manifests.
+
+The path is deliberately split:
+
+```text
+selection
+    |
+    v
+Bronze plan
+    |
+    v
+EODHD requests
+    |
+    +--> raw quote files
+    +--> raw dividend files
+    +--> raw split files
+    |
+    v
+Silver quote normalization
+    |
+    v
+coverage + gap information
+```
+
+### 4. Univariate statistics
+
+`founder.univariate_statistics` calculates reusable metrics for each selected listing from validated Silver history. `founder.return_quality` is shared with Gold generation and prevents invalid prices from becoming fabricated zero returns.
+
+### 5. Univariate filtering
+
+`founder.univariate_filter` applies metric predicates to already-computed statistics. It does not recalculate statistics. The output is another persisted selection with stable membership and provenance.
+
+### 6. Bivariate statistics
+
+`founder.bivariate_statistics` computes one record per unordered listing pair. It:
+
+- aligns both series on the exact common return dates;
+- avoids duplicate symmetric work;
+- skips duplicate same-ISIN listings by default;
+- uses partitioned/bucketed storage for scale;
+- can process pairs across all visible CPU cores unless a concurrency cap is supplied.
+
+### 7. Selection statistics views
+
+`founder.statistics_views` maps an existing metadata or univariate selection to the generic cached univariate and bivariate rows that belong to it. It never silently computes missing rows or returns an incomplete result as complete.
+
+### 8. Multivariate and portfolio analysis
+
+`founder.multivariate_statistics` has several entry points:
+
+```text
+write_multivariate_statistics
+    deterministic baseline/research path
+
+write_production_multivariate_statistics
+    fail-closed data-quality and risk-model path
+
+write_multivariate_recommendation
+    production candidates + scorecard + stress + explanation
+
+write_multivariate_trading_handoff
+    explicit user-approved recommendation slot -> trade preparation
+```
+
+The browser and hosted API must eventually call these same core boundaries through scoped inputs. They must not reimplement formulas in JavaScript or API route handlers.
+
+## Local Lake Layout
+
+`founder.paths.LakePaths` is the single path-construction authority. Modules must not embed alternative lake layouts.
+
+```text
+lake/
+|
+|-- reference/
+|   `-- all_isins/
+|       |-- all_isins.parquet
+|       `-- manifest.json
+|
+|-- bronze/
+|   |-- quotes/<exchange>/<year>/<isin>.parquet
+|   |-- dividends/<exchange>/<year>/<isin>.parquet
+|   |-- splits/<exchange>/<year>/<isin>.parquet
+|   `-- eodhd/search/run_date=<date>/...
+|
+|-- silver/
+|   |-- quotes/<exchange>/<isin>.parquet
+|   |-- metadata_filter/
+|   |   |-- selection_id=<id>/isins.parquet
+|   |   |-- selection_id=<id>/manifest.json
+|   |   `-- current_selection.json
+|   |-- univariate_filter/
+|   |   |-- selection_id=<id>/isins.parquet
+|   |   |-- selection_id=<id>/manifest.json
+|   |   `-- current_selection.json
+|   |-- plans/bronze_plans/<run>.parquet
+|   |-- coverage/
+|   |-- runs/
+|   `-- search/search_run_id=<id>/...
+|
+|-- gold/
+|   |-- returns/<exchange>/<isin>.parquet
+|   |-- univariate_statistics/<exchange>/<isin>.parquet
+|   |-- bivariate_statistics/version=<v>/bucket=<n>.parquet
+|   |-- correlation_edges/...
+|   |-- covariance/...
+|   |-- features/...
+|   |-- evaluation/
+|   |   |-- return_matrices/
+|   |   |-- asset_metrics/
+|   |   |-- portfolio_returns/
+|   |   |-- drawdowns/
+|   |   |-- portfolio_metrics/
+|   |   |-- frontier_points/
+|   |   |-- frontier_weights/
+|   |   |-- backtests/
+|   |   |-- rebalance_events/
+|   |   `-- tail_risk/
+|   |-- weights/<objective>/...
+|   |-- risk_contributions/<objective>/...
+|   |-- clusters/...
+|   `-- metrics/...
+|
+`-- trading/
+    `-- flatex/<evaluation>-<portfolio>.csv
+```
+
+### Layer semantics
+
+- **Reference** is a reusable instrument catalogue.
+- **Bronze** is raw or near-raw provider material and ingestion provenance.
+- **Silver** is normalized market data, selections, coverage, plans, and operational state.
+- **Gold** is reusable statistics, evaluation inputs, optimizer outputs, and portfolio diagnostics.
+- **Trading** contains explicit preparation exports, never broker execution state.
+
+`founder.table_io` isolates JSON, Parquet, and review-CSV serialization. `founder.schemas` and [CONTRACTS.md](CONTRACTS.md) define the logical row contracts.
+
+## Analytical And Portfolio Stack
+
+The analytical stack is downstream-only. It does not call EODHD.
+
+```text
+Silver quotes
+     |
+     v
+return_quality
+     |
+     +--> valid returns + quality diagnostics
+     |
+     v
+gold / univariate_statistics / bivariate_statistics
+     |
+     v
+aligned return matrix + covariance/correlation inputs
+     |
+     +-------------------+-------------------+
+     |                   |                   |
+     v                   v                   v
+risk_model           evaluation          portfolio solvers
+     |                   |                   |
+     +-------------------+-------------------+
+                         |
+                         v
+                      profiles
+                         |
+              +----------+----------+
+              |                     |
+              v                     v
+           scorecard               stress
+              +----------+----------+
+                         |
+                         v
+                  recommendation
+                         |
+                         v
+              explicit approval boundary
+                         |
+                         v
+                      trading
+```
+
+### Return and quality semantics
+
+- Portfolio wealth compounds simple returns.
+- Statistical metrics can consume log returns where specified.
+- Non-positive prices, duplicate dates, stale runs, and unexplained gaps are reported rather than converted to artificial returns.
+- Production eligibility is explicit and includes observation-history thresholds.
+
+### Risk models
+
+`founder.risk_model` owns covariance estimation and diagnostics. Production-oriented paths can use shrinkage covariance and must report stability/eligibility diagnostics rather than silently accepting any matrix.
+
+### Portfolio methods currently represented
+
+The package includes or composes:
+
+- Equal Weight;
+- Inverse Volatility;
+- constrained Minimum Variance;
+- Maximum Sharpe as a comparison method;
+- target-return Minimum Variance;
+- Risk Parity and Equal Risk Contribution;
+- true Hierarchical Risk Parity;
+- Maximum Diversification;
+- historical Minimum CVaR;
+- profile-specific and ensemble candidates.
+
+`founder.portfolio` is the public optimization surface. `founder.portfolio_parts` contains internal solver-focused modules. Solver diagnostics and constraint validation are part of the result contract.
+
+### Profiles
+
+`founder.profiles` defines versioned Defensive, Balanced, Income, and Growth contracts. The Balanced candidate combines True HRP, Equal Risk Contribution, and shrinkage Minimum Variance and then projects the aggregate weights back onto the permitted simplex.
+
+Expected fail-closed conditions are represented as `infeasible` candidates with reasons, not unexplained crashes or silently relaxed constraints.
+
+### Validation and recommendation
+
+- `founder.scorecard` compares candidates on identical walk-forward windows and costs.
+- Ranking uses out-of-sample evidence, not highest in-sample return.
+- `founder.stress` provides deterministic historical, bootstrap, distribution-cut, correlation, and covariance scenarios.
+- `founder.recommendation` explains inclusion, exclusion, constraints, disadvantages, and uncertainty.
+- Every recommendation requires user approval and includes a no-guaranteed-return disclaimer.
+
+### Tax, costs, and cash flow
+
+`founder.tax`, `founder.costs`, `founder.cashflow`, and `founder.calculation_status` currently provide jurisdiction-neutral contracts and registries.
+
+They do **not** yet provide verified production tax rates or real broker fee schedules. EU countries are known registry entries but remain explicitly unsupported until sourced and reviewed adapters are added. Missing values must remain `unavailable` or `unsupported`; they must never silently become zero.
+
+### Trading boundary
+
+`founder.trading` converts approved target weights and current prices into deterministic Flatex-oriented rows. It does not:
+
+- choose the portfolio objective;
+- approve a recommendation;
+- authenticate with Flatex;
+- place, modify, or cancel orders.
+
+## Execution Mode 2: Hosted Development Runtime
+
+The hosted architecture is designed around user-key-backed entitlements and shared physical data. Its complete threat model and prohibited designs are documented in [docs/hosted_security_architecture.md](docs/hosted_security_architecture.md).
+
+### Intended hosted trust boundaries
+
+```text
+                            Internet / user device
+                                      |
+                                      v
++---------------------+       +---------------------+
+| Browser             | HTTPS | Web app             |
+| no provider secrets +------>| presentation only   |
++---------------------+       +----------+----------+
+                                         |
+                                         | API requests
+                                         v
+                              +----------+----------+
+                              | API service         |
+                              | auth + orchestration|
+                              +----+------------+---+
+                                   |            |
+                         SQL + RLS |            | authorized object access
+                                   v            v
+                         +---------+---+   +----+----------------+
+                         | PostgreSQL |   | Shared immutable     |
+                         | catalogue  |   | observations/artifacts|
+                         +---------+-+   +----+----------------+
+                                   |          ^
+                                   |          |
+                                   |          | provider results
+                                   |          |
+                                   v          |
+                         +---------+----------+--+
+                         | External services     |
+                         | Google OIDC + EODHD   |
+                         +-----------------------+
+
+Host secret files / secret manager
+        |
+        +--> PostgreSQL password
+        +--> session secret
+        +--> EODHD key-encryption key
+        `--> Google client secret
+```
+
+The key rule is:
+
+> Physical storage and cache hits can reduce duplicate writes and calculations, but they can never create user visibility.
+
+## Hosted Authorization Model
+
+The hosted data model follows an explicit chain.
+
+```text
+Google subject
+     |
+     v
+internal user
+     |
+     v
+encrypted EODHD credential
+     |
+     v
+successful provider-backed download run
+     |
+     v
+user grants to exact returned observation revisions
+     |
+     v
+immutable User Data Snapshot
+     |
+     v
+user-owned project + persisted selection
+     |
+     v
+ScopedMarketInputs
+     |
+     v
+return / univariate / bivariate / portfolio artifacts
+     |
+     v
+user-owned analysis run reference
+     |
+     v
+API response
+```
+
+### Why snapshots exist
+
+A User Data Snapshot freezes the exact observation ids and revisions a user was authorized to see at one point in time. It prevents later downloads by another user from changing an old analysis.
+
+A new user begins with no grants. An object already present in shared storage does not become visible until that user's own successful EODHD request returned it.
+
+### Scoped analytical inputs
+
+`founder.scoped_inputs` defines:
+
+- `UserDataSnapshotRef`;
+- `SelectionInputRef`;
+- `ScopedMarketInputs`;
+- `SnapshotReader` ports;
+- a hosted entitlement-aware reader;
+- a local file adapter.
+
+The mathematical core receives rows and deterministic hashes. It does not receive database credentials, an unrestricted lake root, or permission to broaden the input universe.
+
+## Shared Storage And Artifact Reuse
+
+### Shared market observations
+
+`founder.shared_observations` normalizes provider rows and derives stable content identities. Identical normalized observations can be stored once. Corrections create new revisions rather than overwriting the historical identity.
+
+Shared payloads must not contain:
+
+- user ids;
+- session tokens;
+- credential ids;
+- credential fingerprints;
+- plaintext provider keys.
+
+### Shared analytical artifacts
+
+`founder.artifact_cache` separates physical reuse from user visibility.
+
+```text
+Exact inputs + parameters + algorithm versions
+                    |
+                    v
+          content-addressed artifact id
+                    |
+           +--------+--------+
+           |                 |
+           v                 v
+ one physical artifact   dependency closure
+           |                 |
+           +--------+--------+
+                    |
+                    v
+       authorized user/project/run reference
+                    |
+                    v
+               API visibility
+```
+
+Physical cache keys exclude `user_id`. Authorization references include user, project, snapshot, and run context.
+
+Return and univariate keys include exact snapshot hashes, date windows, parameters, quality-policy versions, and algorithm versions. Pair keys additionally include both return artifacts and the exact common-date alignment hash. Portfolio keys include selection membership, return matrix, risk model, constraints, costs, walk-forward windows, stress settings, recommendation template, and algorithm versions.
+
+A direct artifact id or filesystem path is never sufficient authorization.
+
+## Docker Compose Topology
+
+`compose.yaml` starts three services and two named volumes.
+
+```text
+                    founder-public network
+
+Browser
+   |
+   | :3000
+   v
++------------------+        :8000        +------------------+
+| web              +-------------------->| api              |
+| Node server.js   |                     | Uvicorn/FastAPI  |
+| no secrets       |                     | API secrets      |
+| no data volume   |                     | shared-data vol  |
++------------------+                     +---------+--------+
+                                                  |
+                                                  | founder-internal
+                                                  v
+                                        +---------+--------+
+                                        | postgres         |
+                                        | PostgreSQL 17    |
+                                        | internal only    |
+                                        | postgres volume  |
+                                        +------------------+
+
+Named volumes:
+  founder-postgres-data
+  founder-shared-data
+```
+
+### Container hardening already present
+
+- non-root API and Web images;
+- read-only root filesystems where configured;
+- writable temporary directories through `tmpfs`;
+- `no-new-privileges`;
+- all Linux capabilities dropped;
+- service health checks and startup ordering;
+- PostgreSQL not published to the host by default;
+- external secret file paths supplied through Docker secrets;
+- explicit CPU and memory limits.
+
+### Secret ownership
+
+```text
+postgres_password  -> PostgreSQL only
+session_secret     -> API only
+eodhd_kek          -> API only
+google_client_secret -> API only
+
+Web receives none of these secrets.
+```
+
+## Current Hosted Wiring Status
+
+This section is the most important description of the actual hosted runtime.
+
+### Web container: active
+
+`apps/web/server.js` is a dependency-free Node HTTP server. It renders a responsive HTML/CSS/JavaScript research workspace containing:
+
+- session status;
+- credential entry and deletion;
+- download planning and submission;
+- visible coverage;
+- metadata filter controls;
+- univariate, bivariate, and multivariate workflow controls;
+- portfolio analysis and weights;
+- report loading;
+- logout and account deletion.
+
+It calls the API with cookies, CSRF headers, and generated idempotency keys. It does not store provider keys or tokens in `localStorage` or `sessionStorage`.
+
+It is **not** currently a Next.js or React application.
+
+### API container: active local-development boundary
+
+`founder.hosted_runtime` starts Uvicorn with `founder.hosted_api:app`.
+
+`founder.hosted_api` exposes route groups for:
+
+- health and session status;
+- EODHD credential status/set/delete;
+- download plan/run/status;
+- visible datasets;
+- projects;
+- selections;
+- analyses;
+- metrics, returns, weights, and reports;
+- account deletion.
+
+Mutating routes require CSRF. Retry-sensitive routes accept idempotency keys. User-owned resources are checked against the current API user before they are returned.
+
+However, the active API state is `HostedApiState`, an in-memory repository set intended for deterministic tests and local development. It currently uses:
+
+- request headers such as `X-Founder-User` for development identity;
+- a fixed development CSRF contract;
+- an in-memory credential store and deterministic development KEK;
+- in-memory projects, selections, downloads, analyses, audit events, and idempotency references;
+- deterministic local responses rather than the full local analytical pipeline.
+
+API state is therefore lost when the API process restarts, even though the PostgreSQL and shared-data Docker volumes persist.
+
+### PostgreSQL: running infrastructure plus implemented schema contract
+
+The PostgreSQL container is active in Compose. `founder.hosted_catalog` defines:
+
+- deterministic migrations and checksums;
+- owner, migrator, application, and read-only roles;
+- forced Row-Level Security concepts;
+- transaction-local authenticated user context;
+- tables for users, external identities, sessions, credentials, projects, download runs, market objects, dataset snapshots, user grants, selections, analysis runs, artifacts, artifact inputs, and audit events.
+
+The current FastAPI runtime does **not** yet use PostgreSQL repositories for `HostedApiState`.
+
+### Google OIDC: implemented contract, not active request wiring
+
+`founder.hosted_auth` implements and tests:
+
+- authorization-code flow contracts;
+- PKCE;
+- state and nonce;
+- injected token exchange and ID-token verification;
+- stable Google `sub` identity mapping;
+- opaque server-side sessions;
+- CSRF, expiry, rotation, and revocation.
+
+The current Web/API development path does not yet execute the real Google callback and cookie-session lifecycle. The visible Google Login link is therefore a UI surface, not proof of a live OIDC integration.
+
+### Hosted EODHD ingestion: implemented contract, not active API provider call
+
+`founder.user_ingestion` implements capability-aware plans, credential unwrapping boundaries, provider error redaction, usage accounting, shared observation publication, and snapshot publication rules.
+
+The current API download route uses deterministic local observation identities for development. It is not yet connected to a live EODHD call through `founder.user_ingestion`.
+
+### Entitlements, scoped inputs, and artifacts: implemented and proven, not fully API-wired
+
+`founder.entitlements`, `founder.scoped_inputs`, and `founder.artifact_cache` are exercised by focused tests and by `founder.hosted_cutover`. The cutover proof creates multiple users, overlapping observations, snapshots, scoped inputs, and artifacts; verifies cross-user denial and idempotent reuse; deletes one user's entitlements; and checks browser-storage and local-CLI invariants.
+
+This is a deterministic local proof. It does not call Google, EODHD, a broker, a cloud service, or production secret storage.
+
+### Readiness and security gates: active validation
+
+`founder.security_gates` validates repository and CI hardening from committed policy.
+
+`founder.hosted_readiness` validates versioned licensing, privacy, retention, backup, restore, key rotation, role, incident-response, and broker-execution decisions.
+
+These gates validate evidence and policy. They do not replace missing runtime adapters.
+
+## Security Boundaries
+
+### Credential lifecycle
+
+```text
+provider key entered
+        |
+        v
+bounded plaintext in API process
+        |
+        v
+random data-encryption key
+        |
+        +--> AES-GCM credential ciphertext
+        |
+        v
+versioned external KEK wraps data key
+        |
+        v
+PostgreSQL-compatible encrypted record
+
+External KEK is not stored in Git, PostgreSQL, images, logs, or CI.
+```
+
+`founder.hosted_credentials` binds ciphertext to credential id, user id, provider, and schema version through authenticated associated data. Stored status responses are masked.
+
+### Database boundary
+
+The schema contract separates object ownership from application use. The runtime application role must not own tables and must not receive `BYPASSRLS`. User context is intended to be set transaction-locally before user-scoped queries.
+
+### Browser boundary
+
+The browser is presentation and orchestration only. It must not:
+
+- receive the credential KEK;
+- receive database credentials;
+- mount shared storage;
+- calculate portfolio recommendations independently;
+- authorize artifact access;
+- persist provider or Google tokens in browser storage;
+- infer access from a guessed id or path.
+
+### Shared-store boundary
+
+Shared object existence is an optimization fact, not an authorization fact.
+
+### Trading boundary
+
+No current module automatically executes broker orders. The final action is an export or structured handoff requiring explicit approval.
+
+## Module Catalogue
+
+The catalogue below groups modules by responsibility. Public modules should depend toward the shared infrastructure and analytical core, not back toward CLI or provider orchestration.
+
+### Shared infrastructure
+
+| Module | Responsibility |
+| --- | --- |
+| `founder.__init__` | Import-safe package/version surface. |
+| `founder.config` | Local EODHD configuration, timeouts, retries, spacing, and backoff. |
+| `founder.http` | Tokenized EODHD requests, pacing, retry, `Retry-After`, and redaction. |
+| `founder.logging` | Uniform logs and retention. |
+| `founder.paths` | Deterministic local lake and export paths. |
+| `founder.schemas` | Dataset registry, versions, fields, owners, and sort keys. |
+| `founder.contracts` | Typed cross-module local contracts. |
+| `founder.table_io` | JSON, Parquet, and CSV serialization boundary. |
+| `founder.run_state` | Deterministic job manifests and resume metadata. |
+| `founder.run_locks` | Per-root/per-layer operating-system locks. |
+| `founder.selection_filters` | Shared predicate parsing and comparison semantics. |
+
+### Discovery, selection, and ingestion
+
+| Module | Responsibility |
+| --- | --- |
+| `founder.search` | Deterministic discovery over supplied candidate files and canonical-universe compatibility flow. |
+| `founder.fetch_all_isins` | Live full EODHD metadata reference refresh. |
+| `founder.metadata_filter` | Metadata-only persisted selections. |
+| `founder.bronze` | Provider plans, raw quote/dividend/split writes, resumability, and coverage inputs. |
+| `founder.silver` | Bronze-to-Silver normalized quote files. |
+| `founder.fetch_all_quotes` | Standalone quote-refresh entry point. |
+| `founder.universe_review` | Missing ISIN, currency, duplicate, and survivorship review. |
+| `founder.workflows` | Operational composition behind the CLI. |
+
+### Statistics and data quality
+
+| Module | Responsibility |
+| --- | --- |
+| `founder.return_quality` | Shared price/return validation and production-history labels. |
+| `founder.gold` | Generic returns, covariance, correlation, edges, and feature inputs. |
+| `founder.univariate_statistics` | Per-listing statistics. |
+| `founder.univariate_filter` | Metric-based persisted selections. |
+| `founder.bivariate_statistics` | Exact common-date pair statistics and bucketed cache. |
+| `founder.statistics_views` | Selection views over reusable statistic caches. |
+| `founder.multivariate_statistics` | Selected portfolio-level orchestration, production adapter, recommendation, and handoff. |
+
+### Evaluation, optimization, and decisions
+
+| Module | Responsibility |
+| --- | --- |
+| `founder.evaluation` / `evaluation_parts` | Return matrices, asset/portfolio metrics, drawdowns, frontier, walk-forward, rebalancing, and tail-risk evaluation. |
+| `founder.risk_model` | Covariance estimators and diagnostics. |
+| `founder.portfolio` / `portfolio_parts` | Constraints, solver-backed objectives, weights, risk contributions, HRP, diversification, and CVaR. |
+| `founder.profiles` | Defensive, Balanced, Income, and Growth candidate contracts. |
+| `founder.scorecard` | Common out-of-sample model comparison. |
+| `founder.stress` | Historical, bootstrap, and covariance sensitivity scenarios. |
+| `founder.recommendation` | Explainable candidate comparison and deterministic report rendering. |
+| `founder.trading` | Flatex-oriented preparation rows and CSV output. |
+| `founder.tax` | Jurisdiction-neutral tax contracts and country registry. |
+| `founder.costs` | Broker/venue/execution/FX/recurring-cost contracts and registry. |
+| `founder.cashflow` | Neutral after-tax/after-cost cash-flow result contract. |
+| `founder.calculation_status` | Exact/estimate/unavailable/unsupported status vocabulary. |
+
+### Hosted boundaries
+
+| Module | Responsibility | Current active wiring |
+| --- | --- | --- |
+| `founder.hosted_catalog` | PostgreSQL schema, roles, RLS, migrations. | Contract implemented; not backing active API state. |
+| `founder.hosted_auth` | Google OIDC and server-side session contracts. | Contract implemented; not wired to active requests. |
+| `founder.hosted_credentials` | Envelope-encrypted EODHD credential lifecycle. | In-memory development adapter used by API. |
+| `founder.shared_observations` | Content-addressed immutable market objects. | Implemented/tested; not active API store. |
+| `founder.entitlements` | Provider-run provenance, grants, and snapshots. | In-memory development implementation used by API/proofs. |
+| `founder.user_ingestion` | User-key-backed provider orchestration. | Implemented/tested; not called by current API download route. |
+| `founder.scoped_inputs` | Hosted/local snapshot readers and authorized inputs. | Implemented/tested; used by proof, not full API analysis path. |
+| `founder.artifact_cache` | Exact reusable derived artifacts plus user references. | In-memory proof implementation; not full API persistence. |
+| `founder.hosted_api` | FastAPI route and local-dev repository boundary. | Active. |
+| `founder.hosted_runtime` | Container health and Uvicorn startup. | Active. |
+| `founder.security_gates` | Repository/CI security-policy validator. | Active in quality gates. |
+| `founder.hosted_readiness` | Hosted release evidence validator. | Active validation. |
+| `founder.hosted_cutover` | Deterministic multi-user integration proof. | Active proof command/tests. |
+
+### Delivery and governance
+
+| Module | Responsibility |
+| --- | --- |
+| `founder.cli` | Local command parsing only. |
+| `founder.pipeline` | Deterministic fixture/dry-run composition used by local verification. |
+| `founder.quality` | Local equivalents of PR and main quality gates. |
+| `founder.architecture_checks` | Import and architecture-boundary validation. |
+| `founder.schema_validation` | Dataset registry consistency validation. |
+| `founder.docs_refresh` | Documentation review-date report generation. |
+
+## Dependency Direction
+
+The preferred dependency direction is:
+
+```text
+CLI / Web / API
+      |
+      v
+workflow and application services
+      |
+      v
+selection / ingestion / analytics / portfolio services
+      |
+      v
+contracts / schemas / paths / table I/O / logging
+```
+
+Forbidden or dangerous directions include:
+
+```text
+evaluation  -X->  EODHD HTTP or Bronze ingestion
+portfolio   -X->  CLI parsing
+shared infrastructure -X-> workflow modules
+Web         -X->  direct PostgreSQL or shared filesystem access
+math core   -X->  database credentials or user authorization decisions
+hosted API  -X->  unrestricted global Silver/Gold scans
+```
+
+Import Linter currently enforces that evaluation does not depend on ingestion modules and that shared infrastructure does not depend on workflow modules.
+
+## Determinism, Idempotency, And Concurrency
+
+### Determinism
+
+Founder uses stable ids and canonical ordering so that unchanged inputs produce unchanged logical outputs. Relevant identities include:
+
+- selection ids from definitions and membership;
+- job/run ids;
+- snapshot hashes;
+- observation ids and segment hashes;
+- return, univariate, pair, and portfolio artifact ids;
+- profile candidate ids;
+- scorecard, stress, and recommendation ids.
+
+Algorithm versions, quality policies, settings, constraints, and date windows belong in identities whenever they can change results.
+
+### Idempotency
+
+Repeated work should either return the existing valid result or calculate only missing deltas.
+
+Examples:
+
+- repeated identical provider rows do not create duplicate physical observations;
+- repeated snapshot publication for one successful response returns the same logical snapshot;
+- repeated statistic requests reuse exact artifacts;
+- API idempotency keys prevent duplicate write operations in local development;
+- repeated Flatex export generation does not create duplicate order rows.
+
+### Local concurrency
+
+```text
+Provider and I/O-heavy stages:
+  Bronze / Silver default concurrency = 2
+
+CPU-heavy statistics stages:
+  Univariate / Bivariate / Multivariate default = visible CPU cores
+
+Safety:
+  per-root module/layer locks prevent overlapping writers
+  deterministic sorting removes worker-completion-order effects
+```
+
+### Hosted concurrency contract
+
+Hosted ingestion is designed to serialize requests per credential, deduplicate shared objects, and publish grants/snapshots atomically only after complete successful responses.
+
+The current in-memory API is suitable for deterministic local testing, not multi-process production concurrency or restart persistence.
+
+## Quality And Release Gates
+
+[GATES.md](GATES.md) is the source of truth. At a high level:
+
+```text
+feature branch or PR
+        |
+        v
++-----------------------------+
+| pr-quality                  |
+| lint + format               |
+| strict typing               |
+| unit/integration shards     |
+| security policy             |
+| commit/PR-title validation  |
++-------------+---------------+
+              |
+              v
+      squash merge to main
+              |
+              v
++-----------------------------+
+| merge-gate                  |
+| full post-merge validation  |
+| combined coverage >= 95%    |
+| architecture checks         |
+| schema validation           |
+| hosted security/readiness   |
++-----------------------------+
+```
+
+Useful local commands include:
+
+```bash
+uv run founder-quality pr
+uv run founder-quality merge
+uv run python -m founder.security_gates
+uv run python -m founder.hosted_readiness
+uv run python -m founder.hosted_cutover
+```
+
+Tests should prove behavior at the module that owns the contract. Broad integration tests should compose public boundaries rather than bypassing them.
+
+## Where A New Contributor Should Make Changes
+
+| Change | Primary files/modules | Also review |
+| --- | --- | --- |
+| Add or change instrument metadata fields | `fetch_all_isins`, `metadata_filter`, `schemas`, `contracts` | `paths`, selection tests, `CONTRACTS.md` |
+| Add an EODHD raw dataset | `bronze`, `http`, `workflows` | Silver normalization, coverage, redaction tests |
+| Change quote normalization | `silver`, `return_quality` | Gold/statistics regression tests |
+| Add a univariate metric | `univariate_statistics` or `gold` | schema, filter vocabulary, artifact version |
+| Add a pair metric | `bivariate_statistics` | alignment identity, bucket schema, scale tests |
+| Add an optimizer | `portfolio_parts`, `portfolio` | diagnostics, profiles, evaluation, recommendation |
+| Add a risk estimator | `risk_model` | production eligibility and artifact identity |
+| Change portfolio profiles | `profiles` | scorecard, stress, recommendation, constraints |
+| Add verified country tax logic | `tax` adapter | source references, validity dates, calculation status |
+| Add real broker costs | `costs` profile | sourced schedule, dates, cash-flow composition |
+| Change Flatex export | `trading` | explicit approval and no-execution boundary |
+| Add a hosted endpoint | `hosted_api` | auth, CSRF, idempotency, ownership, redaction tests |
+| Wire PostgreSQL into API | new repository adapters around `hosted_catalog` | RLS transaction context, migrations, restart tests |
+| Wire real Google login | `hosted_auth`, Web/API callback routes | cookie flags, state/nonce, token redaction |
+| Wire hosted EODHD downloads | `user_ingestion`, credentials, shared observations, entitlements | quota, partial failures, snapshot publication |
+| Change current Web UI | `apps/web/server.js` | API contracts, browser-storage security tests |
+| Change persisted paths or rows | `paths`, `schemas`, `table_io`, `CONTRACTS.md` | migrations/compatibility and schema validation |
+| Change CI or merge policy | workflow files, `quality`, `GATES.md` | governance tests and action pinning |
+
+## Known Current Limitations
+
+These are architectural facts, not hidden implementation details:
+
+1. The active hosted API is in-memory and loses state on API restart.
+2. The active hosted API does not yet use the PostgreSQL schema or RLS policies defined in `founder.hosted_catalog`.
+3. The active hosted request path uses development identity headers rather than the implemented Google OIDC/session contracts.
+4. The current Google Login link is not a complete live OAuth callback flow.
+5. The hosted API download route does not yet call EODHD through `founder.user_ingestion`.
+6. The hosted API does not yet persist shared observations, user snapshots, or analytical artifacts to the Compose volumes and PostgreSQL catalogue.
+7. The hosted analysis route surface is a deterministic development boundary and is not yet the complete local analytical engine behind scoped inputs.
+8. The Web application is a Node-rendered workspace, not Next.js/React.
+9. Concrete country tax adapters, verified tax rates, and real Flatex fee profiles are not implemented in the neutral contract layer.
+10. Income-quality, sustainable-income, distribution-cut, and NAV-erosion outputs remain unavailable where their required verified data stack is absent.
+11. Founder prepares trades but does not execute broker orders.
+12. The hosted cutover proof validates contracts with local deterministic adapters; it is not a live external-service deployment test.
+
+Do not remove these distinctions from the documentation until the corresponding active runtime wiring and persistence tests exist.
+
+## Documentation Map
+
+- [README.md](README.md): product orientation and command usage.
+- [ARCHITECTURE.md](ARCHITECTURE.md): current system structure and dependency boundaries.
+- [CONTRACTS.md](CONTRACTS.md): persisted datasets, rows, versions, and paths.
+- [docs/hosted_security_architecture.md](docs/hosted_security_architecture.md): hosted trust model, prohibited designs, and detailed authorization architecture.
+- [GATES.md](GATES.md): quality gates, branch protection, sharding, coverage, and auto-merge.
+- [DECISIONS.md](DECISIONS.md): durable decisions and their rationale.
+- [RISKS.md](RISKS.md): risks, impact, and mitigation status.
+- [BACKLOG.md](BACKLOG.md): active and completed PR-sized work.
+- [AGENTS.md](AGENTS.md): contributor and coding-agent rules.
+- `docs/security/hosted_security_policy.json`: machine-readable public-repository security policy.
+- `docs/security/hosted_readiness.json`: machine-readable hosted readiness evidence.
 
 ## Update Rules
 
-Update this file whenever a change alters one of these items:
+Update this file whenever a change alters any of the following:
 
-- A layer boundary or dependency direction.
-- Dataset ownership, naming, contracts, or lake paths.
-- Validation gates, architecture checks, or required release commands.
-- Local configuration conventions that affect reproducibility.
-- Logging format, retention, or debug behavior.
+- an active runtime adapter or persistence mechanism;
+- the distinction between implemented contracts and active wiring;
+- a module boundary or dependency direction;
+- a CLI command or hosted route group;
+- dataset ownership, naming, schema, or lake paths;
+- Docker services, networks, volumes, health checks, or secret mounts;
+- authentication, authorization, credential, entitlement, snapshot, or artifact semantics;
+- portfolio methods, quality gates, recommendation logic, or trade-preparation boundaries;
+- concurrency, idempotency, restart, backup, or restore behavior;
+- quality gates, architecture checks, or required release commands.
 
-Before merging architecture changes, update `RISKS.md`, `DECISIONS.md`, and `BACKLOG.md` when the change creates, resolves, or reprioritizes work.
+Before merging architecture changes, also update `CONTRACTS.md`, `DECISIONS.md`, `RISKS.md`, `BACKLOG.md`, or hosted security documentation when their source-of-truth statements changed.
