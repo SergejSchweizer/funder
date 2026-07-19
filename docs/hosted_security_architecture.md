@@ -92,6 +92,27 @@ internal user id through the transaction-local `founder.current_user_id` setting
 stores credential ciphertext, nonce, wrapped data key, key version, associated data, HMAC fingerprint, and masked label;
 it must not contain plaintext EODHD keys or large analytical tables.
 
+## Google Authentication Baseline
+
+PR86 introduces the Google-only OIDC and session baseline in `founder.hosted_auth`.
+
+Required OIDC behavior:
+
+- Use authorization-code flow with PKCE S256, state, and nonce.
+- Validate the exact configured redirect URI during token exchange.
+- Verify Google ID-token issuer, audience, expiry, nonce, subject, and verified email before session creation.
+- Use Google's stable `sub` claim as the identity key; email and display name are mutable metadata.
+- Keep optional hosted-domain allowlisting disabled by default.
+
+Required session behavior:
+
+- Issue opaque session and CSRF tokens only after a verified Google callback.
+- Store only HMAC hashes server-side, never browser tokens in plaintext persistence.
+- Enforce HttpOnly, Secure, SameSite cookies at the web/API boundary that consumes these contracts.
+- Reject expired, revoked, missing, replayed, and CSRF-invalid sessions.
+- Permit concurrent sessions for one user while allowing individual session revocation and rotation.
+- Never log or return Google tokens after session establishment.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

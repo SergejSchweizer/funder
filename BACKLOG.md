@@ -172,7 +172,7 @@ Idempotency: Re-applying migrations to the same schema is a no-op; retries do no
 
 Branch: `feat/google-oidc-authentication`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/129.
 
 Priority: P0 authenticated user boundary.
 

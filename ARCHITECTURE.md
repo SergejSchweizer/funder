@@ -140,6 +140,11 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.hosted_catalog` owns the PR85 hosted PostgreSQL catalog contract. It defines the user/project/credential/grant/snapshot/analysis/artifact/audit schema, role boundaries, Row-Level Security policies, transaction-local authenticated user setting, and deterministic migration plan. It exposes a minimal connection protocol so migrations can be tested without binding the analytical core to a specific PostgreSQL driver.
 
+`founder.hosted_auth` owns the PR86 Google-only authentication boundary. It builds OIDC authorization requests with
+PKCE, state, and nonce; consumes an injected token exchanger and ID-token verifier; maps Google's stable `sub` claim to
+one internal hosted user; and issues opaque server-side sessions with CSRF validation, expiry, rotation, and
+revocation. It stores no Google tokens or provider secrets after session establishment.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -207,6 +212,11 @@ application, and read-only roles; gives the application role no table ownership 
 credential material only as ciphertext, nonces, wrapped data keys, key versions, associated data, HMAC fingerprints,
 and masked labels; and records shared market/artifact identities without putting large analytical tables in
 PostgreSQL.
+
+The second hosted implementation boundary is Google-only authentication. OIDC callback handling must validate state,
+nonce, issuer, audience, expiry, and verified email before it creates or updates a user. The Google email may change
+without changing the internal user because the stable Google `sub` claim is the identity key. Browser-visible sessions
+are opaque cookies backed by server-side state; CSRF, expiry, revocation, and rotation are enforced by the server.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
