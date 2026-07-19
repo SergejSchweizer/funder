@@ -669,6 +669,7 @@ def test_docs_refresh_report_tracks_review_lines(tmp_path: Path) -> None:
         "BACKLOG.md",
         "AGENTS.md",
         "CONTRACTS.md",
+        "docs/hosted_security_architecture.md",
     ):
         (tmp_path / name).write_text("# Doc\n\nLast reviewed: 2026-07-12\n", encoding="utf-8")
     (tmp_path / "RISKS.md").write_text("# Risks\n", encoding="utf-8")
@@ -702,4 +703,4 @@ def test_docs_refresh_handles_missing_docs_and_cli(
     main()
 
     assert output.exists()
-    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 7
+    assert build_docs_refresh_report(tmp_path)["missing_review_count"] == 8

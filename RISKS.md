@@ -1,6 +1,6 @@
 # Risks
 
-Last reviewed: 2026-07-14
+Last reviewed: 2026-07-19
 
 ## Table Of Contents
 
@@ -14,6 +14,7 @@ Last reviewed: 2026-07-14
 - [R007. Risk-Aware Weights Can Be Misleading Without Clean Inputs And Evaluation](#r007-risk-aware-weights-can-be-misleading-without-clean-inputs-and-evaluation)
 - [R008. Search And Bronze Contract Drift Can Corrupt The Lake](#r008-search-and-bronze-contract-drift-can-corrupt-the-lake)
 - [R009. Dense Correlation Storage Can Become Unqueryable At Large Universe Size](#r009-dense-correlation-storage-can-become-unqueryable-at-large-universe-size)
+- [R010. Hosted Multi-Tenant Access Can Leak Provider Data Or Credentials](#r010-hosted-multi-tenant-access-can-leak-provider-data-or-credentials)
 - [Update Rules](#update-rules)
 
 This file tracks active operational, data correctness, and architecture risks. Keep it aligned with `AGENTS.md` and project history when commits introduce or retire meaningful risks.
@@ -93,6 +94,19 @@ Status: Active
 Signal: The target universe may reach 150,000 ISINs, which implies billions of possible pair statistics.
 
 Mitigation: Store scalable pair-search outputs as bucketed `gold/correlation_edges` rows with upper-triangle pairs, common-date observation metadata, threshold filtering, and top-k limiting before adding dense matrix or sparse-array storage.
+
+## R010. Hosted Multi-Tenant Access Can Leak Provider Data Or Credentials
+
+Status: Active
+
+Signal: The hosted roadmap adds Google identities, persistent EODHD credentials, shared physical market data, shared
+statistics caches, API/Web surfaces, and public deployment hardening.
+
+Mitigation: Implement PR84-PR100 in order. Keep EODHD credentials envelope-encrypted with an external KEK, enforce
+PostgreSQL Row-Level Security on user-owned data, publish user grants only after successful user-key-backed provider
+requests, pin every analysis to immutable User Data Snapshots, require exact input-hash authorization before reusing
+shared artifacts, and keep public-hosted mode blocked until licensing, privacy, backup, credential, and security gates
+are green.
 
 ## Update Rules
 

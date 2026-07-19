@@ -132,7 +132,7 @@ Priority policy: security and authorization boundaries precede UI work. No endpo
 
 Branch: `docs/hosted-multitenant-security-architecture`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/127.
 
 Priority: P0 governance and security foundation.
 

@@ -1,6 +1,6 @@
 # Founder Goals
 
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-19
 
 ## Purpose
 
@@ -9,6 +9,11 @@ Founder is intended to become a practical portfolio construction and investment 
 The project should help a user move from a broad ETF and fund universe to a transparent, risk-aware, investable portfolio. It should not merely calculate an efficient frontier or rank funds by historical return. It should combine data quality checks, fund analysis, portfolio construction, out-of-sample validation, rebalancing, costs, and human-readable explanations.
 
 The initial personal use case is portfolio construction with UCITS ETFs and exchange-traded funds available through Flatex, using EODHD end-of-day market data. Income-oriented and monthly distributing funds are an important specialization, but the architecture should remain useful for defensive, balanced, growth, and total-return portfolios.
+
+The hosted product goal is multi-tenant but user-key-backed: every user authenticates with Google, stores their own
+encrypted EODHD key, refreshes provider data under their own entitlement, and analyzes only immutable snapshots they
+are authorized to see. Shared storage and shared analytical caches may reduce duplicate computation, but must never
+broaden another user's visible data.
 
 ## Product Vision
 

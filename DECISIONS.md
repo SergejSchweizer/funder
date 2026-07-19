@@ -1,6 +1,6 @@
 # Decisions
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-19
 
 ## Table Of Contents
 
@@ -20,6 +20,7 @@ Last reviewed: 2026-07-13
 - [D013. Store Large Correlation Search As Edge Tables](#d013-store-large-correlation-search-as-edge-tables)
 - [D014. Use Per-Layer Process Locks](#d014-use-per-layer-process-locks)
 - [D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries](#d015-use-dataset-contracts-and-job-manifests-for-refactor-boundaries)
+- [D016. Use PostgreSQL-First User-Key-Backed Hosted Architecture](#d016-use-postgresql-first-user-key-backed-hosted-architecture)
 - [Update Rules](#update-rules)
 
 Record durable technical decisions here. Use short entries with context, decision, consequences, and update triggers.
@@ -211,6 +212,27 @@ Decision: Keep dataset ownership, schema versions, required fields, and stable s
 Consequences: Refactors should route new validation through the registry, write shared job manifests for new long-running jobs, and include optimizer diagnostics whenever target weights are written. Existing path strings, lake table names, public imports, and CLI behavior should remain compatible unless a later decision records an explicit migration.
 
 Update trigger: Revisit if dataset schema versions need migrations, job manifests move to a database-backed scheduler, or production solver-backed optimizers replace deterministic baseline objectives.
+
+## D016. Use PostgreSQL-First User-Key-Backed Hosted Architecture
+
+Date: 2026-07-19
+
+Context: Founder is moving from local portfolio analysis toward a possible hosted product. Hosted mode must support
+multiple users without leaking market data, provider credentials, selections, portfolio artifacts, or reports between
+accounts.
+
+Decision: Use Google-only authentication, PostgreSQL with Row-Level Security as the hosted application catalog,
+envelope-encrypted per-user EODHD credentials with an external KEK, user-key-backed download provenance, immutable User
+Data Snapshots, and shared content-addressed physical stores for market observations and derived artifacts. Physical
+deduplication is allowed only when authorization remains user-owned and input-hash exact.
+
+Consequences: Hosted services must resolve scoped inputs before analysis and must not read unrestricted local lake
+paths. A new user starts with no market-data grants. Shared observations can avoid duplicate physical writes but cannot
+create access without a successful request made with the current user's stored EODHD key. Public-hosted mode stays
+blocked until licensing, privacy, backup, credential, and security readiness gates pass.
+
+Update trigger: Revisit if a second identity provider is added, PostgreSQL is replaced, EODHD licensing changes,
+provider credentials are no longer BYOK, or the hosted authorization model moves away from immutable user snapshots.
 
 ## Update Rules
 

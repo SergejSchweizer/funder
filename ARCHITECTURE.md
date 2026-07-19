@@ -1,6 +1,6 @@
 # Architecture
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-19
 
 ## Table Of Contents
 
@@ -10,6 +10,7 @@ Last reviewed: 2026-07-18
 - [Module Boundary](#module-boundary)
 - [Simple Lake Layout](#simple-lake-layout)
 - [Portfolio Analysis And Evaluation](#portfolio-analysis-and-evaluation)
+- [Hosted Multi-Tenant Architecture](#hosted-multi-tenant-architecture)
 - [Boundaries](#boundaries)
 - [Validation Boundary](#validation-boundary)
 - [Update Rules](#update-rules)
@@ -188,6 +189,20 @@ The evaluation layer computes aligned return matrices, per-ISIN Sharpe, Sortino,
 The portfolio layer compares equal-weight, constrained minimum variance, maximum Sharpe as a comparison objective, target-return minimum variance, risk parity, hierarchical risk parity, and maximum diversification today. CVaR-aware target weights remain a tail-risk extension after historical CVaR evaluation. Constrained minimum variance and risk parity are the first candidates for trusted production weights; maximum Sharpe remains a comparison result until expected-return assumptions are validated out of sample.
 
 Portfolio target-weight outputs include optimizer diagnostics such as optimizer type, status, objective value, covariance condition, missing covariance count, input listing count, and constraint violations. The current optimizer type is `deterministic_baseline`; future solver-backed optimizers must use the same diagnostics contract before any output can be treated as production execution input.
+
+## Hosted Multi-Tenant Architecture
+
+Founder's hosted architecture is PostgreSQL-first and user-key-backed. Google is the only end-user authentication
+provider, PostgreSQL is the primary application catalog, EODHD credentials are envelope-encrypted with an external
+key-encryption key, and shared market observations or derived artifacts never grant access by their physical existence.
+
+The complete hosted trust-boundary baseline, threat model, data classification, prohibited designs, User Data Snapshot
+semantics, artifact reuse semantics, and PR84-PR100 backlog mapping live in
+[docs/hosted_security_architecture.md](docs/hosted_security_architecture.md).
+
+Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
+paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
+local adapters that are not authorization evidence for hosted users.
 
 ## Boundaries
 

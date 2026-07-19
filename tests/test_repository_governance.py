@@ -44,6 +44,26 @@ OPEN_PR_DEPENDENCIES = {
     100: "PR97 and PR99",
 }
 
+HOSTED_REQUIREMENTS_BY_PR = {
+    84: "Architecture decision, threat model, and prohibited designs",
+    85: "PostgreSQL catalog, roles, migrations, and RLS",
+    86: "Google-only OIDC and server-side sessions",
+    87: "Encrypted EODHD credential vault and KEK rotation",
+    88: "Shared content-addressed market observation store",
+    89: "User grants, provenance, and immutable snapshots",
+    90: "User-key-backed ingestion and refresh planning",
+    91: "Scoped analytical input boundary and local adapter compatibility",
+    92: "Content-addressed univariate and return artifact cache",
+    93: "Content-addressed bivariate cache and exact alignment",
+    94: "Content-addressed portfolio, backtest, and report artifacts",
+    95: "Docker Compose hosted development runtime",
+    96: "FastAPI user, credential, download, project, and analysis API",
+    97: "Google-authenticated Web UI and research funnel",
+    98: "Public-repository CI, supply-chain, and deployment hardening",
+    99: "Licensing, privacy, retention, backup, restore, and key-rotation readiness",
+    100: "End-to-end hosted cutover and multi-user proof",
+}
+
 
 def test_open_backlog_stack_uses_typed_branch_paths() -> None:
     backlog = (REPOSITORY_ROOT / "BACKLOG.md").read_text(encoding="utf-8")
@@ -100,6 +120,40 @@ def test_backlog_series_completion_gate_lists_required_main_checks() -> None:
         "hosted-readiness validation",
     ):
         assert required_text in gate
+
+
+def test_hosted_security_architecture_maps_goals_to_active_prs() -> None:
+    architecture = (REPOSITORY_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    decisions = (REPOSITORY_ROOT / "DECISIONS.md").read_text(encoding="utf-8")
+    risks = (REPOSITORY_ROOT / "RISKS.md").read_text(encoding="utf-8")
+    goals = (REPOSITORY_ROOT / "GOALS.md").read_text(encoding="utf-8")
+    hosted = (REPOSITORY_ROOT / "docs/hosted_security_architecture.md").read_text(encoding="utf-8")
+
+    assert "docs/hosted_security_architecture.md" in architecture
+    assert "D016. Use PostgreSQL-First User-Key-Backed Hosted Architecture" in decisions
+    assert "R010. Hosted Multi-Tenant Access Can Leak Provider Data Or Credentials" in risks
+    assert "multi-tenant but user-key-backed" in goals
+
+    for boundary in (
+        "Browser",
+        "Web app",
+        "API service",
+        "PostgreSQL",
+        "External key-encryption key",
+        "Shared immutable store",
+        "EODHD",
+    ):
+        assert boundary in hosted
+
+    for forbidden in (
+        "Plaintext EODHD keys",
+        "global current-selection pointers",
+        "Public-hosted mode",
+    ):
+        assert forbidden in hosted
+
+    for pr_number, requirement in HOSTED_REQUIREMENTS_BY_PR.items():
+        assert f"| {requirement} | PR{pr_number} |" in hosted
 
 
 def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
