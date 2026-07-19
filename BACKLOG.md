@@ -432,7 +432,7 @@ Idempotency: Re-running scans against unchanged source produces the same policy 
 
 Branch: `docs/hosted-readiness-security-gate`.
 
-Git status: in progress. PR: TBD.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/146.
 
 Priority: P0 public-hosting release gate.
 
@@ -452,7 +452,7 @@ Idempotency: Re-running the gate does not mutate production data, rotate keys, o
 
 Branch: `feat/hosted-multitenant-cutover`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P0 final integration and release proof.
 

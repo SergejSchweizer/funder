@@ -206,6 +206,11 @@ restore, KEK recovery, key rotation, database-role, incident-response, and no-au
 Normal CI validates complete records while local-only mode remains available; release cutover can additionally require
 public-hosted mode to pass every approved, unexpired decision.
 
+`founder.hosted_cutover` owns the PR100 end-to-end hosted cutover proof. It composes the hosted credential vault,
+entitlement snapshots, scoped input reader, artifact cache, Web storage contract, local CLI compatibility contract, and
+readiness gate into one deterministic multi-user scenario. The proof uses no provider, broker, cloud, or production
+secret calls; it validates authorization and idempotency invariants against the same local contracts used by tests.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.

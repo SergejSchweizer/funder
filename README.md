@@ -548,6 +548,12 @@ The hosted Web container serves the local research workspace from `apps/web/serv
 
 Hosted public deployment readiness is described by `docs/security/hosted_readiness.json` and `docs/security/hosted_readiness.md`. Normal quality gates require complete readiness records while local-only mode remains available. Public-hosted release cutover must additionally pass `uv run python -m founder.hosted_readiness --require-public-hosted`.
 
+Run the deterministic hosted cutover proof with:
+
+```bash
+uv run python -m founder.hosted_cutover
+```
+
 Install dependencies with:
 
 ```bash
