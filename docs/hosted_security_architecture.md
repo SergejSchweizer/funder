@@ -197,6 +197,21 @@ Required scoped-input behavior:
 - Extra global rows cannot influence analytics unless the user's snapshot and selection authorize them.
 - Local CLI compatibility is preserved through explicit local readers over provided files or rows.
 
+## Return And Univariate Artifact Cache Baseline
+
+PR92 introduces the first shared analytical cache in `founder.artifact_cache`.
+
+Required cache behavior:
+
+- Return artifact ids include listing id, quote snapshot hash, dividend snapshot hash, date window, return parameters,
+  quality-policy version, and algorithm version.
+- Univariate artifact ids include the exact return artifact id, metric parameters, confidence level, quality-policy
+  version, and algorithm version.
+- Physical artifacts are globally deduplicated by exact input hash.
+- User-visible artifact references are separate from physical artifacts.
+- Direct artifact ids or paths are not authorization evidence.
+- A univariate artifact can be created only when the user has a visible reference to its return artifact dependency.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

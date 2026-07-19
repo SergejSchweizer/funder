@@ -170,6 +170,11 @@ returned observations through the shared store, records usage, and publishes sna
 `SelectionInputRef`, `ScopedMarketInputs`, and `SnapshotReader` ports; hosted readers resolve rows only through
 user-owned immutable snapshots, while local readers preserve explicit-file CLI compatibility.
 
+`founder.artifact_cache` owns the PR92 shared return and univariate artifact cache boundary. It builds exact
+content-addressed identities from scoped input hashes, listing/date/dividend/parameter/quality-policy/algorithm
+versions, stores each physical artifact once, and creates user-visible references only after a scoped input or
+dependency reference proves authorization.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -265,6 +270,10 @@ deduplication is not authorization. Partial or failed provider responses cannot 
 The seventh hosted implementation boundary is scoped analytical input resolution. Hosted analytics must receive a
 resolved `ScopedMarketInputs` value and must not scan unrestricted global Silver/Gold paths or current-selection
 pointers. The mathematical core receives rows and hashes, not database credentials or broad filesystem access.
+
+The eighth hosted implementation boundary is content-addressed return and univariate artifacts. Hosted cache discovery
+does not grant access: every artifact read must resolve through a user-owned snapshot reference and artifact reference,
+while identical exact inputs across users may reuse one physical artifact.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit

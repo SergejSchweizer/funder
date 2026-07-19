@@ -292,7 +292,7 @@ Idempotency: Re-resolving unchanged authorized inputs returns the same immutable
 
 Branch: `feat/content-addressed-univariate-cache`.
 
-Git status: not started. PR: TBD.
+Git status: in progress. PR: TBD.
 
 Priority: P1 reusable analytical cache.
 
