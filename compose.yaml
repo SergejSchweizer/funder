@@ -85,6 +85,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    develop:
+      watch:
+        - action: rebuild
+          path: ./apps/web
+        - action: rebuild
+          path: ./apps/web/Dockerfile
+        - action: rebuild
+          path: ./compose.yaml
     restart: unless-stopped
     environment:
       NODE_ENV: development

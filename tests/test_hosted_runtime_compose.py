@@ -57,6 +57,19 @@ def test_web_has_no_shared_data_or_secret_mounts() -> None:
     assert "FOUNDER_API_BASE_URL" in web["environment"]
 
 
+def test_web_compose_develop_watch_rebuilds_local_ui_changes() -> None:
+    services = cast(ComposeMapping, _compose()["services"])
+    web = cast(ComposeMapping, services["web"])
+    develop = cast(ComposeMapping, web["develop"])
+    watch = cast(list[ComposeMapping], develop["watch"])
+
+    assert watch == [
+        {"action": "rebuild", "path": "./apps/web"},
+        {"action": "rebuild", "path": "./apps/web/Dockerfile"},
+        {"action": "rebuild", "path": "./compose.yaml"},
+    ]
+
+
 def test_runtime_secrets_are_external_paths_and_not_build_arguments() -> None:
     compose = _compose()
     secrets = cast(ComposeMapping, compose["secrets"])

@@ -542,14 +542,20 @@ The hosted development runtime is defined in [compose.yaml](compose.yaml). It st
 docker compose --env-file .env.local up --build
 ```
 
-During local UI development, keep a second terminal running:
+During local UI development, start the Web service with Compose watch:
+
+```bash
+docker compose --env-file .env.local up --build --watch web
+```
+
+The Compose watch contract rebuilds and reinstalls the local Web container when `apps/web`, `apps/web/Dockerfile`, or `compose.yaml` changes. If Compose watch is not available, keep a second terminal running:
 
 ```bash
 uv run founder-compose-web-watch
 ```
 
-The watcher tracks `apps/web`, `apps/api`, `src`, `compose.yaml`, `.dockerignore`, `pyproject.toml`, and `uv.lock`.
-Whenever one of those inputs changes, it automatically runs:
+The fallback watcher tracks `apps/web`, `apps/api`, `src`, `compose.yaml`, `.dockerignore`, `pyproject.toml`, and `uv.lock`.
+Whenever one of those inputs changes, it runs:
 
 ```bash
 docker compose --env-file .env.local up --build -d web
