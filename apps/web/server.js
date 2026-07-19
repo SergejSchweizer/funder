@@ -1,4 +1,6 @@
 const http = require("node:http");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
 const { URL } = require("node:url");
 
 if (process.argv.includes("--health")) {
@@ -7,6 +9,17 @@ if (process.argv.includes("--health")) {
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
+const authMode = process.env.FOUNDER_AUTH_MODE || "auto";
+const googleClientId = process.env.FOUNDER_GOOGLE_CLIENT_ID || "";
+const googleRedirectUri =
+  process.env.FOUNDER_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
+const googleAllowedDomain = process.env.FOUNDER_GOOGLE_ALLOWED_DOMAIN || "";
+const googleAuthEndpoint =
+  process.env.FOUNDER_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
+const googleTokenEndpoint =
+  process.env.FOUNDER_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
+const googleJwksUri = process.env.FOUNDER_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
+const googleStateTtlMs = Number.parseInt(process.env.FOUNDER_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
 const localDevUserId = "local-google-dev-user";
 const localDevCsrfToken = "valid-csrf";
 const localDevGoogleEmail = (
@@ -14,6 +27,10 @@ const localDevGoogleEmail = (
 ).toLowerCase();
 const sessionCookieName = "founder_session_user";
 const csrfCookieName = "founder_csrf";
+const emailCookieName = "founder_auth_email";
+const providerCookieName = "founder_auth_provider";
+const pendingGoogleStates = new Map();
+let googleJwksCache = { expiresAt: 0, keys: [] };
 
 const funnelSteps = [
   { id: "data", label: "Data", status: "ready", href: "/data" },
@@ -82,6 +99,137 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function base64Url(buffer) {
+  return Buffer.from(buffer).toString("base64url");
+}
+
+function randomToken(bytes = 32) {
+  return base64Url(crypto.randomBytes(bytes));
+}
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function stableGoogleUserId(subject) {
+  return "google-" + sha256Hex(subject).slice(0, 32);
+}
+
+function localDevAuthEnabled() {
+  if (authMode === "local-dev") return true;
+  return authMode === "auto" && process.env.NODE_ENV === "development" && !googleClientId;
+}
+
+function googleAuthConfigured() {
+  return Boolean(googleClientId && googleRedirectUri);
+}
+
+function readGoogleClientSecret() {
+  if (process.env.FOUNDER_GOOGLE_CLIENT_SECRET) return process.env.FOUNDER_GOOGLE_CLIENT_SECRET;
+  const secretPath = process.env.FOUNDER_GOOGLE_CLIENT_SECRET_FILE;
+  if (!secretPath) return "";
+  return fs.readFileSync(secretPath, "utf8").trim();
+}
+
+function pruneExpiredGoogleStates(now = Date.now()) {
+  for (const [stateHash, pending] of pendingGoogleStates.entries()) {
+    if (pending.expiresAt <= now || pending.consumed) pendingGoogleStates.delete(stateHash);
+  }
+}
+
+function createGoogleAuthRequest() {
+  pruneExpiredGoogleStates();
+  const state = randomToken();
+  const nonce = randomToken();
+  const codeVerifier = randomToken(48);
+  const codeChallenge = base64Url(crypto.createHash("sha256").update(codeVerifier).digest());
+  pendingGoogleStates.set(sha256Hex(state), {
+    codeVerifier,
+    nonce,
+    expiresAt: Date.now() + googleStateTtlMs,
+    consumed: false,
+  });
+  const url = new URL(googleAuthEndpoint);
+  url.searchParams.set("client_id", googleClientId);
+  url.searchParams.set("redirect_uri", googleRedirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid email profile");
+  url.searchParams.set("state", state);
+  url.searchParams.set("nonce", nonce);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  url.searchParams.set("prompt", "select_account");
+  return url.toString();
+}
+
+async function exchangeGoogleCode(code, codeVerifier) {
+  const clientSecret = readGoogleClientSecret();
+  if (!clientSecret) throw new Error("google_client_secret_missing");
+  const body = new URLSearchParams({
+    client_id: googleClientId,
+    client_secret: clientSecret,
+    code,
+    code_verifier: codeVerifier,
+    grant_type: "authorization_code",
+    redirect_uri: googleRedirectUri,
+  });
+  const response = await fetch(googleTokenEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    body,
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.id_token) throw new Error("google_token_exchange_failed");
+  return payload.id_token;
+}
+
+async function googleJwks() {
+  if (googleJwksCache.expiresAt > Date.now() && googleJwksCache.keys.length > 0) {
+    return googleJwksCache.keys;
+  }
+  const response = await fetch(googleJwksUri, { headers: { accept: "application/json" } });
+  const payload = await response.json();
+  if (!response.ok || !Array.isArray(payload.keys)) throw new Error("google_jwks_unavailable");
+  googleJwksCache = { expiresAt: Date.now() + 3600 * 1000, keys: payload.keys };
+  return googleJwksCache.keys;
+}
+
+function jsonPart(value) {
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+}
+
+async function verifyGoogleIdToken(idToken, expectedNonce) {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("invalid_google_id_token");
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const header = jsonPart(encodedHeader);
+  const claims = jsonPart(encodedPayload);
+  if (header.alg !== "RS256" || !header.kid) throw new Error("invalid_google_id_token_algorithm");
+  const keys = await googleJwks();
+  const jwk = keys.find((key) => key.kid === header.kid && key.kty === "RSA");
+  if (!jwk) throw new Error("google_jwk_not_found");
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${encodedHeader}.${encodedPayload}`);
+  verifier.end();
+  const valid = verifier.verify(crypto.createPublicKey({ key: jwk, format: "jwk" }), Buffer.from(encodedSignature, "base64url"));
+  if (!valid) throw new Error("invalid_google_id_token_signature");
+  const now = Math.floor(Date.now() / 1000);
+  if (!["https://accounts.google.com", "accounts.google.com"].includes(claims.iss)) {
+    throw new Error("invalid_google_issuer");
+  }
+  if (claims.aud !== googleClientId) throw new Error("invalid_google_audience");
+  if (!claims.sub) throw new Error("missing_google_subject");
+  if (claims.nonce !== expectedNonce) throw new Error("invalid_google_nonce");
+  if (Number(claims.exp || 0) <= now) throw new Error("expired_google_id_token");
+  if (claims.email_verified !== true && claims.email_verified !== "true") {
+    throw new Error("google_email_unverified");
+  }
+  if (googleAllowedDomain && claims.hd !== googleAllowedDomain) {
+    throw new Error("google_hosted_domain_not_allowed");
+  }
+  return claims;
 }
 
 function navItem(route) {
@@ -684,6 +832,14 @@ async function refreshDatasets() {
   const datasets = await apiRequest(apiRoutes.datasets);
   writeJson("[data-analysis-output]", { datasets });
 }
+function clientUserLabel(session) {
+  if (!session) return "";
+  return String(session.email || session.display_name || session.user_id || "").toLowerCase();
+}
+function clientAuthProviderLabel(session) {
+  if (!session || !session.auth_provider) return "";
+  return String(session.auth_provider).toLowerCase();
+}
 function mountAuthenticatedShell(session) {
   const gate = document.querySelector("[data-auth-gate]");
   const root = document.querySelector("[data-authenticated-root]");
@@ -694,8 +850,8 @@ function mountAuthenticatedShell(session) {
   if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
   const authUser = document.querySelector("[data-auth-user]");
   if (authUser && session) {
-    const label = userLabel(session);
-    const provider = authProviderLabel(session);
+    const label = clientUserLabel(session);
+    const provider = clientAuthProviderLabel(session);
     authUser.textContent = label + (provider ? " · " + provider : "");
   }
   if (gate) gate.hidden = true;
@@ -805,11 +961,16 @@ const server = http.createServer((request, response) => {
     proxyApiRequest(request, response);
     return;
   }
-  if (request.url === "/auth/google/start") {
-    startLocalGoogleLogin(response);
+  const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  if (requestUrl.pathname === "/auth/google/start") {
+    void startGoogleLogin(response);
     return;
   }
-  if (request.url === "/auth/logout") {
+  if (requestUrl.pathname === "/auth/google/callback") {
+    void completeGoogleLogin(requestUrl, response);
+    return;
+  }
+  if (requestUrl.pathname === "/auth/logout") {
     logoutLocalGoogleSession(response);
     return;
   }
@@ -824,10 +985,44 @@ const server = http.createServer((request, response) => {
 server.listen(port, "0.0.0.0");
 
 function cookieHeader(name, value, options = {}) {
-  const parts = [`${name}=${value}`, "Path=/", "SameSite=Lax"];
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "SameSite=Lax"];
   if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
   if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
   return parts.join("; ");
+}
+
+async function startGoogleLogin(response) {
+  try {
+    if (localDevAuthEnabled()) {
+      startLocalGoogleLogin(response);
+      return;
+    }
+    if (!googleAuthConfigured()) throw new Error("google_auth_not_configured");
+    response.writeHead(303, { location: createGoogleAuthRequest() });
+    response.end();
+  } catch (_error) {
+    writeAuthError(response, "google_auth_start_failed");
+  }
+}
+
+async function completeGoogleLogin(callbackUrl, response) {
+  try {
+    const code = callbackUrl.searchParams.get("code");
+    const state = callbackUrl.searchParams.get("state");
+    if (!code || !state) throw new Error("google_callback_missing_code_or_state");
+    const pending = pendingGoogleStates.get(sha256Hex(state));
+    if (!pending || pending.consumed || pending.expiresAt <= Date.now()) {
+      throw new Error("google_callback_invalid_state");
+    }
+    pending.consumed = true;
+    pendingGoogleStates.delete(sha256Hex(state));
+    const idToken = await exchangeGoogleCode(code, pending.codeVerifier);
+    const claims = await verifyGoogleIdToken(idToken, pending.nonce);
+    startGoogleSession(response, claims);
+  } catch (_error) {
+    writeAuthError(response, "google_auth_callback_failed");
+  }
 }
 
 function startLocalGoogleLogin(response) {
@@ -836,6 +1031,23 @@ function startLocalGoogleLogin(response) {
     "set-cookie": [
       cookieHeader(sessionCookieName, localDevUserId, { httpOnly: true, maxAge: 3600 }),
       cookieHeader(csrfCookieName, localDevCsrfToken, { maxAge: 3600 }),
+      cookieHeader(emailCookieName, localDevGoogleEmail, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(providerCookieName, "local-dev-google", { httpOnly: true, maxAge: 3600 }),
+    ],
+  });
+  response.end();
+}
+
+function startGoogleSession(response, claims) {
+  const csrfToken = randomToken();
+  const email = String(claims.email || "").toLowerCase();
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, stableGoogleUserId(claims.sub), { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(csrfCookieName, csrfToken, { maxAge: 3600 }),
+      cookieHeader(emailCookieName, email, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(providerCookieName, "google-oidc", { httpOnly: true, maxAge: 3600 }),
     ],
   });
   response.end();
@@ -847,9 +1059,16 @@ function logoutLocalGoogleSession(response) {
     "set-cookie": [
       cookieHeader(sessionCookieName, "", { httpOnly: true, maxAge: 0 }),
       cookieHeader(csrfCookieName, "", { maxAge: 0 }),
+      cookieHeader(emailCookieName, "", { httpOnly: true, maxAge: 0 }),
+      cookieHeader(providerCookieName, "", { httpOnly: true, maxAge: 0 }),
     ],
   });
   response.end();
+}
+
+function writeAuthError(response, errorCode) {
+  response.writeHead(503, { "content-type": "application/json" });
+  response.end(JSON.stringify({ error: errorCode }));
 }
 
 function parseCookies(cookieHeaderValue) {
@@ -857,20 +1076,20 @@ function parseCookies(cookieHeaderValue) {
   for (const part of String(cookieHeaderValue || "").split(";")) {
     const [rawName, ...rawValueParts] = part.trim().split("=");
     if (!rawName) continue;
-    cookies[rawName] = rawValueParts.join("=");
+    cookies[rawName] = decodeURIComponent(rawValueParts.join("="));
   }
   return cookies;
 }
 
 function sessionFromRequest(request) {
   const cookies = parseCookies(request.headers.cookie);
-  if (cookies[sessionCookieName] !== localDevUserId) return null;
+  if (!cookies[sessionCookieName]) return null;
   return {
     authenticated: true,
-    user_id: localDevUserId,
-    email: localDevGoogleEmail,
-    display_name: localDevGoogleEmail,
-    auth_provider: "local-dev-google",
+    user_id: cookies[sessionCookieName],
+    email: cookies[emailCookieName] || cookies[sessionCookieName],
+    display_name: cookies[emailCookieName] || cookies[sessionCookieName],
+    auth_provider: cookies[providerCookieName] || "unknown",
     csrf_token: cookies[csrfCookieName] || localDevCsrfToken,
   };
 }

@@ -161,7 +161,7 @@ def test_backlog_tracks_real_google_oidc_runtime_pr_before_dashboard_work() -> N
     ]
 
     assert "Branch: `feat/web-google-oidc-runtime-login`." in pr109
-    assert "Git status: not started. PR: TBD." in pr109
+    assert "Git status: in progress. PR: TBD." in pr109
     assert "redirect the browser to Google's account chooser" in pr109
     assert "add `/auth/google/callback`" in pr109
     assert "visible lowercase identity line" in pr109

@@ -158,7 +158,6 @@ def test_web_shell_avoids_browser_secret_persistence_and_url_token_leaks() -> No
     assert "sessionStorage" not in source
     assert "document.cookie" not in source
     assert "access_token" not in source
-    assert "id_token" not in source
     assert "api_token" not in source
 
 
@@ -201,8 +200,8 @@ def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
 def test_web_server_handles_local_google_session_same_origin_before_auth_proxy() -> None:
     source = _web_source()
 
-    assert 'if (request.url === "/auth/google/start")' in source
-    assert 'if (request.url === "/auth/logout")' in source
+    assert 'requestUrl.pathname === "/auth/google/start"' in source
+    assert 'requestUrl.pathname === "/auth/logout"' in source
     assert "startLocalGoogleLogin(response)" in source
     assert "logoutLocalGoogleSession(response)" in source
     assert "function cookieHeader(name, value, options = {})" in source
@@ -213,10 +212,32 @@ def test_web_server_handles_local_google_session_same_origin_before_auth_proxy()
     assert "founder_csrf" in source
     assert "FOUNDER_LOCAL_DEV_GOOGLE_EMAIL" in source
     assert "local-google-dev-user@example.test" in source
-    assert 'auth_provider: "local-dev-google"' in source
-    assert source.index('request.url === "/auth/google/start"') < source.index(
+    assert 'cookieHeader(providerCookieName, "local-dev-google"' in source
+    assert source.index('requestUrl.pathname === "/auth/google/start"') < source.index(
         'request.url.startsWith("/auth/")'
     )
+
+
+def test_web_server_implements_real_google_oidc_runtime_flow() -> None:
+    source = _web_source()
+
+    for expected in (
+        "FOUNDER_AUTH_MODE",
+        "FOUNDER_GOOGLE_CLIENT_ID",
+        "FOUNDER_GOOGLE_REDIRECT_URI",
+        "FOUNDER_GOOGLE_CLIENT_SECRET_FILE",
+        "FOUNDER_GOOGLE_ALLOWED_DOMAIN",
+        "createGoogleAuthRequest()",
+        'url.searchParams.set("prompt", "select_account")',
+        'url.searchParams.set("code_challenge_method", "S256")',
+        'requestUrl.pathname === "/auth/google/callback"',
+        "exchangeGoogleCode(code, pending.codeVerifier)",
+        "verifyGoogleIdToken(idToken, pending.nonce)",
+        'crypto.createPublicKey({ key: jwk, format: "jwk" })',
+        "stableGoogleUserId(claims.sub)",
+        'auth_provider: cookies[providerCookieName] || "unknown"',
+    ):
+        assert expected in source
 
 
 def test_web_shell_binds_authenticated_handlers_once_for_client_or_server_render() -> None:

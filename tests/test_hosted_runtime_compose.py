@@ -48,13 +48,14 @@ def test_compose_exposes_only_api_and_web_development_ports() -> None:
     assert "ports" not in cast(ComposeMapping, services["postgres"])
 
 
-def test_web_has_no_shared_data_or_secret_mounts() -> None:
+def test_web_has_no_shared_data_mount_and_only_google_auth_secret() -> None:
     services = cast(ComposeMapping, _compose()["services"])
     web = cast(ComposeMapping, services["web"])
 
     assert "volumes" not in web
-    assert "secrets" not in web
+    assert web["secrets"] == ["google_client_secret"]
     assert "FOUNDER_API_BASE_URL" in web["environment"]
+    assert "FOUNDER_GOOGLE_CLIENT_SECRET_FILE" in web["environment"]
 
 
 def test_web_compose_develop_watch_rebuilds_local_ui_changes() -> None:
