@@ -134,6 +134,10 @@ def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -
     source = _web_source()
 
     assert 'href="/auth/google/start"' in source
+    assert 'data-action="start-google-login"' in source
+    assert "startGoogleLogin(event)" in source
+    assert 'fetch("/auth/google/start", { credentials: "include", redirect: "follow" })' in source
+    assert 'window.location.assign("/auth/google/start")' in source
     assert 'name="provider_key" type="password"' in source
     assert 'autocomplete="new-password"' in source
     assert "masked_label" not in source

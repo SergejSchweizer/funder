@@ -465,7 +465,7 @@ ${renderStyles()}
     <h1>Sign in to continue</h1>
     <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
     <div class="actions">
-      <a href="/auth/google/start"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
+      <a href="/auth/google/start" data-action="start-google-login"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
     </div>
     <p class="login-panel__status" data-auth-status>Checking session...</p>
   </section>
@@ -618,6 +618,10 @@ function writeJson(selector, value) {
   const target = document.querySelector(selector);
   if (target) target.textContent = JSON.stringify(value, null, 2);
 }
+function setAuthStatus(message) {
+  const status = document.querySelector("[data-auth-status]");
+  if (status) status.textContent = message;
+}
 function parseSymbols(value) {
   return value.split(",").map((symbol) => symbol.trim()).filter(Boolean);
 }
@@ -643,9 +647,28 @@ function mountAuthenticatedShell(session) {
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");
-  const status = document.querySelector("[data-auth-status]");
   if (gate) gate.hidden = false;
-  if (status) status.textContent = "Google login is required before the dashboard is shown.";
+  setAuthStatus("Google login is required before the dashboard is shown.");
+}
+async function startGoogleLogin(event) {
+  event.preventDefault();
+  setAuthStatus("Starting Google login...");
+  try {
+    await fetch("/auth/google/start", { credentials: "include", redirect: "follow" });
+    const session = await apiRequest(apiRoutes.session);
+    if (session && session.authenticated === true) {
+      mountAuthenticatedShell(session);
+      return;
+    }
+  } catch (_error) {
+    window.location.assign("/auth/google/start");
+    return;
+  }
+  setAuthStatus("Google login did not create a session. Try again.");
+}
+function bindLoginGateHandlers() {
+  const loginLink = document.querySelector('[data-action="start-google-login"]');
+  if (loginLink) loginLink.addEventListener("click", startGoogleLogin);
 }
 async function initializeAuthGate() {
   try {
@@ -722,6 +745,7 @@ document.querySelector('[data-action="delete-account"]').addEventListener("click
 });
 }
 window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshDatasets, refreshSession };
+bindLoginGateHandlers();
 initializeAuthGate();
 </script>
 </body>
