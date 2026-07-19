@@ -166,6 +166,10 @@ capability-aware full or gap-refresh plans, unwraps a user's encrypted credentia
 request, redacts provider errors, rejects partial/rate-limited/empty responses before entitlement publication, writes
 returned observations through the shared store, records usage, and publishes snapshots only for returned observations.
 
+`founder.scoped_inputs` owns the PR91 scoped analytical input boundary. It defines `UserDataSnapshotRef`,
+`SelectionInputRef`, `ScopedMarketInputs`, and `SnapshotReader` ports; hosted readers resolve rows only through
+user-owned immutable snapshots, while local readers preserve explicit-file CLI compatibility.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -257,6 +261,10 @@ one user returns the same logical snapshot without duplicating grants.
 The sixth hosted implementation boundary is user-scoped ingestion. A hosted refresh must execute a provider request
 with the current user's active key even when the requested observations already exist physically, because shared object
 deduplication is not authorization. Partial or failed provider responses cannot publish a snapshot.
+
+The seventh hosted implementation boundary is scoped analytical input resolution. Hosted analytics must receive a
+resolved `ScopedMarketInputs` value and must not scan unrestricted global Silver/Gold paths or current-selection
+pointers. The mathematical core receives rows and hashes, not database credentials or broad filesystem access.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit

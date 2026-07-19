@@ -184,6 +184,19 @@ Required ingestion behavior:
   before access is granted.
 - Usage accounting records successful provider requests.
 
+## Scoped Analytical Input Baseline
+
+PR91 introduces scoped analytical input contracts in `founder.scoped_inputs`.
+
+Required scoped-input behavior:
+
+- Hosted analytical workflows receive `ScopedMarketInputs`, not unrestricted lake readers.
+- `UserDataSnapshotRef` binds user id, snapshot id, and snapshot hash.
+- `SelectionInputRef` binds selection id, selection hash, and exact member observation ids.
+- Hosted readers reject selections outside the user-owned snapshot.
+- Extra global rows cannot influence analytics unless the user's snapshot and selection authorize them.
+- Local CLI compatibility is preserved through explicit local readers over provided files or rows.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

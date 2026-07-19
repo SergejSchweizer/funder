@@ -272,7 +272,7 @@ Idempotency: Resuming a run requests only incomplete work, deduplicates shared o
 
 Branch: `refactor/scoped-analytical-inputs`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/134.
 
 Priority: P0 prevention of cross-user analytical leakage.
 
