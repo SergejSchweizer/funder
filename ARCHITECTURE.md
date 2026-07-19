@@ -161,6 +161,11 @@ only from successful provider-backed download runs, resolves user-owned snapshot
 shared-object existence from creating access, and deletes user grants/snapshot pointers without deleting shared
 physical observations still referenced by other users.
 
+`founder.user_ingestion` owns the PR90 user-key-backed EODHD ingestion planning boundary. It builds deterministic
+capability-aware full or gap-refresh plans, unwraps a user's encrypted credential only immediately before a provider
+request, redacts provider errors, rejects partial/rate-limited/empty responses before entitlement publication, writes
+returned observations through the shared store, records usage, and publishes snapshots only for returned observations.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -248,6 +253,10 @@ The fifth hosted implementation boundary is user data entitlement. A grant can b
 current-user provider run, and every hosted analysis must use an immutable User Data Snapshot rather than object
 existence, date range, listing identity, content hash, or another user's run. Replaying the same successful response for
 one user returns the same logical snapshot without duplicating grants.
+
+The sixth hosted implementation boundary is user-scoped ingestion. A hosted refresh must execute a provider request
+with the current user's active key even when the requested observations already exist physically, because shared object
+deduplication is not authorization. Partial or failed provider responses cannot publish a snapshot.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
