@@ -535,8 +535,10 @@ Founder uses two quality gates. [AGENTS.md](AGENTS.md) is the source of truth fo
 
 GitHub Actions runs Lint, Type, Unit, and Integration as independent parallel gates. Unit and
 Integration each run four deterministic file shards, and each shard uses `pytest-xdist` with
-`pytest -n auto`. The final `pr-quality` and `merge-gate` jobs aggregate the gate results so branch
-protection can keep stable required check names.
+`pytest -n auto`. The fast `pr-quality` aggregate is the required pre-merge check and drives
+same-repository auto-merge. The full `merge-gate` aggregate runs after pushes to `main` so coverage
+and heavier repository checks still validate the merged commit without duplicating the full suite on
+every PR update.
 
 ### PR Gate
 
@@ -554,13 +556,13 @@ Create branches as `<type>/<scope>-<short-description>` using lowercase ASCII le
 
 ### Merge Gate
 
-Run this immediately before merging to `main`:
+Run this before a final manual merge candidate, or to reproduce the post-merge `main` gate locally:
 
 ```bash
 uv run founder-quality merge
 ```
 
-The protected merge gate requires all of the following checks to pass before merge:
+The full main gate requires all of the following checks to pass:
 
 - Ruff lint and format checks.
 - Architecture/import-boundary checks.
@@ -570,8 +572,8 @@ The protected merge gate requires all of the following checks to pass before mer
 - Dataset schema-registry validation.
 
 It also validates Conventional Commit subjects and requires a clean tracked working tree. In GitHub
-Actions, coverage is collected per Unit and Integration test shard, combined, and checked against the
-same threshold. The equivalent local coverage command is:
+Actions, this gate runs after `main` is updated; coverage is collected per Unit and Integration test
+shard, combined, and checked against the same threshold. The equivalent local coverage command is:
 
 ```text
 pytest -n auto --cov=founder --cov-report=term-missing --cov-fail-under=95

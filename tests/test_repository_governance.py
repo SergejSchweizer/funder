@@ -156,7 +156,7 @@ def test_hosted_security_architecture_maps_goals_to_active_prs() -> None:
         assert f"| {requirement} | PR{pr_number} |" in hosted
 
 
-def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
+def test_github_quality_workflows_validate_and_use_squash_subject() -> None:
     merge_gate_workflow = (REPOSITORY_ROOT / ".github/workflows/merge-gate.yml").read_text(
         encoding="utf-8"
     )
@@ -184,8 +184,9 @@ def test_github_merge_workflows_validate_and_use_squash_subject() -> None:
     assert "uv run python -m founder.schema_validation" in merge_gate_workflow
     assert "uv run coverage combine coverage-shards" in merge_gate_workflow
     assert "uv run coverage report --fail-under=95" in merge_gate_workflow
-    assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in merge_gate_workflow
-    assert "workflows: [merge-gate]" in merge_workflow
+    assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in pr_workflow
+    assert "pull_request:" not in merge_gate_workflow
+    assert "workflows: [pr-quality]" in merge_workflow
     assert "is still a draft; skipping auto-merge" in merge_workflow
     assert "Invalid squash subject" in merge_workflow
     assert '--squash --delete-branch --subject "$PR_TITLE"' in merge_workflow

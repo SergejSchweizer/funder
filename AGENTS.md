@@ -21,18 +21,18 @@ This file is the workflow reference for coding agents and maintainers. It should
 - Allowed branch path types are `feat`, `fix`, `refactor`, `docs`, and `chore`.
 - Use `feat/` for new behavior, `fix/` for defect correction, `refactor/` for behavior-preserving structural or performance work, `docs/` for documentation-only changes, and `chore/` for build, CI, test-only, style, dependency, or repository-maintenance work.
 - The branch path type must reflect the primary PR purpose. The PR title and final squash subject must use the most precise compatible Conventional Commit type.
-- Every open PR series in `BACKLOG.md` must end with an explicit `Series Completion Gate` that lists the final branch, squash-subject rule, and required `merge-gate` checks.
+- Every open PR series in `BACKLOG.md` must end with an explicit `Series Completion Gate` that lists the final branch, squash-subject rule, required `pr-quality` pre-merge checks, and `merge-gate` post-merge checks.
 - Use `Branch: <type>/<scope>-<short-description>` until a planned branch is created, then keep the exact published branch path in the backlog entry.
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.
 - Update the Git status as work moves through planned, in progress, pushed, merged, or blocked.
-- A PR that has run and passed `merge-gate` counts as approved for merge.
+- A PR that has run and passed `pr-quality` counts as approved for merge.
 - `pr-quality` is the fast branch and PR feedback gate. In GitHub Actions it aggregates independent Lint, Type, Unit, and Integration gates. Unit and Integration run as deterministic Pytest shards using `pytest-xdist` with `pytest -n auto`. Locally, `uv run founder-quality pr` runs the equivalent checks without sharding.
-- `merge-gate` is the required protected-main merge gate. In GitHub Actions it aggregates independent Lint, Type, Unit, and Integration gates. Unit and Integration run as deterministic Pytest coverage shards using `pytest-xdist` with `pytest -n auto`; coverage artifacts are combined before enforcing the threshold. Locally, `uv run founder-quality merge` runs the equivalent checks without sharding and must pass Ruff lint and format checks, architecture/import-boundary checks, Pyright strict type checking, Pytest with at least 95% coverage, and dataset schema-registry validation.
+- `merge-gate` is the full post-merge main validation gate. In GitHub Actions it runs only after a push to `main`, aggregates independent Lint, Type, Unit, and Integration gates, and combines deterministic Pytest coverage shards using `pytest-xdist` with `pytest -n auto` before enforcing the threshold. Locally, `uv run founder-quality merge` runs the equivalent checks without sharding and must pass Ruff lint and format checks, architecture/import-boundary checks, Pyright strict type checking, Pytest with at least 95% coverage, and dataset schema-registry validation.
 - PR titles must follow `type(optional-scope): subject` because the title becomes the squash-merge commit subject.
-- Squash merges must set the final commit subject to the validated PR title; changing the title requires `merge-gate` to pass again.
-- GitHub branch protection should require `merge-gate` and should not require a separate approving review when `merge-gate` has passed.
-- Same-repository PRs with a passing `merge-gate` workflow may be squash-merged automatically and have their branch deleted.
+- Squash merges must set the final commit subject to the validated PR title; changing the title requires `pr-quality` to pass again.
+- GitHub branch protection should require `pr-quality` and should not require a separate approving review when `pr-quality` has passed.
+- Same-repository PRs with a passing `pr-quality` workflow may be squash-merged automatically and have their branch deleted. The full `merge-gate` then validates the resulting `main` commit.
 
 ## Generated Risk Context
 

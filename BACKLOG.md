@@ -474,7 +474,9 @@ Final branch: `feat/hosted-multitenant-cutover`.
 
 Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 are stacked on their declared dependencies and must be restacked after predecessor merges.
 
-Required main merge gate: Ruff lint and format, Pyright strict, Pytest with at least 95% coverage, import-boundary checks, dataset-schema validation, migration tests, PostgreSQL RLS isolation tests, credential cryptography tests, secret-redaction tests, shared-store deduplication tests, snapshot entitlement tests, exact-hash cache tests, API/Web contract tests, fork-safe CI policy checks, backup/restore tests, and hosted-readiness validation.
+Required pre-merge PR gate: Ruff lint and format, Pyright strict, sharded Pytest without coverage, Conventional Commit validation, migration tests, PostgreSQL RLS isolation tests, credential cryptography tests, secret-redaction tests, shared-store deduplication tests, snapshot entitlement tests, exact-hash cache tests, API/Web contract tests, fork-safe CI policy checks, and hosted-readiness validation.
+
+Required post-merge main gate: Ruff lint and format, Pyright strict, Pytest with at least 95% coverage, import-boundary checks, dataset-schema validation, and backup/restore validation for the merged `main` commit.
 
 The series is incomplete while any of these conditions remains true:
 
