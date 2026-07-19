@@ -40,6 +40,19 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
         assert expected in source
 
 
+def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
+    source = _web_source()
+
+    assert "data-auth-gate" in source
+    assert 'id="authenticated-root"' in source
+    assert "data-authenticated-template" in source
+    assert "initializeAuthGate()" in source
+    assert "mountAuthenticatedShell(session)" in source
+    assert "bindAuthenticatedHandlers()" in source
+    assert "Google login is required before the dashboard is shown." in source
+    assert source.index("data-auth-gate") < source.index("data-authenticated-template")
+
+
 def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None:
     source = _web_source()
 
@@ -123,6 +136,7 @@ def test_web_shell_avoids_browser_secret_persistence_and_url_token_leaks() -> No
 def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() -> None:
     source = _web_source()
 
+    assert 'const apiBaseUrl = "/api";' in source
     assert "fetch(apiBaseUrl + path" in source
     assert 'credentials: "include"' in source
     assert '"X-Founder-CSRF"' in source
@@ -140,6 +154,19 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
         "/account",
     ):
         assert route in source
+
+
+def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
+    source = _web_source()
+
+    assert 'request.url.startsWith("/api/")' in source
+    assert "proxyApiRequest(request, response)" in source
+    assert 'request.url.startsWith("/auth/")' in source
+    assert "proxyAuthRequest(request, response)" in source
+    assert "proxyRequestToTarget" in source
+    assert "clientRequest.url.replace" in source
+    assert "apiBaseUrl)" in source
+    assert 'process.env.FOUNDER_API_BASE_URL || "http://api:8000"' in source
 
 
 def test_web_package_remains_local_container_runnable_without_external_calls() -> None:

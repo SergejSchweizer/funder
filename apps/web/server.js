@@ -1,4 +1,5 @@
 const http = require("node:http");
+const { URL } = require("node:url");
 
 if (process.argv.includes("--health")) {
   process.exit(0);
@@ -181,6 +182,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   min-height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+}
+.login-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-page);
+}
+.login-panel {
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+}
+.login-panel__copy {
+  color: var(--muted);
+}
+.login-panel__status {
+  min-height: 20px;
+  color: var(--muted);
+  font-size: var(--meta);
 }
 .sidebar {
   position: sticky;
@@ -428,6 +452,19 @@ function renderAppShell(apiUrl) {
 ${renderStyles()}
 </head>
 <body>
+<div class="login-gate" data-auth-gate>
+  <section class="login-panel" aria-label="Founder login">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
+    <h1>Sign in to continue</h1>
+    <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
+    <div class="actions">
+      <a href="/auth/google/start"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
+    </div>
+    <p class="login-panel__status" data-auth-status>Checking session...</p>
+  </section>
+</div>
+<div id="authenticated-root" data-authenticated-root></div>
+<template id="authenticated-shell-template" data-authenticated-template>
 <div class="app-shell" data-design-system-version="founder-web-shell-v1">
   <aside class="sidebar" aria-label="Founder navigation">
     <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
@@ -535,8 +572,9 @@ ${renderStyles()}
     </div>
   </main>
 </div>
+</template>
 <script>
-const apiBaseUrl = ${JSON.stringify(apiUrl)};
+const apiBaseUrl = "/api";
 const apiRoutes = {
   session: "/session",
   credential: "/credentials/eodhd",
@@ -585,6 +623,36 @@ async function refreshDatasets() {
   const datasets = await apiRequest(apiRoutes.datasets);
   writeJson("[data-analysis-output]", { datasets });
 }
+function mountAuthenticatedShell(session) {
+  const gate = document.querySelector("[data-auth-gate]");
+  const root = document.querySelector("[data-authenticated-root]");
+  const template = document.querySelector("[data-authenticated-template]");
+  if (!root || !template || root.childElementCount > 0) return;
+  root.appendChild(template.content.cloneNode(true));
+  if (gate) gate.hidden = true;
+  writeJson("[data-analysis-output]", { session });
+  bindAuthenticatedHandlers();
+}
+function showLoginGate() {
+  const gate = document.querySelector("[data-auth-gate]");
+  const status = document.querySelector("[data-auth-status]");
+  if (gate) gate.hidden = false;
+  if (status) status.textContent = "Google login is required before the dashboard is shown.";
+}
+async function initializeAuthGate() {
+  try {
+    const session = await apiRequest(apiRoutes.session);
+    if (session && session.authenticated === true) {
+      mountAuthenticatedShell(session);
+      return;
+    }
+  } catch (_error) {
+    showLoginGate();
+    return;
+  }
+  showLoginGate();
+}
+function bindAuthenticatedHandlers() {
 document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -644,7 +712,9 @@ document.querySelector('[data-action="delete-account"]').addEventListener("click
   await apiRequest(apiRoutes.account, { method: "DELETE" });
   writeJson("[data-analysis-output]", { status: "deleted" });
 });
+}
 window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshDatasets, refreshSession };
+initializeAuthGate();
 </script>
 </body>
 </html>`;
@@ -656,10 +726,54 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify({ status: "ok" }));
     return;
   }
+  if (request.url && request.url.startsWith("/api/")) {
+    proxyApiRequest(request, response);
+    return;
+  }
+  if (request.url && request.url.startsWith("/auth/")) {
+    proxyAuthRequest(request, response);
+    return;
+  }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(renderAppShell(apiBaseUrl));
 });
 
 server.listen(port, "0.0.0.0");
 
-module.exports = { designTokens, funnelSteps, renderAppShell, routeSkeletons };
+function proxyApiRequest(clientRequest, clientResponse) {
+  const target = new URL(clientRequest.url.replace(/^\/api/, ""), apiBaseUrl);
+  proxyRequestToTarget(clientRequest, clientResponse, target);
+}
+
+function proxyAuthRequest(clientRequest, clientResponse) {
+  const target = new URL(clientRequest.url, apiBaseUrl);
+  proxyRequestToTarget(clientRequest, clientResponse, target);
+}
+
+function proxyRequestToTarget(clientRequest, clientResponse, target) {
+  const proxyRequest = http.request(
+    target,
+    {
+      method: clientRequest.method,
+      headers: Object.assign({}, clientRequest.headers, { host: target.host }),
+    },
+    (proxyResponse) => {
+      clientResponse.writeHead(proxyResponse.statusCode || 502, proxyResponse.headers);
+      proxyResponse.pipe(clientResponse);
+    }
+  );
+  proxyRequest.on("error", () => {
+    clientResponse.writeHead(502, { "content-type": "application/json" });
+    clientResponse.end(JSON.stringify({ error: "api_unavailable" }));
+  });
+  clientRequest.pipe(proxyRequest);
+}
+
+module.exports = {
+  designTokens,
+  funnelSteps,
+  proxyApiRequest,
+  proxyAuthRequest,
+  renderAppShell,
+  routeSkeletons,
+};
