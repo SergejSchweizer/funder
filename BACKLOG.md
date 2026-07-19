@@ -192,7 +192,7 @@ Idempotency: Repeated valid login for the same Google `sub` updates permitted pr
 
 Branch: `feat/encrypted-eodhd-credential-vault`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/130.
 
 Priority: P0 credential confidentiality.
 

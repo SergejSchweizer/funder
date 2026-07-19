@@ -113,6 +113,27 @@ Required session behavior:
 - Permit concurrent sessions for one user while allowing individual session revocation and rotation.
 - Never log or return Google tokens after session establishment.
 
+## Encrypted EODHD Credential Vault Baseline
+
+PR87 introduces the credential vault baseline in `founder.hosted_credentials`.
+
+Required credential behavior:
+
+- Persist at most one logical active EODHD credential per user.
+- Encrypt provider keys with a random per-credential data-encryption key.
+- Wrap the data-encryption key with a versioned KEK loaded from external runtime secret material.
+- Bind ciphertext to credential id, user id, provider, and schema version as authenticated associated data.
+- Store only ciphertext, nonce, wrapped data key, wrap nonce, KEK version, associated data, HMAC fingerprint, masked
+  label, and lifecycle status.
+- Return only masked client-safe status metadata.
+- Fail closed on wrong user context, tampering, unavailable KEK version, revoked/deleted credentials, or failed
+  authenticated decryption.
+- Support KEK rotation by rewrapping from an authenticated unwrap without requiring provider-key re-entry.
+
+Plaintext provider keys may exist only in bounded process memory during set, validation, unwrap-for-provider-call, and
+rotation. They must never be persisted, logged, returned to clients, or passed to workers that do not perform provider
+access.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:

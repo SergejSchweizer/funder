@@ -145,6 +145,12 @@ PKCE, state, and nonce; consumes an injected token exchanger and ID-token verifi
 one internal hosted user; and issues opaque server-side sessions with CSRF validation, expiry, rotation, and
 revocation. It stores no Google tokens or provider secrets after session establishment.
 
+`founder.hosted_credentials` owns the PR87 encrypted EODHD credential vault boundary. It encrypts one active credential
+per user with a random data-encryption key, wraps that key with an externally supplied versioned KEK, binds ciphertext
+to credential id, user id, provider, and schema version as authenticated associated data, returns only masked status
+metadata, and fails closed when tampering, wrong user context, unavailable KEK versions, revoked/deleted state, or
+authentication failure is detected.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -217,6 +223,11 @@ The second hosted implementation boundary is Google-only authentication. OIDC ca
 nonce, issuer, audience, expiry, and verified email before it creates or updates a user. The Google email may change
 without changing the internal user because the stable Google `sub` claim is the identity key. Browser-visible sessions
 are opaque cookies backed by server-side state; CSRF, expiry, revocation, and rotation are enforced by the server.
+
+The third hosted implementation boundary is the encrypted EODHD credential vault. Plaintext provider keys exist only
+during set, validation, unwrap-for-provider-call, and key rotation operations. Stored rows contain ciphertext, nonce,
+wrapped data key, wrap nonce, KEK version, associated data, keyed fingerprint, and masked label; database dumps and
+shared storage do not contain plaintext or independently reusable credential material.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit
