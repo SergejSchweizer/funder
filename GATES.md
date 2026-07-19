@@ -117,6 +117,13 @@ Release cutover can require the stricter public-hosted readiness mode:
 uv run python -m founder.hosted_readiness --require-public-hosted
 ```
 
+The deterministic hosted cutover proof composes multi-user auth, credentials, entitlements, scoped analytics, artifact
+reuse, Web storage safety, local CLI compatibility, and readiness checks:
+
+```bash
+uv run python -m founder.hosted_cutover
+```
+
 The local pre-commit hook runs this same PR gate before accepting commits.
 
 ## `merge-gate`

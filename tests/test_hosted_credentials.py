@@ -54,8 +54,11 @@ def test_tampering_and_wrong_key_fail_closed() -> None:
     vault.set_credential(user_id="user-1", provider_key="abcd-secret-token-1234")
     record = store.get(user_id="user-1")
     assert record is not None
+    tampered_byte = bytes([record.ciphertext[-1] ^ 1])
     store.upsert(
-        record.__class__(**{**record.__dict__, "ciphertext": record.ciphertext[:-1] + b"x"})
+        record.__class__(
+            **{**record.__dict__, "ciphertext": record.ciphertext[:-1] + tampered_byte}
+        )
     )
 
     with pytest.raises(CredentialVaultError, match="authentication failed"):
