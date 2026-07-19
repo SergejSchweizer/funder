@@ -170,12 +170,13 @@ returned observations through the shared store, records usage, and publishes sna
 `SelectionInputRef`, `ScopedMarketInputs`, and `SnapshotReader` ports; hosted readers resolve rows only through
 user-owned immutable snapshots, while local readers preserve explicit-file CLI compatibility.
 
-`founder.artifact_cache` owns the PR92-PR93 shared analytical artifact cache boundary. It builds exact
-content-addressed identities from scoped input hashes, return-artifact dependencies, pair alignment hashes,
-listing/date/dividend/parameter/quality-policy/minimum-observation/algorithm versions, stores each physical artifact
-once, and creates user-visible references only after a scoped input or dependency reference proves authorization.
-Bivariate artifacts canonicalize unordered pairs, hash the exact common-date aligned return rows including values, and
-fail closed when either return dependency is not visible to the user snapshot.
+`founder.artifact_cache` owns the PR92-PR94 shared analytical artifact cache boundary. It builds exact
+content-addressed identities from scoped input hashes, return-artifact dependencies, pair alignment hashes, selection
+definition and membership hashes, return matrices, risk models, constraints, optimizer settings, costs, walk-forward
+windows, stress settings, recommendation templates, and algorithm versions. Physical artifacts are stored once without
+user ids in their cache keys. User-visible return, univariate, and bivariate references require scoped input or
+dependency authorization; portfolio artifacts are served only through user/project-owned analysis-run references whose
+project snapshot pointer is still current.
 
 ## Current Shape
 

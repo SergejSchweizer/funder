@@ -312,7 +312,7 @@ Idempotency: Concurrent or repeated requests compute or publish one artifact and
 
 Branch: `feat/content-addressed-bivariate-cache`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/136.
+Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/136.
 
 Priority: P1 pair-statistics reuse without leakage.
 
@@ -332,7 +332,7 @@ Idempotency: Repeated overlapping selections reuse existing pair artifacts and c
 
 Branch: `feat/content-addressed-portfolio-artifacts`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/137.
 
 Priority: P1 portfolio-level reuse.
 

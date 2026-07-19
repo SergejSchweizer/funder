@@ -200,7 +200,8 @@ Required scoped-input behavior:
 ## Return And Univariate Artifact Cache Baseline
 
 PR92 introduces the first shared analytical cache in `founder.artifact_cache`; PR93 extends the same authorization
-boundary to bivariate pair artifacts.
+boundary to bivariate pair artifacts; PR94 extends it to portfolio-level downstream artifacts and user-owned analysis
+runs.
 
 Required cache behavior:
 
@@ -218,6 +219,12 @@ Required cache behavior:
   values or newly common dates produce different artifacts.
 - A bivariate artifact can be created only when the user has visible references to both return artifact dependencies.
 - Bucketed pair storage must fail closed when the expected bivariate artifact id is absent from the resolved bucket.
+- Portfolio artifact ids include sorted authorized listing-input artifact ids, selection definition and membership,
+  return matrix, risk model, constraints, optimizer settings, costs, walk-forward windows, stress settings,
+  recommendation template, and algorithm versions.
+- Portfolio physical artifact keys must not include `user_id`, `project_id`, or run ids.
+- Portfolio responses resolve through user/project-owned analysis runs, not direct shared artifact ids.
+- Cross-project run access and stale project snapshot pointers fail closed before a portfolio artifact is returned.
 
 ## Prohibited Designs
 

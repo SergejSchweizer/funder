@@ -16,7 +16,8 @@ class ArtifactCacheError(RuntimeError):
     """Raised when artifact cache access fails closed."""
 
 
-ArtifactKind = Literal["returns", "univariate", "bivariate"]
+ArtifactKind = Literal["returns", "univariate", "bivariate", "portfolio"]
+AnalysisRunStatus = Literal["active", "completed"]
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,52 @@ class BivariateArtifactKey:
 
 
 @dataclass(frozen=True)
+class PortfolioArtifactKey:
+    """Exact multivariate and downstream portfolio artifact identity."""
+
+    listing_input_artifact_ids: tuple[str, ...]
+    selection_definition_hash: str
+    selection_membership_hash: str
+    return_matrix_hash: str
+    risk_model: JsonRow
+    constraints: JsonRow
+    optimizer_settings: JsonRow
+    costs: JsonRow
+    walk_forward_windows: JsonRow
+    stress_settings: JsonRow
+    recommendation_template: str
+    algorithm_versions: JsonRow
+
+    def artifact_id(self) -> str:
+        """Return deterministic portfolio artifact id."""
+
+        return _artifact_id("portfolio", self.as_payload())
+
+    def as_payload(self) -> JsonRow:
+        """Return canonical key payload without user or project identity."""
+
+        return {
+            "listing_input_artifact_ids": list(self.ordered_listing_input_artifact_ids()),
+            "selection_definition_hash": self.selection_definition_hash,
+            "selection_membership_hash": self.selection_membership_hash,
+            "return_matrix_hash": self.return_matrix_hash,
+            "risk_model": self.risk_model,
+            "constraints": self.constraints,
+            "optimizer_settings": self.optimizer_settings,
+            "costs": self.costs,
+            "walk_forward_windows": self.walk_forward_windows,
+            "stress_settings": self.stress_settings,
+            "recommendation_template": self.recommendation_template,
+            "algorithm_versions": self.algorithm_versions,
+        }
+
+    def ordered_listing_input_artifact_ids(self) -> tuple[str, ...]:
+        """Return deterministic dependency order independent of selection order."""
+
+        return tuple(sorted(self.listing_input_artifact_ids))
+
+
+@dataclass(frozen=True)
 class SharedArtifact:
     """Physical globally deduplicated artifact."""
 
@@ -138,6 +185,19 @@ class UserArtifactRef:
     snapshot_id: str
     artifact_id: str
     artifact_kind: ArtifactKind
+
+
+@dataclass(frozen=True)
+class AnalysisRunRef:
+    """User-owned reference to a shared portfolio artifact."""
+
+    user_id: str
+    project_id: str
+    snapshot_id: str
+    run_id: str
+    artifact_id: str
+    selection_membership_hash: str
+    status: AnalysisRunStatus
 
 
 @dataclass
@@ -201,6 +261,90 @@ class InMemoryArtifactCache:
         if artifact is None:
             raise ArtifactCacheError("artifact not found")
         return artifact
+
+
+@dataclass
+class InMemoryAnalysisRunStore:
+    """In-memory project ownership and analysis-run references."""
+
+    project_owner_by_id: dict[str, str] = field(default_factory=lambda: dict[str, str]())
+    current_snapshot_by_project_id: dict[str, str] = field(default_factory=lambda: dict[str, str]())
+    runs_by_id: dict[str, AnalysisRunRef] = field(
+        default_factory=lambda: dict[str, AnalysisRunRef]()
+    )
+
+    def create_project(self, *, user_id: str, project_id: str, current_snapshot_id: str) -> None:
+        """Register project ownership and its current authorized snapshot."""
+
+        existing_owner = self.project_owner_by_id.get(project_id)
+        if existing_owner is not None and existing_owner != user_id:
+            raise ArtifactCacheError("project belongs to a different user")
+        self.project_owner_by_id[project_id] = user_id
+        self.current_snapshot_by_project_id[project_id] = current_snapshot_id
+
+    def set_current_snapshot(self, *, user_id: str, project_id: str, snapshot_id: str) -> None:
+        """Move a user-owned project pointer to a newer snapshot."""
+
+        self._require_project_owner(user_id=user_id, project_id=project_id)
+        self.current_snapshot_by_project_id[project_id] = snapshot_id
+
+    def publish_run(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        snapshot_id: str,
+        artifact: SharedArtifact,
+        selection_membership_hash: str,
+        status: AnalysisRunStatus = "completed",
+    ) -> AnalysisRunRef:
+        """Create or reuse a user-owned analysis run for a shared artifact."""
+
+        self._require_project_owner(user_id=user_id, project_id=project_id)
+        if self.current_snapshot_by_project_id.get(project_id) != snapshot_id:
+            raise ArtifactCacheError("project snapshot pointer is stale")
+        run_id = _artifact_id(
+            "analysis-run",
+            {
+                "user_id": user_id,
+                "project_id": project_id,
+                "snapshot_id": snapshot_id,
+                "artifact_id": artifact.artifact_id,
+                "selection_membership_hash": selection_membership_hash,
+            },
+        )
+        existing = self.runs_by_id.get(run_id)
+        if existing is not None:
+            return existing
+        ref = AnalysisRunRef(
+            user_id=user_id,
+            project_id=project_id,
+            snapshot_id=snapshot_id,
+            run_id=run_id,
+            artifact_id=artifact.artifact_id,
+            selection_membership_hash=selection_membership_hash,
+            status=status,
+        )
+        self.runs_by_id[run_id] = ref
+        return ref
+
+    def require_run(self, *, user_id: str, project_id: str, run_id: str) -> AnalysisRunRef:
+        """Resolve a portfolio artifact only through a current user-owned run."""
+
+        self._require_project_owner(user_id=user_id, project_id=project_id)
+        ref = self.runs_by_id.get(run_id)
+        if ref is None or ref.user_id != user_id or ref.project_id != project_id:
+            raise ArtifactCacheError("analysis run is not visible to project")
+        if self.current_snapshot_by_project_id.get(project_id) != ref.snapshot_id:
+            raise ArtifactCacheError("analysis run points at a stale project snapshot")
+        return ref
+
+    def _require_project_owner(self, *, user_id: str, project_id: str) -> None:
+        owner_id = self.project_owner_by_id.get(project_id)
+        if owner_id is None:
+            raise ArtifactCacheError("project not found")
+        if owner_id != user_id:
+            raise ArtifactCacheError("project belongs to a different user")
 
 
 def create_return_artifact(
@@ -295,6 +439,42 @@ def create_bivariate_artifact(
         artifact=artifact,
     )
     return artifact, ref
+
+
+def create_portfolio_artifact(
+    *,
+    cache: InMemoryArtifactCache,
+    run_store: InMemoryAnalysisRunStore,
+    inputs: ScopedMarketInputs,
+    project_id: str,
+    key: PortfolioArtifactKey,
+    payload: JsonRow,
+) -> tuple[SharedArtifact, AnalysisRunRef]:
+    """Create or reuse a portfolio artifact after dependency and project authorization."""
+
+    dependency_ids = key.ordered_listing_input_artifact_ids()
+    for artifact_id in dependency_ids:
+        cache.require_ref(
+            user_id=inputs.snapshot.user_id,
+            snapshot_id=inputs.snapshot.snapshot_id,
+            artifact_id=artifact_id,
+        )
+    artifact = cache.get_or_create(
+        artifact_kind="portfolio",
+        artifact_id=key.artifact_id(),
+        input_hash=_stable_hash(key.as_payload()),
+        payload=payload,
+        dependency_ids=dependency_ids,
+    )
+    run_ref = run_store.publish_run(
+        user_id=inputs.snapshot.user_id,
+        project_id=project_id,
+        snapshot_id=inputs.snapshot.snapshot_id,
+        artifact=artifact,
+        selection_membership_hash=key.selection_membership_hash,
+        status="completed",
+    )
+    return artifact, run_ref
 
 
 def build_bivariate_alignment_hash(
