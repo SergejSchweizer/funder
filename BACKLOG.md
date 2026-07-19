@@ -5,6 +5,7 @@ Last reviewed: 2026-07-19
 ## Table Of Contents
 
 - [Backlog Policy](#backlog-policy)
+- [Completed PR History](#completed-pr-history)
 - [Current Architectural Decision](#current-architectural-decision)
 - [Hosted Multi-Tenant Founder PR Stack](#hosted-multi-tenant-founder-pr-stack)
 - [Series Completion Gate](#series-completion-gate)
@@ -12,11 +13,96 @@ Last reviewed: 2026-07-19
 
 ## Backlog Policy
 
-This file tracks active PR-sized work only. Historical implementation details and completed PR evidence remain available in Git history, merged pull requests, `ARCHITECTURE.md`, `DECISIONS.md`, and release documentation.
+This file tracks active PR-sized work and completed PR history. Completed PR entries are kept as an audit trail so
+merged scope, PR numbers, and historical identifiers remain visible without reading Git history first.
 
-The previously open backlog entries are superseded by the stack below. Their PR numbers, branch plans, dependency chains, and acceptance criteria must not be treated as active work. New work starts at PR84 so historical identifiers are never reused.
+The previously open backlog entries are superseded by the stack below. Their PR numbers, branch plans, dependency chains, and acceptance criteria must not be treated as active work unless listed in the active stack. New work starts at PR84 so historical identifiers are never reused.
 
 Every active item must contain `Branch`, `Git status`, `PR`, `Priority`, `Depends on`, `Scope`, `Acceptance`, `Security`, `Determinism`, and `Idempotency`. Branches are stacked in the declared dependency order until their predecessors merge.
+
+Completed or implemented entries must not be deleted from this file. If a finished entry is superseded, keep it in
+the completed-history section with its final status and link the replacing PR or decision.
+
+## Completed PR History
+
+These entries are historical and not active work. They are kept to preserve completed scope, PR links, and stable
+backlog identifiers.
+
+| ID | Title | Final status |
+| --- | --- | --- |
+| PR01 | Project Package And Quality Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/1 |
+| PR02 | Shared Configuration, HTTP, And Contract Primitives | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR03 | Simple Bronze/Silver/Gold Lake Layout Contract | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR04 | Search Module: EODHD Query And Raw Candidate Capture | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR05 | Search Module: Canonical ISIN Selection Contract | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR06 | Search Module: Review Artifacts And Active Universe Pointer | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR07 | Bronze Module: Input Contract Validation And Planning | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR08 | Bronze Module: EOD Quote Download To Bronze | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR09 | Silver Quote Build Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR10 | Bronze Module: Identifier Mapping Capture | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR11 | Bronze Module: Coverage, Errors, And Monthly Refresh Behavior | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR12 | Gold Inputs: Returns, Correlation, And Covariance Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR13 | Finalization: End-To-End Dry Run, Docs, And Release Checklist | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
+| PR14 | Bronze Process: Cron-Safe Bronze Ingestion And Medallion Builds | merged. PR: https://github.com/SergejSchweizer/founder/pull/13 |
+| PR15 | Gold Evaluation Dataset Contracts And Paths | merged. PR: https://github.com/SergejSchweizer/founder/pull/20 |
+| PR16 | Evaluation Module: Return Matrix And Asset Metrics | merged. PR: https://github.com/SergejSchweizer/founder/pull/21 |
+| PR17 | Evaluation Module: Portfolio Returns And Drawdown Metrics | merged. PR: https://github.com/SergejSchweizer/founder/pull/24 |
+| PR18 | Portfolio Module: Core Optimization Objectives And Target Weights | merged. PR: https://github.com/SergejSchweizer/founder/pull/26 |
+| PR19 | Portfolio Module: Risk Parity And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/founder/pull/32 |
+| PR20 | Evaluation Module: Walk-Forward Backtesting | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR21 | Evaluation Module: Rebalancing Simulation | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR22 | Portfolio Module: Hierarchical Risk Parity | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR23 | Portfolio Module: Maximum Diversification Objective | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR24 | Evaluation Module: Efficient Frontier Generator | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR25 | Portfolio Module: CVaR And Tail-Risk Optimization | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR26 | Evaluation CLI And Dry-Run Integration | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
+| PR27 | Gold Correlation Edge Dataset Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/28 |
+| PR28 | Gold Spearman Correlation Edges | merged. PR: https://github.com/SergejSchweizer/founder/pull/30 |
+| PR29 | Gold Correlation Edges: Skip Same-ISIN Pairs | merged. PR: https://github.com/SergejSchweizer/founder/pull/40 |
+| PR30 | Gold Pair Statistics Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
+| PR31 | Dataset Contract Registry Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
+| PR32 | Evaluation And Portfolio Package Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
+| PR33 | Unified Run State And Job Manifest Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
+| PR34 | Production Optimizer Interface And Diagnostics Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
+| PR35 | Enforce Real Evaluation And Portfolio Package Boundaries | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
+| PR36 | Extract Scalable Gold Pair Statistics Engine | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
+| PR37 | Type Critical Dataset Rows And Contract Validation | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
+| PR38 | Split CLI Parsing From Workflow Execution | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
+| PR39 | Add Import-Boundary And Scale-Guard Quality Gates | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
+| PR40 | Three-Module Boundaries And Public Contract Skeleton | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
+| PR41 | Refresh Catalog Contracts And Stable Instrument Identities | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
+| PR42 | Selection Predicate And Metric-Requirement Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
+| PR43 | Selection Identity, Candidate And Final Membership Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
+| PR44 | Update Contracts, Pinned Inputs, And Shared Work Planner | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
+| PR45 | Refresh Complete EODHD Catalog Synchronization | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR46 | Refresh All-ISIN Market Data And Versioned Inputs | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR47 | Refresh Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR48 | Selection Service, Current Pointer, And Standalone CLI | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR49 | Update Incremental Per-ISIN Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR50 | Update Screening Classifications And Selection Finalization | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR51 | Update Selection Calendar And Comparable Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR52 | Update Incremental Pair Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR53 | Update Evaluation Profiles And Selection Analysis Manifests | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR54 | Update Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR55 | Three-Module Cutover, Legacy Migration, And Documentation | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
+| PR56 | Return Semantics And Data-Quality Gate | merged. PR: https://github.com/SergejSchweizer/founder/pull/83 |
+| PR57 | Instrument-Level Rebalancing Drift And Cost Basis | merged. PR: https://github.com/SergejSchweizer/founder/pull/85 |
+| PR58 | Risk Model Package And Covariance Diagnostics | merged. PR: https://github.com/SergejSchweizer/founder/pull/89 |
+| PR59 | Production Numerical Solver Boundary | addressed; no dedicated PR under this branch name |
+| PR60 | Production Minimum Variance And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/founder/pull/101 |
+| PR61 | True HRP And Minimum CVaR Optimizers | merged. PR: https://github.com/SergejSchweizer/founder/pull/104 and https://github.com/SergejSchweizer/founder/pull/109 |
+| PR62A | Jurisdiction-Neutral Tax, Cost, And Cash-Flow Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/112 |
+| PR63 | Portfolio Profile Contracts And Balanced Ensemble Candidate | merged. PR: https://github.com/SergejSchweizer/founder/pull/113 |
+| PR64 | Walk-Forward Model Comparison Scorecard | merged. PR: https://github.com/SergejSchweizer/founder/pull/114 |
+| PR65 | Stress, Bootstrap, And Sensitivity Analysis | merged. PR: https://github.com/SergejSchweizer/founder/pull/115 |
+| PR66 | Explainable Recommendation Report | merged. PR: https://github.com/SergejSchweizer/founder/pull/116 |
+| PR69 | Multivariate Statistics Baseline Module And CLI | merged. PR: https://github.com/SergejSchweizer/founder/pull/79 |
+| PR70 | Multivariate Production Portfolio Adapter | merged. PR: https://github.com/SergejSchweizer/founder/pull/117 |
+| PR71 | Multivariate Income And Recommendation Outputs | merged. PR: https://github.com/SergejSchweizer/founder/pull/118 |
+| PR72 | Multivariate Trading And Monitoring Handoff | merged. PR: https://github.com/SergejSchweizer/founder/pull/119 |
+| PR73 | Generic Listing And Pair Statistics Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/80 |
+| PR74 | Selection Statistics Views | merged. PR: https://github.com/SergejSchweizer/founder/pull/120 |
+| PR75 | Multivariate Selection Cache Consumption | merged. PR: https://github.com/SergejSchweizer/founder/pull/121 |
 
 ## Current Architectural Decision
 
