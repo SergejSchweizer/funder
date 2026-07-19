@@ -138,6 +138,8 @@ This project analyzes EODHD end-of-day ETF quotes and builds risk-aware fund por
 
 `founder.docs_refresh` owns documentation review reporting. It scans tracked documentation files for review markers and writes `docs/docs_refresh_report.json` so docs-heavy changes can verify that documentation stayed current.
 
+`founder.hosted_catalog` owns the PR85 hosted PostgreSQL catalog contract. It defines the user/project/credential/grant/snapshot/analysis/artifact/audit schema, role boundaries, Row-Level Security policies, transaction-local authenticated user setting, and deterministic migration plan. It exposes a minimal connection protocol so migrations can be tested without binding the analytical core to a specific PostgreSQL driver.
+
 ## Current Shape
 
 - **Fetch All ISINs**: EODHD exchange symbol-list enumeration stores one irregularly refreshed all-ISIN metadata reference.
@@ -199,6 +201,12 @@ key-encryption key, and shared market observations or derived artifacts never gr
 The complete hosted trust-boundary baseline, threat model, data classification, prohibited designs, User Data Snapshot
 semantics, artifact reuse semantics, and PR84-PR100 backlog mapping live in
 [docs/hosted_security_architecture.md](docs/hosted_security_architecture.md).
+
+The first hosted implementation boundary is the PostgreSQL application catalog. It creates separate owner, migrator,
+application, and read-only roles; gives the application role no table ownership and no RLS bypass; stores encrypted
+credential material only as ciphertext, nonces, wrapped data keys, key versions, associated data, HMAC fingerprints,
+and masked labels; and records shared market/artifact identities without putting large analytical tables in
+PostgreSQL.
 
 Hosted analytical workflows must consume resolved scoped inputs. They must not scan unrestricted global Silver or Gold
 paths, global current-selection pointers, or local lake directories. Local CLI mode remains supported through explicit

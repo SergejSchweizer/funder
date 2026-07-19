@@ -9,6 +9,7 @@ description = "Minimum-risk ETF portfolio tooling using EODHD EOD data."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "psycopg[binary]>=3.2.9",
     "pyarrow>=25.0.0",
 ]
 

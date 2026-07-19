@@ -152,7 +152,7 @@ Idempotency: Re-running documentation validation against unchanged records produ
 
 Branch: `feat/postgres-multitenant-catalog`.
 
-Git status: not started. PR: TBD.
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/128.
 
 Priority: P0 persistence and isolation foundation.
 

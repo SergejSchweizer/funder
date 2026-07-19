@@ -66,6 +66,32 @@ Boundary ownership:
 | Shared derived data | univariate, bivariate, multivariate, reports | Content-addressed store; visible only through user runs |
 | Local-only data | local lake files, local secret config | Explicit local adapter; not hosted authorization evidence |
 
+## PostgreSQL Catalog Baseline
+
+PR85 introduces the catalog baseline in `founder.hosted_catalog`.
+
+Required role boundaries:
+
+- `founder_owner` owns database objects but is not the application runtime.
+- `founder_migrator` applies migrations without `BYPASSRLS`.
+- `founder_app` is the runtime role, owns no tables, and cannot bypass Row-Level Security.
+- `founder_readonly` can inspect catalog tables without mutation rights.
+
+Required catalog objects:
+
+- user and Google external identity rows;
+- server-side session rows;
+- encrypted EODHD credential rows;
+- projects, download runs, dataset snapshots, user grants, selections, and analysis runs;
+- shared immutable market object and artifact catalogs;
+- artifact input dependency closure;
+- user-scoped audit events.
+
+Every user-owned table must enable and force Row-Level Security. Hosted request handlers must bind the authenticated
+internal user id through the transaction-local `founder.current_user_id` setting before repository access. The catalog
+stores credential ciphertext, nonce, wrapped data key, key version, associated data, HMAC fingerprint, and masked label;
+it must not contain plaintext EODHD keys or large analytical tables.
+
 ## Prohibited Designs
 
 Hosted work must not introduce these designs:
@@ -157,4 +183,3 @@ Required mitigations:
 | Public-repository CI, supply-chain, and deployment hardening | PR98 |
 | Licensing, privacy, retention, backup, restore, and key-rotation readiness | PR99 |
 | End-to-end hosted cutover and multi-user proof | PR100 |
-
