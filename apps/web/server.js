@@ -1007,6 +1007,11 @@ function statisticsStepEnabled(kind) {
   const previous = statisticsSteps[index - 1];
   return Boolean(previous && projectState.statisticsComplete[previous.id]);
 }
+function nextStatisticsStep(kind) {
+  const index = statisticsStepIndex(kind);
+  if (index < 0) return null;
+  return statisticsSteps[index + 1] || null;
+}
 function updateStatisticsPathAccess() {
   for (const button of document.querySelectorAll("[data-statistics-step]")) {
     const kind = button.dataset.statisticsStep || "";
@@ -1045,6 +1050,14 @@ function setStatisticsProgress(kind, progress, message) {
   if (progressBar) progressBar.value = progress;
   if (status) status.textContent = message;
 }
+function completeStatisticsStep(kind) {
+  projectState.statisticsComplete[kind] = true;
+  updateStatisticsPathAccess();
+  const nextStep = nextStatisticsStep(kind);
+  if (nextStep && statisticsStepEnabled(nextStep.id)) {
+    showStatisticsPage(nextStep.id);
+  }
+}
 async function computeStatistics(kind) {
   const project = selectedProject();
   if (!project) {
@@ -1058,8 +1071,7 @@ async function computeStatistics(kind) {
     body: { project_id: project.project_id }
   });
   setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
-  projectState.statisticsComplete[kind] = true;
-  updateStatisticsPathAccess();
+  if (result.status === "succeeded") completeStatisticsStep(kind);
 }
 function selectProject(projectId) {
   const previousProjectId = projectState.selectedProjectId;

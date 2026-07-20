@@ -153,9 +153,13 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "computeStatistics(kind)",
         "showStatisticsPage(kind)",
         "statisticsStepEnabled(kind)",
+        "nextStatisticsStep(kind)",
+        "completeStatisticsStep(kind)",
         "updateStatisticsPathAccess()",
         "resetStatisticsWorkflow()",
         "setStatisticsProgress(kind, progress, message)",
+        'if (result.status === "succeeded") completeStatisticsStep(kind);',
+        "showStatisticsPage(nextStep.id)",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',
     ):
