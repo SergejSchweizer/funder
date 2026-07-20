@@ -216,6 +216,44 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
     ]
 
 
+def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:
+    state = HostedApiState(
+        all_isins_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "Example UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+                "source_exchange": "XETRA",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+    )
+    client = _client(state)
+
+    rejected = client.post("/metadata-filter/fetch-all-isins", headers=_headers())
+    client.post(
+        "/credentials/eodhd",
+        headers=_headers(idempotency="credential-fetch-all-isins"),
+        json={"provider_key": "secret-provider-token"},
+    )
+    fetched = _json(client.post("/metadata-filter/fetch-all-isins", headers=_headers()))
+
+    assert rejected.status_code == 422
+    assert _json(rejected)["detail"]["code"] == "eodhd_key_required"
+    assert fetched == {
+        "country_count": 1,
+        "currency_count": 1,
+        "exchange_count": 1,
+        "instrument_type_count": 1,
+        "row_count": 1,
+        "status": "succeeded",
+    }
+
+
 def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> None:
     client = _client()
     project = _json(

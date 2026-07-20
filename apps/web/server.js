@@ -264,8 +264,8 @@ function navItem(route) {
 }
 
 function projectNavigationMarkup() {
-  return `<nav class="nav-group" aria-label="Project routes" data-project-navigation>
-    ${navItem(routeSkeletons[0])}
+  return `<nav class="nav-group" aria-label="Project routes" data-project-navigation aria-disabled="true">
+    <a class="nav-link nav-link--complete" href="/projects" data-route="projects" aria-disabled="true"><span>Projects</span></a>
     <div class="project-tree" data-project-tree>
       <div class="project-tree__empty" data-project-tree-empty>No projects</div>
       <div class="project-tree__items" data-project-tree-items></div>
@@ -429,6 +429,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-right: 1px solid var(--line);
   background: #f1f3f4;
   padding: 18px;
+  display: flex;
+  flex-direction: column;
 }
 .brand {
   display: flex;
@@ -467,6 +469,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   display: grid;
   gap: 8px;
 }
+.snapshot-indicator[aria-disabled="true"], .nav-group[aria-disabled="true"], .project-definition[aria-disabled="true"] {
+  opacity: .46;
+}
 .snapshot-indicator span {
   display: block;
   color: var(--muted);
@@ -487,6 +492,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   font-weight: 700;
 }
 .nav-link:hover { background: #e8f0fe; }
+.nav-link[aria-disabled="true"] {
+  pointer-events: none;
+  color: var(--muted);
+}
 .project-tree {
   display: grid;
   gap: 4px;
@@ -514,6 +523,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   background: #e8f0fe;
   color: var(--accent);
 }
+.sidebar-auth {
+  margin-top: auto;
+  padding-top: 18px;
+}
+.sidebar-auth button {
+  width: 100%;
+}
 .workspace {
   min-width: 0;
   padding: var(--space-page);
@@ -526,6 +542,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   align-items: center;
   border-bottom: 1px solid var(--line);
   padding-bottom: 16px;
+}
+.eodhd-fetch {
+  width: min(620px, 100%);
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.eodhd-fetch label {
+  color: var(--muted);
+}
+.eodhd-fetch button {
+  min-width: 150px;
+}
+.eodhd-fetch__status {
+  grid-column: 1 / -1;
+  min-height: 18px;
+  color: var(--muted);
+  font-size: var(--meta);
 }
 h1, h2, p { margin: 0; }
 h1 { font-size: var(--page-title); font-weight: 720; letter-spacing: 0; }
@@ -670,6 +705,11 @@ form {
   display: grid;
   gap: 12px;
 }
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 label {
   display: grid;
   gap: 5px;
@@ -709,6 +749,7 @@ pre {
 @media (max-width: 620px) {
   .workspace { padding: 16px; }
   .topbar { align-items: flex-start; flex-direction: column; }
+  .eodhd-fetch { grid-template-columns: 1fr; }
   .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-strip { grid-template-columns: 1fr; }
 }
@@ -726,16 +767,19 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
   return `<div class="app-shell" data-design-system-version="founder-web-shell-v1">
   <aside class="sidebar" aria-label="Founder navigation">
     ${brandMarkup(session)}
-    <div class="snapshot-indicator" data-snapshot-indicator>
+    <div class="snapshot-indicator" data-snapshot-indicator aria-disabled="true">
       <label>
         <strong>Project Snapshot</strong>
-        <select name="project_snapshot" data-project-selector>
+        <select name="project_snapshot" data-project-selector disabled>
           <option value="">No project selected</option>
         </select>
       </label>
       <span data-project-summary>Not selected</span>
     </div>
     ${projectNavigationMarkup()}
+    <div class="sidebar-auth">
+      <a href="/auth/logout"><button type="button" data-action="google-auth">Google Auth</button></a>
+    </div>
   </aside>
   <main class="workspace">
     <header class="topbar">
@@ -743,28 +787,30 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
         <h1 data-workspace-title>Project Snapshot</h1>
         <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
       </div>
-      <div class="actions">
-        <a href="/auth/logout"><button type="button" data-action="logout">Logout</button></a>
-      </div>
+      <form class="eodhd-fetch" data-form="eodhd-fetch">
+        <label>EODHD Key<input name="provider_key" type="password" autocomplete="new-password" placeholder="Paste EODHD API key"></label>
+        <button class="primary" type="submit" data-action="fetch-all-isins" disabled>Fetch all ISINs</button>
+        <span class="eodhd-fetch__status" data-eodhd-fetch-status>Enter an EODHD key to enable project setup.</span>
+      </form>
     </header>
 
     <section class="project-empty-state" data-project-empty-state>
       <h2>No project selected</h2>
       <p>Select a project from Project Snapshot or define a new ISIN search project.</p>
-      <form class="project-definition" data-form="project-definition">
+      <form class="project-definition" data-form="project-definition" aria-disabled="true">
         <div class="project-definition__header">
           <h2>Project Definition</h2>
           <p class="subtle">Filter the all-ISIN metadata universe and create a project from the resulting list.</p>
         </div>
-        <div class="field-grid">
+        <fieldset class="field-grid" data-project-definition-fields disabled>
           <label>Exchange<select name="exchange" data-metadata-option="exchange"><option value="">Any</option></select></label>
           <label>Name<input name="name" placeholder="UCITS ETF"></label>
           <label>Instrument Type<select name="instrument_type" data-metadata-option="instrument_type"><option value="">Any</option></select></label>
           <label>Country<select name="country" data-metadata-option="country"><option value="">Any</option></select></label>
           <label>Currency<select name="currency" data-metadata-option="currency"><option value="">Any</option></select></label>
-        </div>
+        </fieldset>
         <div class="project-definition__actions">
-          <button class="primary" type="submit" data-action="create-metadata-project">Create New Project</button>
+          <button class="primary" type="submit" data-action="create-metadata-project" disabled>Create New Project</button>
         </div>
         <p class="subtle" data-project-definition-status></p>
       </form>
@@ -780,20 +826,6 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
           ${routeSkeletons.map(routePanel).join("")}
         </div>
         <div class="side-stack">
-        <section class="control-panel" id="credentials" data-route-skeleton="credentials">
-          <div class="route-panel__header"><h2>Credentials</h2><p class="eyebrow">write-only</p></div>
-          <form data-form="credential">
-            <div class="field-grid">
-              <label>EODHD provider key<input name="provider_key" type="password" autocomplete="new-password" required></label>
-              <label>Status<input name="credential_status" value="not loaded" readonly></label>
-            </div>
-            <div class="actions">
-              <button class="primary" type="submit">Save Key</button>
-              <button class="danger" type="button" data-action="delete-credential">Delete Key</button>
-            </div>
-          </form>
-        </section>
-
         <section class="control-panel" id="downloads" data-route-skeleton="downloads">
           <div class="route-panel__header"><h2>Downloads</h2><p class="eyebrow">user scoped</p></div>
           <form data-form="download">
@@ -904,6 +936,7 @@ const apiRoutes = {
   downloadRun: "/downloads/run",
   projects: "/projects",
   selections: "/selections",
+  metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
   metadataFilterProjects: "/metadata-filter/projects",
   analyses: "/analyses",
@@ -959,7 +992,8 @@ async function refreshDatasets() {
 }
 let projectState = {
   projects: [],
-  selectedProjectId: ""
+  selectedProjectId: "",
+  metadataReady: false
 };
 function normalizeProjectItems(payload) {
   if (!payload || !Array.isArray(payload.items)) return [];
@@ -970,6 +1004,69 @@ function projectLabel(project) {
 }
 function selectedProject() {
   return projectState.projects.find((project) => project.project_id === projectState.selectedProjectId) || null;
+}
+function setEodhdFetchStatus(message) {
+  const target = document.querySelector("[data-eodhd-fetch-status]");
+  if (target) target.textContent = message;
+}
+function setProjectGateEnabled(enabled) {
+  projectState.metadataReady = enabled;
+  const selector = document.querySelector("[data-project-selector]");
+  const snapshot = document.querySelector("[data-snapshot-indicator]");
+  const navigation = document.querySelector("[data-project-navigation]");
+  const projectLink = document.querySelector('[data-route="projects"]');
+  const definition = document.querySelector('[data-form="project-definition"]');
+  const definitionFields = document.querySelector("[data-project-definition-fields]");
+  const createButton = document.querySelector('[data-action="create-metadata-project"]');
+  if (selector) selector.disabled = !enabled;
+  if (snapshot) snapshot.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (navigation) navigation.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (projectLink) projectLink.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (definition) definition.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (definitionFields) definitionFields.disabled = !enabled;
+  if (createButton) createButton.disabled = !enabled;
+  if (!enabled) {
+    projectState.projects = [];
+    projectState.selectedProjectId = "";
+    renderProjectOptions();
+    renderProjectNavigation();
+    selectProject("");
+  }
+}
+function eodhdKeyValue() {
+  const input = document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]');
+  return input ? String(input.value || "").trim() : "";
+}
+function updateFetchButtonState() {
+  const button = document.querySelector('[data-action="fetch-all-isins"]');
+  const hasKey = Boolean(eodhdKeyValue());
+  if (button) button.disabled = !hasKey;
+  setProjectGateEnabled(false);
+  setEodhdFetchStatus(
+    hasKey ? "Fetch all ISINs to enable project setup." : "Enter an EODHD key to enable project setup."
+  );
+}
+async function fetchAllIsinsForProjects(form) {
+  const providerKey = eodhdKeyValue();
+  if (!providerKey) {
+    updateFetchButtonState();
+    return;
+  }
+  setProjectGateEnabled(false);
+  setEodhdFetchStatus("Fetching all ISINs...");
+  await apiRequest(apiRoutes.credential, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey("credential") },
+    body: { provider_key: providerKey }
+  });
+  const result = await apiRequest(apiRoutes.metadataFilterFetchAllIsins, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey("fetch-all-isins") }
+  });
+  setProjectGateEnabled(true);
+  await refreshMetadataFilterOptions();
+  await refreshProjects();
+  setEodhdFetchStatus("Fetched " + result.row_count + " ISIN listings.");
 }
 function optionMarkup(value) {
   return '<option value="' + clientEscapeHtml(value) + '">' + clientEscapeHtml(value) + "</option>";
@@ -1042,6 +1139,12 @@ function selectProject(projectId) {
   renderProjectNavigation();
 }
 async function refreshProjects() {
+  if (!projectState.metadataReady) {
+    renderProjectOptions();
+    renderProjectNavigation();
+    selectProject("");
+    return;
+  }
   try {
     const payload = await apiRequest(apiRoutes.projects);
     projectState.projects = normalizeProjectItems(payload);
@@ -1077,8 +1180,8 @@ function mountAuthenticatedShell(session) {
   }
   if (gate) gate.hidden = true;
   bindAuthenticatedHandlers();
-  void refreshMetadataFilterOptions();
-  void refreshProjects();
+  setProjectGateEnabled(false);
+  updateFetchButtonState();
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");
@@ -1106,11 +1209,25 @@ let authenticatedHandlersBound = false;
 function bindAuthenticatedHandlers() {
 if (authenticatedHandlersBound) return;
 authenticatedHandlersBound = true;
+document.querySelector('[data-form="eodhd-fetch"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await fetchAllIsinsForProjects(event.currentTarget);
+  } catch (_error) {
+    setProjectGateEnabled(false);
+    setEodhdFetchStatus("Fetch failed. Check the EODHD key and all-ISIN reference data.");
+  }
+});
+document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]').addEventListener("input", () => {
+  updateFetchButtonState();
+});
 document.querySelector("[data-project-selector]").addEventListener("change", (event) => {
+  if (!projectState.metadataReady) return;
   selectProject(event.currentTarget.value);
 });
 document.querySelector('[data-form="project-definition"]').addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!projectState.metadataReady) return;
   const form = event.currentTarget;
   setProjectDefinitionStatus("Creating project...");
   try {
@@ -1127,22 +1244,6 @@ document.querySelector('[data-form="project-definition"]').addEventListener("sub
   } catch (_error) {
     setProjectDefinitionStatus("Choose at least one filter with matching ISINs.");
   }
-});
-document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const providerKey = new FormData(form).get("provider_key");
-  const status = await apiRequest(apiRoutes.credential, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("credential") },
-    body: { provider_key: providerKey }
-  });
-  form.elements.credential_status.value = status.status;
-  form.elements.provider_key.value = "";
-});
-document.querySelector('[data-action="delete-credential"]').addEventListener("click", async () => {
-  await apiRequest(apiRoutes.credential, { method: "DELETE" });
-  document.querySelector('[name="credential_status"]').value = "deleted";
 });
 document.querySelector('[data-action="plan-download"]').addEventListener("click", async () => {
   const symbols = parseSymbols(document.querySelector('[name="symbols"]').value);

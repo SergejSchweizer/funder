@@ -18,9 +18,11 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
 
     for expected in (
         "Google Login",
+        "Google Auth",
+        "EODHD Key",
+        "Fetch all ISINs",
         "Projects",
         "Data",
-        "Credentials",
         "Downloads",
         "Metadata",
         "Metadata Filter",
@@ -45,6 +47,8 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     assert "Project Definition" in source
     assert "Create New Project" in source
     assert 'data-form="project-definition"' in source
+    assert 'data-form="eodhd-fetch"' in source
+    assert "Enter an EODHD key to enable project setup." in source
 
 
 def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
@@ -144,6 +148,7 @@ def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -
     assert 'type="submit" aria-label="Start Google login"' in source
     assert 'name="provider_key" type="password"' in source
     assert 'autocomplete="new-password"' in source
+    assert 'data-action="fetch-all-isins"' in source
     assert "masked_label" not in source
     assert "ciphertext" not in source
     assert "fingerprint" not in source
@@ -176,6 +181,7 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
         "/downloads/run",
         "/projects",
         "/selections",
+        "/metadata-filter/fetch-all-isins",
         "/metadata-filter/options",
         "/metadata-filter/projects",
         "/analyses",
@@ -189,6 +195,12 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
 
     for expected in (
         "let projectState =",
+        "metadataReady: false",
+        "setProjectGateEnabled(false)",
+        "setProjectGateEnabled(true)",
+        "fetchAllIsinsForProjects",
+        "apiRoutes.metadataFilterFetchAllIsins",
+        'Fetched " + result.row_count + " ISIN listings.',
         "refreshProjects()",
         "refreshMetadataFilterOptions()",
         "normalizeProjectItems(payload)",
@@ -208,12 +220,17 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         'document.querySelector("[data-project-selector]")',
         'document.querySelector("[data-project-empty-state]")',
         'document.querySelector("[data-project-workspace]")',
+        'document.querySelector("[data-snapshot-indicator]")',
+        'document.querySelector("[data-project-navigation]")',
         "workspace.hidden = !project",
         "emptyState.hidden = Boolean(project)",
     ):
         assert expected in source
 
-    assert source.index("bindAuthenticatedHandlers()") < source.index("void refreshProjects()")
+    assert (
+        "bindAuthenticatedHandlers();\n  setProjectGateEnabled(false);\n  updateFetchButtonState();"
+    ) in source
+    assert "void refreshProjects()" not in source
     assert 'writeJson("[data-analysis-output]", { session })' not in source
 
 
