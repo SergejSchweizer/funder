@@ -38,10 +38,6 @@ const statisticsSteps = [
   { id: "multivariate", label: "Multivariate Statistics" },
 ];
 
-const routeSkeletons = [
-  { id: "projects", title: "Projects", tone: "complete" },
-];
-
 const designTokens = {
   typography: {
     fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
@@ -273,7 +269,8 @@ function brandMarkup(session = null) {
 
 function statisticsStepButton(step, index) {
   const current = index === 0 ? ' aria-current="step"' : "";
-  return `<button class="statistics-path__step" type="button" data-statistics-step="${step.id}"${current}>
+  const disabled = index === 0 ? "" : " disabled";
+  return `<button class="statistics-path__step" type="button" data-statistics-step="${step.id}"${current}${disabled}>
     <span class="statistics-path__index" aria-hidden="true">${index + 1}</span>
     <span class="funnel-copy">
       <span class="funnel-label">${escapeHtml(step.label)}</span>
@@ -292,23 +289,6 @@ function statisticsPanel(step, index) {
       </div>
       <button class="primary" type="button" data-compute-statistics="${step.id}">Compute</button>
       <progress value="0" max="100" data-statistics-progress="${step.id}"></progress>
-    </div>
-  </section>`;
-}
-
-function routePanel(route) {
-  return `<section class="route-panel route-panel--${route.tone}" id="${route.id}" data-route-skeleton="${route.id}">
-    <div class="route-panel__header">
-      <p class="eyebrow">${escapeHtml(route.tone)}</p>
-      <h2>${escapeHtml(route.title)}</h2>
-    </div>
-    <div class="route-panel__body">
-      <div class="metric-strip" aria-label="${escapeHtml(route.title)} summary">
-        <span><strong data-synthetic-count="${route.id}">0</strong><small>items</small></span>
-        <span><strong>ready</strong><small>state</small></span>
-        <span><strong>snapshot</strong><small>source</small></span>
-      </div>
-      <div class="empty-state" data-empty-state="${route.id}">No user-owned run is loaded for this route.</div>
     </div>
   </section>`;
 }
@@ -558,6 +538,16 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   border-color: var(--accent);
   background: #e8f0fe;
 }
+.statistics-path__step:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: #f1f3f4;
+  opacity: .52;
+}
+.statistics-path__step:disabled:hover {
+  border-color: var(--line);
+  background: #f1f3f4;
+}
 .statistics-path__index {
   width: 28px;
   height: 28px;
@@ -598,16 +588,6 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   height: 12px;
   accent-color: var(--accent);
 }
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr);
-  gap: 16px;
-  align-items: start;
-}
-.route-stack, .side-stack {
-  display: grid;
-  gap: 12px;
-}
 .project-empty-state {
   min-height: 360px;
   display: grid;
@@ -645,47 +625,11 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
 .project-workspace[hidden] {
   display: none !important;
 }
-.route-panel, .control-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--surface);
-  padding: var(--space-panel);
-  box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
-}
-.route-panel__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
-  margin-bottom: 12px;
-}
 .eyebrow {
   color: var(--muted);
   font-size: var(--meta);
   text-transform: uppercase;
   letter-spacing: .08em;
-}
-.metric-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.metric-strip span {
-  min-height: 58px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  padding: 8px;
-}
-.metric-strip strong { font-size: 16px; }
-.metric-strip small { color: var(--muted); }
-.empty-state {
-  margin-top: 10px;
-  color: var(--muted);
 }
 form {
   display: grid;
@@ -711,15 +655,6 @@ input, select {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
 }
-pre {
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: #fbfdfc;
-  padding: 10px;
-  color: var(--muted);
-}
 @media (max-width: 1040px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar-resizer { display: none; }
@@ -730,13 +665,11 @@ pre {
     border-bottom: 1px solid var(--line);
   }
   .statistics-path { grid-template-columns: 1fr; }
-  .content-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .workspace { padding: 16px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .eodhd-fetch { grid-template-columns: 1fr; }
-  .metric-strip { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -808,71 +741,6 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
       <div class="statistics-pages">
         ${statisticsSteps.map(statisticsPanel).join("")}
       </div>
-
-      <div class="content-grid">
-        <div class="route-stack">
-          ${routeSkeletons.map(routePanel).join("")}
-        </div>
-        <div class="side-stack">
-        <section class="control-panel" id="downloads" data-route-skeleton="downloads">
-          <div class="route-panel__header"><h2>Downloads</h2><p class="eyebrow">user scoped</p></div>
-          <form data-form="download">
-            <div class="field-grid">
-              <label>Symbols<input name="symbols" placeholder="AAA.XETRA, BBB.XETRA"></label>
-              <label>Run status<input name="download_status" value="idle" readonly></label>
-            </div>
-            <div class="actions">
-              <button type="button" data-action="plan-download">Plan</button>
-              <button class="primary" type="submit">Run</button>
-            </div>
-          </form>
-        </section>
-
-        <section class="control-panel" id="metadata-filter" data-route-skeleton="metadata-filter">
-          <div class="route-panel__header"><h2>Metadata Filter</h2><p class="eyebrow">server backed</p></div>
-          <form data-form="metadata-filter">
-            <div class="field-grid">
-              <label>Name contains<input name="name_contains" placeholder="UCITS ETF"></label>
-              <label>Exchange<select name="exchange"><option value="">Any</option><option>XETRA</option><option>LSE</option></select></label>
-              <label>Distribution<select name="distribution_frequency"><option value="">Any</option><option>monthly</option><option>quarterly</option><option>annual</option></select></label>
-            </div>
-            <div class="actions"><button class="primary" type="submit">Create Selection</button></div>
-          </form>
-        </section>
-
-        <section class="control-panel" id="statistics-controls" data-route-skeleton="statistics-controls">
-          <div class="route-panel__header"><h2>Statistics</h2><p class="eyebrow">API produced</p></div>
-          <div class="actions">
-            <button data-action="run-univariate-statistics">Univariate Statistics</button>
-            <button data-action="run-univariate-filter">Univariate Filter</button>
-            <button data-action="run-bivariate-statistics">Bivariate Statistics</button>
-            <button data-action="run-multivariate-statistics">Multivariate Statistics</button>
-          </div>
-        </section>
-
-        <section class="control-panel" id="analysis-controls" data-route-skeleton="analysis-controls">
-          <div class="route-panel__header"><h2>Portfolio Analysis</h2><p class="eyebrow">no browser math</p></div>
-          <form data-form="analysis">
-            <div class="field-grid">
-              <label>Project<input name="project_name" value="ETF Research"></label>
-              <label>Objective<select name="objective"><option>minimum_variance</option><option>risk_parity</option><option>maximum_diversification</option></select></label>
-            </div>
-            <div class="actions">
-              <button class="primary" type="submit">Analyze</button>
-              <button type="button" data-action="load-report">Report</button>
-            </div>
-          </form>
-          <pre data-analysis-output>{}</pre>
-        </section>
-
-        <section class="control-panel" id="account" data-route-skeleton="account">
-          <div class="route-panel__header"><h2>Account</h2><p class="eyebrow">owned data</p></div>
-          <div class="actions">
-            <button class="danger" type="button" data-action="delete-account">Delete Account Data</button>
-          </div>
-        </section>
-        </div>
-      </div>
     </section>
   </main>
 </div>`;
@@ -919,17 +787,11 @@ const apiBaseUrl = "/api";
 const apiRoutes = {
   session: "/session",
   credential: "/credentials/eodhd",
-  datasets: "/datasets",
-  downloadPlan: "/downloads/plan",
-  downloadRun: "/downloads/run",
   projects: "/projects",
-  selections: "/selections",
   metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
   metadataFilterProjects: "/metadata-filter/projects",
-  statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute",
-  analyses: "/analyses",
-  account: "/account"
+  statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute"
 };
 function csrfToken() {
   return document.querySelector('meta[name="founder-csrf-token"]').content;
@@ -953,16 +815,9 @@ async function apiRequest(path, options = {}) {
   if (!response.ok) throw new Error("api_error_" + response.status);
   return response.json();
 }
-function writeJson(selector, value) {
-  const target = document.querySelector(selector);
-  if (target) target.textContent = JSON.stringify(value, null, 2);
-}
 function setAuthStatus(message) {
   const status = document.querySelector("[data-auth-status]");
   if (status) status.textContent = message;
-}
-function parseSymbols(value) {
-  return value.split(",").map((symbol) => symbol.trim()).filter(Boolean);
 }
 function clientEscapeHtml(value) {
   return String(value)
@@ -975,15 +830,12 @@ function clientEscapeHtml(value) {
 async function refreshSession() {
   return apiRequest(apiRoutes.session);
 }
-async function refreshDatasets() {
-  const datasets = await apiRequest(apiRoutes.datasets);
-  writeJson("[data-analysis-output]", { datasets });
-}
 let projectState = {
   projects: [],
   selectedProjectId: "",
   metadataReady: false,
-  eodhdCredentialSaved: false
+  eodhdCredentialSaved: false,
+  statisticsComplete: { univariate: false, bivariate: false, multivariate: false }
 };
 function normalizeProjectItems(payload) {
   if (!payload || !Array.isArray(payload.items)) return [];
@@ -1136,7 +988,36 @@ function renderProjectOptions() {
       + clientEscapeHtml(projectLabel(project)) + "</option>";
   }).join("");
 }
+function statisticsStepIndex(kind) {
+  return statisticsSteps.findIndex((step) => step.id === kind);
+}
+function statisticsStepEnabled(kind) {
+  const index = statisticsStepIndex(kind);
+  if (index <= 0) return true;
+  const previous = statisticsSteps[index - 1];
+  return Boolean(previous && projectState.statisticsComplete[previous.id]);
+}
+function updateStatisticsPathAccess() {
+  for (const button of document.querySelectorAll("[data-statistics-step]")) {
+    const kind = button.dataset.statisticsStep || "";
+    const enabled = statisticsStepEnabled(kind);
+    const status = button.querySelector(".funnel-status");
+    button.disabled = !enabled;
+    if (status) {
+      status.textContent = projectState.statisticsComplete[kind] ? "complete" : enabled ? "ready" : "locked";
+    }
+  }
+}
+function resetStatisticsWorkflow() {
+  projectState.statisticsComplete = { univariate: false, bivariate: false, multivariate: false };
+  for (const step of statisticsSteps) {
+    setStatisticsProgress(step.id, 0, "Idle. Select Compute to run this statistic for the current project.");
+  }
+  updateStatisticsPathAccess();
+  showStatisticsPage("univariate");
+}
 function showStatisticsPage(kind) {
+  if (!statisticsStepEnabled(kind)) return;
   for (const page of document.querySelectorAll("[data-statistics-page]")) {
     page.hidden = page.dataset.statisticsPage !== kind;
   }
@@ -1167,8 +1048,11 @@ async function computeStatistics(kind) {
     body: { project_id: project.project_id }
   });
   setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
+  projectState.statisticsComplete[kind] = true;
+  updateStatisticsPathAccess();
 }
 function selectProject(projectId) {
+  const previousProjectId = projectState.selectedProjectId;
   projectState.selectedProjectId = projectId;
   const project = selectedProject();
   const workspace = document.querySelector("[data-project-workspace]");
@@ -1180,6 +1064,7 @@ function selectProject(projectId) {
   if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
   if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
   renderProjectOptions();
+  if (previousProjectId !== projectId) resetStatisticsWorkflow();
 }
 async function refreshProjects() {
   if (!projectState.metadataReady) {
@@ -1346,51 +1231,8 @@ document.querySelector('[data-form="project-definition"]').addEventListener("sub
     setProjectDefinitionStatus("Choose at least one filter with matching ISINs.");
   }
 });
-document.querySelector('[data-action="plan-download"]').addEventListener("click", async () => {
-  const symbols = parseSymbols(document.querySelector('[name="symbols"]').value);
-  const plan = await apiRequest(apiRoutes.downloadPlan, { method: "POST", body: { symbols } });
-  document.querySelector('[name="download_status"]').value = plan.status;
-});
-document.querySelector('[data-form="download"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const symbols = parseSymbols(new FormData(event.currentTarget).get("symbols"));
-  const run = await apiRequest(apiRoutes.downloadRun, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("download") },
-    body: { symbols }
-  });
-  document.querySelector('[name="download_status"]').value = run.status;
-  await refreshDatasets();
-});
-document.querySelector('[data-form="analysis"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const project = await apiRequest(apiRoutes.projects, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("project") },
-    body: { name: new FormData(form).get("project_name") }
-  });
-  const selection = await apiRequest(apiRoutes.selections, {
-    method: "POST",
-    body: { project_id: project.project_id, name: "Current Selection", member_ids: ["example-member"] }
-  });
-  const analysis = await apiRequest(apiRoutes.analyses, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("analysis") },
-    body: {
-      project_id: project.project_id,
-      selection_id: selection.selection_id,
-      settings: { objective: new FormData(form).get("objective") }
-    }
-  });
-  writeJson("[data-analysis-output]", analysis);
-});
-document.querySelector('[data-action="delete-account"]').addEventListener("click", async () => {
-  await apiRequest(apiRoutes.account, { method: "DELETE" });
-  writeJson("[data-analysis-output]", { status: "deleted" });
-});
 }
-window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshDatasets, refreshSession };
+window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
 initializeAuthGate();
 </script>
 </body>
@@ -1582,7 +1424,6 @@ module.exports = {
   proxyAuthRequest,
   renderAppShell,
   renderAuthenticatedShell,
-  routeSkeletons,
   sessionFromRequest,
   startLocalGoogleLogin,
   statisticsSteps,

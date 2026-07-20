@@ -22,13 +22,9 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
         "EODHD Key",
         "Fetch all ISINs",
         "Projects",
-        "Downloads",
-        "Metadata Filter",
         "Univariate Statistics",
         "Bivariate Statistics",
         "Multivariate Statistics",
-        "Portfolio Analysis",
-        "Delete Account Data",
     ):
         assert expected in source
 
@@ -84,7 +80,9 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     ):
         assert token in source
 
-    assert 'id: "projects"' in source
+    assert 'id: "univariate"' in source
+    assert 'id: "bivariate"' in source
+    assert 'id: "multivariate"' in source
     assert 'id: "dashboard"' not in source
     assert 'class="nav-dot"' not in source
     assert "projectNavigationMarkup()" not in source
@@ -101,7 +99,15 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert "pointerdown" in source
     assert "pointermove" in source
 
-    assert 'data-route-skeleton="${route.id}"' in source
+    for removed in (
+        "Downloads",
+        "Metadata Filter",
+        "Portfolio Analysis",
+        "Delete Account Data",
+        "data-route-skeleton",
+        "routeSkeletons",
+    ):
+        assert removed not in source
 
 
 def test_web_shell_uses_google_style_material_color_tokens() -> None:
@@ -138,8 +144,14 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "progress-banner",
         "data-statistics-progress",
         "data-compute-statistics",
+        " disabled",
+        "locked",
+        "complete",
         "computeStatistics(kind)",
         "showStatisticsPage(kind)",
+        "statisticsStepEnabled(kind)",
+        "updateStatisticsPathAccess()",
+        "resetStatisticsWorkflow()",
         "setStatisticsProgress(kind, progress, message)",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',
@@ -184,18 +196,12 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
     for route in (
         "/session",
         "/credentials/eodhd",
-        "/datasets",
-        "/downloads/plan",
-        "/downloads/run",
         "/projects",
-        "/selections",
         "/metadata-filter/fetch-all-isins",
         "/metadata-filter/options",
         "/metadata-filter/projects",
         "/statistics/",
         "/compute",
-        "/analyses",
-        "/account",
     ):
         assert route in source
 
