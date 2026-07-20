@@ -30,6 +30,9 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
 
     assert "Project Snapshot" in source
     assert "No project selected" in source
+    assert "Consisting currently of 0 ISINs" in source
+    assert "currentSelectionSummary(project)" in source
+    assert "selectedIsinCount(project)" in source
     assert "data-project-selector" in source
     assert "data-project-workspace hidden" in source
     assert "Project Definition" in source
@@ -275,6 +278,8 @@ def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
     assert "proxyRequestToTarget" in source
     assert "clientRequest.url.replace" in source
     assert "apiBaseUrl)" in source
+    assert "data-current-selection-summary" in source
+    assert ">API ${escapedApiUrl}</p>" not in source
     assert 'process.env.FOUNDER_API_BASE_URL || "http://api:8000"' in source
 
 

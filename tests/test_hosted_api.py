@@ -212,7 +212,11 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
     assert created["selection"]["member_ids"] == ["IE1:XETRA:AAA"]
     assert created["selected_count"] == 1
     assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
-        created["project"]
+        {
+            **created["project"],
+            "selected_count": 1,
+            "selection_id": created["selection"]["selection_id"],
+        }
     ]
     assert _json(client.get("/projects", headers=_headers("user-b", csrf=False)))["items"] == []
     assert (

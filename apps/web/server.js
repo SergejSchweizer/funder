@@ -703,7 +703,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
     <header class="topbar">
       <div>
         <h1 data-workspace-title>Project Snapshot</h1>
-        <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
+        <p class="subtle" data-api-base="${escapedApiUrl}" data-current-selection-summary>Consisting currently of 0 ISINs</p>
       </div>
       <form class="eodhd-fetch" data-form="eodhd-fetch">
         <label>EODHD Key<input name="provider_key" type="password" autocomplete="new-password" placeholder="Paste EODHD API key"></label>
@@ -846,6 +846,16 @@ function projectLabel(project) {
 }
 function selectedProject() {
   return projectState.projects.find((project) => project.project_id === projectState.selectedProjectId) || null;
+}
+function selectedIsinCount(project) {
+  if (!project) return 0;
+  if (Number.isFinite(project.selected_count)) return Number(project.selected_count);
+  if (project.selection && Array.isArray(project.selection.member_ids)) return project.selection.member_ids.length;
+  return 0;
+}
+function currentSelectionSummary(project) {
+  const count = selectedIsinCount(project);
+  return "Consisting currently of " + count + " ISIN" + (count === 1 ? "" : "s");
 }
 function setEodhdFetchStatus(message) {
   const target = document.querySelector("[data-eodhd-fetch-status]");
@@ -1059,10 +1069,12 @@ function selectProject(projectId) {
   const emptyState = document.querySelector("[data-project-empty-state]");
   const title = document.querySelector("[data-workspace-title]");
   const summary = document.querySelector("[data-project-summary]");
+  const selectionSummary = document.querySelector("[data-current-selection-summary]");
   if (workspace) workspace.hidden = !project;
   if (emptyState) emptyState.hidden = Boolean(project);
   if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
   if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
+  if (selectionSummary) selectionSummary.textContent = currentSelectionSummary(project);
   renderProjectOptions();
   if (previousProjectId !== projectId) resetStatisticsWorkflow();
 }
