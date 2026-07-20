@@ -86,6 +86,70 @@ Gold input builds are designed for large ETF universes. The CLI defaults to all 
 
 Gap-aware planning discovers missing windows from the `quotes` data type because quote rows are the dense dated market series. Bronze applies those planned windows to quotes, dividends, and splits through dataset strategies, and stores dividends and splits as dated Bronze rows beside quotes.
 
+### Univariate Statistics Field Reference
+
+The `univariate_statistics` row contains these fields. `README.md` keeps the longer user-facing semantics, ranges, units, and empirical bands; this contract table is the compact schema reference.
+
+| Field | Short description |
+| --- | --- |
+| `isin` | Instrument ISIN identifier. |
+| `exchange` | Listing exchange code. |
+| `code` | Provider listing code or ticker. |
+| `confidence_level` | Tail-risk confidence level used for VaR and Expected Shortfall. |
+| `first_quote_date` | First quote date included in the listing window. |
+| `last_quote_date` | Last quote date included in the listing window. |
+| `quote_observation_count` | Count of quote rows for the listing. |
+| `first_return_date` | First daily return date after the first valid quote. |
+| `last_return_date` | Last daily return date. |
+| `return_observation_count` | Count of daily return observations. |
+| `start_adjusted_close` | First adjusted close in the quote window. |
+| `end_adjusted_close` | Last adjusted close in the quote window. |
+| `total_return` | Full-window simple return from first to last adjusted close. |
+| `cagr` | Compound annual growth rate over the quote window. |
+| `cumulative_log_return` | Sum of daily adjusted-close log returns. |
+| `mean_log_return` | Arithmetic mean of daily log returns. |
+| `median_log_return` | Median daily log return. |
+| `min_log_return` | Worst daily log return. |
+| `max_log_return` | Best daily log return. |
+| `mean_simple_return` | Arithmetic mean of daily simple returns. |
+| `median_simple_return` | Median daily simple return. |
+| `min_simple_return` | Worst daily simple return. |
+| `max_simple_return` | Best daily simple return. |
+| `daily_log_return_std` | Sample standard deviation of daily log returns. |
+| `daily_simple_return_std` | Sample standard deviation of daily simple returns. |
+| `annualized_return` | Alias of annualized log return. |
+| `annualized_log_return` | Mean daily log return multiplied by 252 trading days. |
+| `annualized_simple_return` | Mean daily simple return multiplied by 252 trading days. |
+| `annualized_geometric_return` | Geometric annual return derived from annualized log return. |
+| `annualized_volatility` | Annualized daily log-return volatility. |
+| `realized_variance` | Sum of squared daily log returns over the window. |
+| `realized_volatility` | Square root of realized variance. |
+| `downside_deviation` | Annualized downside deviation from negative daily log returns. |
+| `sharpe_ratio` | Annualized log return divided by annualized volatility. |
+| `sortino_ratio` | Annualized log return divided by downside deviation. |
+| `var` | Historical daily-loss quantile at `confidence_level`. |
+| `expected_shortfall` | Mean daily loss in the tail at or beyond VaR. |
+| `tail_observation_count` | Number of tail observations used for Expected Shortfall. |
+| `max_drawdown` | Worst peak-to-trough adjusted-close drawdown. |
+| `positive_day_ratio` | Share of daily log returns greater than zero. |
+| `log_price_slope` | Linear-regression slope of log adjusted close over quote order. |
+| `trend_r_squared` | R-squared of the log-price trend regression. |
+| `availability_reason` | Basic statistic availability status such as `ok` or insufficient returns. |
+| `distribution_frequency` | Inferred distribution cadence from positive dividend events. |
+| `distribution_events_per_year` | Annualized positive distribution event rate. |
+| `last_distribution_date` | Latest positive distribution event date. |
+| `distribution_observation_count` | Count of positive distribution events used for inference. |
+| `quarantined_price_count` | Count of invalid price rows excluded by return-quality checks. |
+| `non_positive_price_detected` | Whether a zero or negative price was detected. |
+| `duplicate_date_detected` | Whether duplicate quote dates were detected. |
+| `stale_price_detected` | Whether the stale-price quality gate fired. |
+| `unexplained_gap_detected` | Whether unexplained quote-date gaps were detected. |
+| `meets_min_history_252` | Whether the listing has at least 252 valid observations. |
+| `meets_min_history_504` | Whether the listing has at least 504 valid observations. |
+| `meets_min_history_756` | Whether the listing has at least 756 valid observations. |
+| `production_eligible` | Whether the listing passes the current production-quality gate. |
+| `data_quality_reason` | Main quality reason for eligibility or exclusion. |
+
 ## Portfolio Evaluation Outputs
 
 Portfolio evaluation datasets belong in Gold because they are derived from validated Gold risk inputs and are intended for analysis, comparison, and target-weight selection. They are reproducible without EODHD credentials and do not mutate Bronze or Silver market data.
