@@ -395,7 +395,7 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         offset: int = 0,
     ) -> JsonRow:
         items = [
-            _project_row(project)
+            _project_with_selection_row(api_state, project, user.user_id)
             for project in api_state.projects_by_id.values()
             if project.user_id == user.user_id
         ]
@@ -775,6 +775,20 @@ def _download_row(run: ProviderDownloadRun) -> JsonRow:
 
 def _project_row(project: ProjectRecord) -> JsonRow:
     return {"project_id": project.project_id, "name": project.name}
+
+
+def _project_with_selection_row(
+    state: HostedApiState, project: ProjectRecord, user_id: str
+) -> JsonRow:
+    try:
+        selection = _selection_for_project(state, project.project_id, user_id)
+    except HTTPException:
+        return {**_project_row(project), "selected_count": 0}
+    return {
+        **_project_row(project),
+        "selection_id": selection.selection_id,
+        "selected_count": len(selection.member_ids),
+    }
 
 
 def _selection_row(selection: SelectionRecord) -> JsonRow:
