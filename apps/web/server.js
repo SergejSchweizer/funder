@@ -1066,7 +1066,14 @@ function updateFetchButtonState() {
 async function refreshEodhdCredentialStatus() {
   try {
     const status = await apiRequest(apiRoutes.credential);
-    setEodhdCredentialSaved(status && status.status === "active");
+    const saved = status && status.status === "active";
+    setEodhdCredentialSaved(saved);
+    if (saved) {
+      setProjectGateEnabled(true);
+      await refreshMetadataFilterOptions();
+      await refreshProjects();
+      setEodhdFetchStatus("Saved EODHD key available. Projects restored for this user.");
+    }
   } catch (_error) {
     setEodhdCredentialSaved(false);
   }

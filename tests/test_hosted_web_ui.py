@@ -204,6 +204,8 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         'status && status.status === "active"',
         "projectState.eodhdCredentialSaved",
         "Saved EODHD key available",
+        "Projects restored for this user.",
+        "await refreshMetadataFilterOptions();\n      await refreshProjects();",
         "if (providerKey) {",
         "fetchAllIsinsForProjects",
         "apiRoutes.metadataFilterFetchAllIsins",
