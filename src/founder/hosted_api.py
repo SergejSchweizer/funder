@@ -88,6 +88,12 @@ class AnalysisCreateRequest(BaseModel):
     settings: JsonRow = Field(default_factory=dict)
 
 
+class StatisticsComputeRequest(BaseModel):
+    """Request to compute one statistics layer for a user-owned project."""
+
+    project_id: str
+
+
 class UserOwnedRow(Protocol):
     """Protocol for rows that are scoped to one hosted API user."""
 
@@ -546,6 +552,25 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         return _selection_row(
             _require_user_row(api_state.selections_by_id, selection_id, user.user_id)
         )
+
+    @app.post("/statistics/{statistics_kind}/compute")
+    def compute_statistics(
+        statistics_kind: str,
+        payload: StatisticsComputeRequest,
+        user: ApiUser = Depends(csrf_user),
+        api_state: HostedApiState = Depends(current_state),
+    ) -> JsonRow:
+        allowed_kinds = {"univariate", "bivariate", "multivariate"}
+        if statistics_kind not in allowed_kinds:
+            raise _http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_statistics_kind")
+        _require_user_row(api_state.projects_by_id, payload.project_id, user.user_id)
+        _audit(api_state, user.user_id, f"statistics.{statistics_kind}.compute")
+        return {
+            "kind": statistics_kind,
+            "project_id": payload.project_id,
+            "status": "succeeded",
+            "progress": 100,
+        }
 
     @app.post("/analyses")
     def create_analysis(

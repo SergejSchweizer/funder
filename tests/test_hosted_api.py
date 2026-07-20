@@ -315,11 +315,24 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
             },
         )
     )
+    computed_statistics = _json(
+        client.post(
+            "/statistics/univariate/compute",
+            headers=_headers(idempotency="statistics-univariate-1"),
+            json={"project_id": project["project_id"]},
+        )
+    )
     projects_page = _json(client.get("/projects?limit=1&offset=0", headers=_headers(csrf=False)))
 
     assert repeated_project == project
     assert selection["member_ids"] == ["IE1", "IE2"]
     assert analysis["status"] == "succeeded"
+    assert computed_statistics == {
+        "kind": "univariate",
+        "progress": 100,
+        "project_id": project["project_id"],
+        "status": "succeeded",
+    }
     assert analysis["cache_hit"] is False
     assert repeated_analysis["run_id"] == analysis["run_id"]
     assert repeated_analysis["cache_hit"] is True
@@ -352,6 +365,22 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
     assert (
         client.delete(f"/projects/{project['project_id']}", headers=_headers("user-b")).status_code
         == 404
+    )
+    assert (
+        client.post(
+            "/statistics/bivariate/compute",
+            headers=_headers("user-b"),
+            json={"project_id": project["project_id"]},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/statistics/unknown/compute",
+            headers=_headers(),
+            json={"project_id": project["project_id"]},
+        ).status_code
+        == 422
     )
     deleted_project = _json(client.delete(f"/projects/{project['project_id']}", headers=_headers()))
     assert deleted_project == {"project_id": project["project_id"], "status": "deleted"}

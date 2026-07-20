@@ -22,19 +22,12 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
         "EODHD Key",
         "Fetch all ISINs",
         "Projects",
-        "Data",
         "Downloads",
-        "Metadata",
         "Metadata Filter",
         "Univariate Statistics",
-        "Univariate Filter",
-        "Diversification",
         "Bivariate Statistics",
         "Multivariate Statistics",
-        "Portfolio",
         "Portfolio Analysis",
-        "Validation",
-        "Report",
         "Delete Account Data",
     ):
         assert expected in source
@@ -129,26 +122,30 @@ def test_web_shell_uses_google_style_material_color_tokens() -> None:
         assert token in source
 
 
-def test_web_shell_models_complete_funnel_order_and_status_states() -> None:
+def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
     source = _web_source()
 
     positions = [
-        source.index(f'id: "{step}"')
-        for step in (
-            "data",
-            "metadata",
-            "univariate",
-            "filter",
-            "diversification",
-            "portfolio",
-            "validation",
-            "report",
-        )
+        source.index(f'id: "{step}"') for step in ("univariate", "bivariate", "multivariate")
     ]
     assert positions == sorted(positions)
 
-    for state in ("not-started", "ready", "running", "complete", "warning", "failed", "stale"):
-        assert f'status: "{state}"' in source or f"funnel-step--{state}" in source
+    for expected in (
+        "statisticsSteps",
+        "statisticsStepButton(step, index)",
+        "statisticsPanel(step, index)",
+        "statistics-path",
+        "Statistics path map",
+        "progress-banner",
+        "data-statistics-progress",
+        "data-compute-statistics",
+        "computeStatistics(kind)",
+        "showStatisticsPage(kind)",
+        "setStatisticsProgress(kind, progress, message)",
+        "apiRoutes.statisticsCompute(kind)",
+        'method: "POST"',
+    ):
+        assert expected in source
 
 
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:
@@ -196,6 +193,8 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
         "/metadata-filter/fetch-all-isins",
         "/metadata-filter/options",
         "/metadata-filter/projects",
+        "/statistics/",
+        "/compute",
         "/analyses",
         "/account",
     ):

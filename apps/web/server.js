@@ -32,15 +32,10 @@ const providerCookieName = "founder_auth_provider";
 const pendingGoogleStates = new Map();
 let googleJwksCache = { expiresAt: 0, keys: [] };
 
-const funnelSteps = [
-  { id: "data", label: "Data", status: "ready", href: "/data" },
-  { id: "metadata", label: "Metadata", status: "not-started", href: "/metadata" },
-  { id: "univariate", label: "Univariate", status: "running", href: "/univariate" },
-  { id: "filter", label: "Filter", status: "warning", href: "/filter" },
-  { id: "diversification", label: "Diversification", status: "stale", href: "/diversification" },
-  { id: "portfolio", label: "Portfolio", status: "complete", href: "/portfolio" },
-  { id: "validation", label: "Validation", status: "failed", href: "/validation" },
-  { id: "report", label: "Report", status: "not-started", href: "/report" },
+const statisticsSteps = [
+  { id: "univariate", label: "Univariate Statistics" },
+  { id: "bivariate", label: "Bivariate Statistics" },
+  { id: "multivariate", label: "Multivariate Statistics" },
 ];
 
 const routeSkeletons = [
@@ -292,14 +287,29 @@ function brandMarkup(session = null) {
   return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Founder Research</span>${userLine}</span></div>`;
 }
 
-function funnelItem(step, index) {
-  return `<a class="funnel-step funnel-step--${step.status}" href="${step.href}" data-funnel-step="${step.id}" data-state="${step.status}">
-    <span class="funnel-index" aria-hidden="true">${index + 1}</span>
+function statisticsStepButton(step, index) {
+  const current = index === 0 ? ' aria-current="step"' : "";
+  return `<button class="statistics-path__step" type="button" data-statistics-step="${step.id}"${current}>
+    <span class="statistics-path__index" aria-hidden="true">${index + 1}</span>
     <span class="funnel-copy">
       <span class="funnel-label">${escapeHtml(step.label)}</span>
-      <span class="funnel-status">${escapeHtml(step.status)}</span>
+      <span class="funnel-status">ready</span>
     </span>
-  </a>`;
+  </button>`;
+}
+
+function statisticsPanel(step, index) {
+  return `<section class="statistics-page" data-statistics-page="${step.id}"${index === 0 ? "" : " hidden"}>
+    <div class="progress-banner" data-statistics-progress-banner="${step.id}">
+      <div>
+        <p class="eyebrow">statistics compute</p>
+        <h2>${escapeHtml(step.label)}</h2>
+        <p class="subtle" data-statistics-status="${step.id}">Idle. Select Compute to run this statistic for the current project.</p>
+      </div>
+      <button class="primary" type="button" data-compute-statistics="${step.id}">Compute</button>
+      <progress value="0" max="100" data-statistics-progress="${step.id}"></progress>
+    </div>
+  </section>`;
 }
 
 function routePanel(route) {
@@ -611,13 +621,13 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   flex-wrap: wrap;
   gap: 8px;
 }
-.funnel {
+.statistics-path {
   display: grid;
-  grid-template-columns: repeat(8, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
   gap: 8px;
   margin: 18px 0;
 }
-.funnel-step {
+.statistics-path__step {
   min-height: 66px;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -627,9 +637,14 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   border-radius: var(--radius-panel);
   background: var(--surface);
   padding: 10px;
-  text-decoration: none;
+  color: var(--ink);
+  text-align: left;
 }
-.funnel-index {
+.statistics-path__step:hover, .statistics-path__step[aria-current="step"] {
+  border-color: var(--accent);
+  background: #e8f0fe;
+}
+.statistics-path__index {
   width: 28px;
   height: 28px;
   display: grid;
@@ -647,11 +662,28 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
 }
 .funnel-label { font-weight: 700; }
 .funnel-status { color: var(--muted); font-size: var(--meta); }
-.funnel-step--complete { border-color: color-mix(in srgb, var(--complete) 40%, var(--line)); }
-.funnel-step--running { border-color: color-mix(in srgb, var(--running) 50%, var(--line)); }
-.funnel-step--warning { border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); }
-.funnel-step--failed { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
-.funnel-step--stale { border-color: color-mix(in srgb, var(--stale) 50%, var(--line)); }
+.statistics-pages {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.progress-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: var(--space-panel);
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
+}
+.progress-banner progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 12px;
+  accent-color: var(--accent);
+}
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr);
@@ -784,14 +816,13 @@ pre {
     border-bottom: 1px solid var(--line);
   }
   .nav-group { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .funnel { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
+  .statistics-path { grid-template-columns: 1fr; }
   .content-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .workspace { padding: 16px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .eodhd-fetch { grid-template-columns: 1fr; }
-  .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric-strip { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -859,9 +890,12 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
     </section>
 
     <section class="project-workspace" data-project-workspace hidden>
-      <nav class="funnel" aria-label="Persisted research funnel">
-        ${funnelSteps.map(funnelItem).join("")}
+      <nav class="statistics-path" aria-label="Statistics path map">
+        ${statisticsSteps.map(statisticsStepButton).join("")}
       </nav>
+      <div class="statistics-pages">
+        ${statisticsSteps.map(statisticsPanel).join("")}
+      </div>
 
       <div class="content-grid">
         <div class="route-stack">
@@ -982,6 +1016,7 @@ const apiRoutes = {
   metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
   metadataFilterProjects: "/metadata-filter/projects",
+  statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute",
   analyses: "/analyses",
   account: "/account"
 };
@@ -1232,6 +1267,38 @@ async function deleteProject(projectId) {
   if (projectState.selectedProjectId === projectId) projectState.selectedProjectId = "";
   await refreshProjects();
 }
+function showStatisticsPage(kind) {
+  for (const page of document.querySelectorAll("[data-statistics-page]")) {
+    page.hidden = page.dataset.statisticsPage !== kind;
+  }
+  for (const button of document.querySelectorAll("[data-statistics-step]")) {
+    if (button.dataset.statisticsStep === kind) {
+      button.setAttribute("aria-current", "step");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  }
+}
+function setStatisticsProgress(kind, progress, message) {
+  const progressBar = document.querySelector('[data-statistics-progress="' + kind + '"]');
+  const status = document.querySelector('[data-statistics-status="' + kind + '"]');
+  if (progressBar) progressBar.value = progress;
+  if (status) status.textContent = message;
+}
+async function computeStatistics(kind) {
+  const project = selectedProject();
+  if (!project) {
+    setStatisticsProgress(kind, 0, "Select a project before computing statistics.");
+    return;
+  }
+  setStatisticsProgress(kind, 12, "Starting " + kind + " statistics...");
+  const result = await apiRequest(apiRoutes.statisticsCompute(kind), {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey(kind + "-statistics") },
+    body: { project_id: project.project_id }
+  });
+  setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
+}
 function selectProject(projectId) {
   projectState.selectedProjectId = projectId;
   const project = selectedProject();
@@ -1385,6 +1452,14 @@ document.querySelector("[data-project-selector]").addEventListener("change", (ev
   if (!projectState.metadataReady) return;
   selectProject(event.currentTarget.value);
 });
+for (const button of document.querySelectorAll("[data-statistics-step]")) {
+  button.addEventListener("click", () => showStatisticsPage(button.dataset.statisticsStep || "univariate"));
+}
+for (const button of document.querySelectorAll("[data-compute-statistics]")) {
+  button.addEventListener("click", () => {
+    void computeStatistics(button.dataset.computeStatistics || "univariate");
+  });
+}
 document.querySelector('[data-form="project-definition"]').addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!projectState.metadataReady) return;
@@ -1635,7 +1710,6 @@ function proxyRequestToTarget(clientRequest, clientResponse, target) {
 
 module.exports = {
   designTokens,
-  funnelSteps,
   logoutLocalGoogleSession,
   parseCookies,
   proxyApiRequest,
@@ -1645,4 +1719,5 @@ module.exports = {
   routeSkeletons,
   sessionFromRequest,
   startLocalGoogleLogin,
+  statisticsSteps,
 };
