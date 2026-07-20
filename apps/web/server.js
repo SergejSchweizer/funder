@@ -1086,8 +1086,6 @@ async function fetchAllIsinsForProjects(form) {
       body: { provider_key: providerKey }
     });
     setEodhdCredentialSaved(true);
-    const input = eodhdKeyInput();
-    if (input) input.value = "";
   }
   const result = await apiRequest(apiRoutes.metadataFilterFetchAllIsins, {
     method: "POST",

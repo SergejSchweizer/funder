@@ -214,6 +214,14 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
     assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
         created["project"]
     ]
+    assert _json(client.get("/projects", headers=_headers("user-b", csrf=False)))["items"] == []
+    assert (
+        client.get(
+            f"/selections/{created['selection']['selection_id']}",
+            headers=_headers("user-b", csrf=False),
+        ).status_code
+        == 404
+    )
 
 
 def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:

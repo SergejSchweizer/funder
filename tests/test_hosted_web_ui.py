@@ -205,7 +205,6 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         "projectState.eodhdCredentialSaved",
         "Saved EODHD key available",
         "if (providerKey) {",
-        'input.value = ""',
         "fetchAllIsinsForProjects",
         "apiRoutes.metadataFilterFetchAllIsins",
         'Fetched " + result.row_count + " ISIN listings.',
@@ -242,6 +241,7 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
     ) in source
     assert "void refreshProjects()" not in source
     assert 'writeJson("[data-analysis-output]", { session })' not in source
+    assert 'input.value = ""' not in source
 
 
 def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
