@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from founder.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
 
 
-def _client() -> TestClient:
-    return TestClient(create_app(HostedApiState()))
+def _client(state: HostedApiState | None = None) -> TestClient:
+    return TestClient(create_app(state or HostedApiState()))
 
 
 def _headers(
@@ -144,6 +144,128 @@ def test_downloads_publish_visible_user_datasets_and_are_idempotent() -> None:
     assert other_datasets["items"] == []
 
 
+def test_metadata_filter_options_and_project_creation_use_all_isins_reference() -> None:
+    state = HostedApiState(
+        all_isins_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "Example UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+                "source_exchange": "XETRA",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+            {
+                "isin": "US1",
+                "exchange": "NYSE",
+                "code": "BBB",
+                "name": "Example Stock",
+                "instrument_type": "Common Stock",
+                "country": "US",
+                "currency": "USD",
+                "source_exchange": "NYSE",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+    )
+    client = _client(state)
+
+    options = _json(client.get("/metadata-filter/options", headers=_headers(csrf=False)))
+    created = _json(
+        client.post(
+            "/metadata-filter/projects",
+            headers=_headers(idempotency="metadata-project-1"),
+            json={
+                "exchange": "XETRA",
+                "name": "UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+            },
+        )
+    )
+    repeated = _json(
+        client.post(
+            "/metadata-filter/projects",
+            headers=_headers(idempotency="metadata-project-1"),
+            json={
+                "exchange": "XETRA",
+                "name": "UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+            },
+        )
+    )
+
+    assert options == {
+        "country": ["IE", "US"],
+        "currency": ["EUR", "USD"],
+        "exchange": ["NYSE", "XETRA"],
+        "instrument_type": ["Common Stock", "ETF"],
+    }
+    assert created == repeated
+    assert created["project"]["name"] == "xetra_name_ucits_etf_etf_ie_eur"
+    assert created["selection"]["member_ids"] == ["IE1:XETRA:AAA"]
+    assert created["selected_count"] == 1
+    assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
+        created["project"]
+    ]
+    assert _json(client.get("/projects", headers=_headers("user-b", csrf=False)))["items"] == []
+    assert (
+        client.get(
+            f"/selections/{created['selection']['selection_id']}",
+            headers=_headers("user-b", csrf=False),
+        ).status_code
+        == 404
+    )
+
+
+def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:
+    state = HostedApiState(
+        all_isins_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "Example UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+                "source_exchange": "XETRA",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+    )
+    client = _client(state)
+
+    rejected = client.post("/metadata-filter/fetch-all-isins", headers=_headers())
+    client.post(
+        "/credentials/eodhd",
+        headers=_headers(idempotency="credential-fetch-all-isins"),
+        json={"provider_key": "secret-provider-token"},
+    )
+    credential_status = _json(client.get("/credentials/eodhd", headers=_headers(csrf=False)))
+    fetched = _json(client.post("/metadata-filter/fetch-all-isins", headers=_headers()))
+    fetched_again = _json(client.post("/metadata-filter/fetch-all-isins", headers=_headers()))
+
+    assert rejected.status_code == 422
+    assert _json(rejected)["detail"]["code"] == "eodhd_key_required"
+    assert credential_status["status"] == "active"
+    assert fetched == {
+        "country_count": 1,
+        "currency_count": 1,
+        "exchange_count": 1,
+        "instrument_type_count": 1,
+        "row_count": 1,
+        "status": "succeeded",
+    }
+    assert fetched_again == fetched
+
+
 def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> None:
     client = _client()
     project = _json(
@@ -193,11 +315,24 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
             },
         )
     )
+    computed_statistics = _json(
+        client.post(
+            "/statistics/univariate/compute",
+            headers=_headers(idempotency="statistics-univariate-1"),
+            json={"project_id": project["project_id"]},
+        )
+    )
     projects_page = _json(client.get("/projects?limit=1&offset=0", headers=_headers(csrf=False)))
 
     assert repeated_project == project
     assert selection["member_ids"] == ["IE1", "IE2"]
     assert analysis["status"] == "succeeded"
+    assert computed_statistics == {
+        "kind": "univariate",
+        "progress": 100,
+        "project_id": project["project_id"],
+        "status": "succeeded",
+    }
     assert analysis["cache_hit"] is False
     assert repeated_analysis["run_id"] == analysis["run_id"]
     assert repeated_analysis["cache_hit"] is True
@@ -225,6 +360,39 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
         client.get(
             f"/analyses/{analysis['run_id']}", headers=_headers("user-b", csrf=False)
         ).status_code
+        == 404
+    )
+    assert (
+        client.delete(f"/projects/{project['project_id']}", headers=_headers("user-b")).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/statistics/bivariate/compute",
+            headers=_headers("user-b"),
+            json={"project_id": project["project_id"]},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/statistics/unknown/compute",
+            headers=_headers(),
+            json={"project_id": project["project_id"]},
+        ).status_code
+        == 422
+    )
+    deleted_project = _json(client.delete(f"/projects/{project['project_id']}", headers=_headers()))
+    assert deleted_project == {"project_id": project["project_id"], "status": "deleted"}
+    assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == []
+    assert (
+        client.get(
+            f"/selections/{selection['selection_id']}", headers=_headers(csrf=False)
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(f"/analyses/{analysis['run_id']}", headers=_headers(csrf=False)).status_code
         == 404
     )
     assert client.get("/projects?limit=0", headers=_headers(csrf=False)).status_code == 422

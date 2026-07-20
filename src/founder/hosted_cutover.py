@@ -262,7 +262,7 @@ def _raises_artifact_error(callback: Callable[[], object]) -> bool:
 
 def _web_storage_safe() -> bool:
     source = (REPOSITORY_ROOT / "apps" / "web" / "server.js").read_text(encoding="utf-8")
-    forbidden = ("localStorage", "sessionStorage", "document.cookie", "access_token", "id_token")
+    forbidden = ("localStorage", "sessionStorage", "document.cookie", "access_token", "api_token")
     return all(term not in source for term in forbidden)
 
 

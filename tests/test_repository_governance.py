@@ -147,6 +147,28 @@ def test_stacked_ui_workflow_requires_explicit_main_merge_and_local_docker_watch
     assert expected_watch_command in readme
 
 
+def test_backlog_tracks_real_google_oidc_runtime_pr_before_dashboard_work() -> None:
+    backlog = (REPOSITORY_ROOT / "BACKLOG.md").read_text(encoding="utf-8")
+    pr109 = backlog[
+        backlog.index(
+            "### PR109. Real Google OIDC Runtime Login And Account Identity Display"
+        ) : backlog.index("### PR102. Project Dashboard", backlog.index("### PR109."))
+    ]
+    pr102 = backlog[
+        backlog.index("### PR102. Project Dashboard") : backlog.index(
+            "### PR103.", backlog.index("### PR102.")
+        )
+    ]
+
+    assert "Branch: `feat/web-google-oidc-runtime-login`." in pr109
+    assert "Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/162." in pr109
+    assert "redirect the browser to Google's account chooser" in pr109
+    assert "add `/auth/google/callback`" in pr109
+    assert "visible lowercase identity line" in pr109
+    assert "local-dev-google" in pr109
+    assert "Depends on: PR109." in pr102
+
+
 def test_hosted_security_architecture_maps_goals_to_active_prs() -> None:
     architecture = (REPOSITORY_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
     decisions = (REPOSITORY_ROOT / "DECISIONS.md").read_text(encoding="utf-8")

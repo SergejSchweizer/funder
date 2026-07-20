@@ -45,6 +45,7 @@ services:
       FOUNDER_ENV: development
       FOUNDER_DATABASE_URL: postgresql://founder_app@postgres:5432/founder
       FOUNDER_SHARED_DATA_ROOT: /srv/founder/shared-data
+      FOUNDER_LAKE_ROOT: /srv/founder/lake
       FOUNDER_SESSION_SECRET_FILE: /run/secrets/session_secret
       FOUNDER_EODHD_KEK_FILE: /run/secrets/eodhd_kek
       FOUNDER_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
@@ -54,6 +55,7 @@ services:
       - google_client_secret
     volumes:
       - founder-shared-data:/srv/founder/shared-data
+      - ./lake:/srv/founder/lake:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,6 +70,8 @@ services:
     networks:
       - founder-internal
       - founder-public
+    group_add:
+      - "${FOUNDER_LAKE_GROUP_ID:-10}"
     read_only: true
     tmpfs:
       - /tmp
@@ -97,6 +101,14 @@ services:
     environment:
       NODE_ENV: development
       FOUNDER_API_BASE_URL: http://api:8000
+      FOUNDER_AUTH_MODE: ${FOUNDER_AUTH_MODE:-google}
+      FOUNDER_GOOGLE_CLIENT_ID: ${FOUNDER_GOOGLE_CLIENT_ID:-}
+      FOUNDER_GOOGLE_REDIRECT_URI: ${FOUNDER_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/google/callback}
+      FOUNDER_GOOGLE_ALLOWED_DOMAIN: ${FOUNDER_GOOGLE_ALLOWED_DOMAIN:-}
+      FOUNDER_LOCAL_DEV_GOOGLE_EMAIL: ${FOUNDER_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}
+      FOUNDER_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+    secrets:
+      - google_client_secret
     depends_on:
       api:
         condition: service_healthy

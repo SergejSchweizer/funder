@@ -1,4 +1,6 @@
 const http = require("node:http");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
 const { URL } = require("node:url");
 
 if (process.argv.includes("--health")) {
@@ -7,30 +9,33 @@ if (process.argv.includes("--health")) {
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
+const authMode = process.env.FOUNDER_AUTH_MODE || "google";
+const googleClientId = process.env.FOUNDER_GOOGLE_CLIENT_ID || "";
+const googleRedirectUri =
+  process.env.FOUNDER_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
+const googleAllowedDomain = process.env.FOUNDER_GOOGLE_ALLOWED_DOMAIN || "";
+const googleAuthEndpoint =
+  process.env.FOUNDER_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
+const googleTokenEndpoint =
+  process.env.FOUNDER_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
+const googleJwksUri = process.env.FOUNDER_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
+const googleStateTtlMs = Number.parseInt(process.env.FOUNDER_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
+const localDevUserId = "local-google-dev-user";
+const localDevCsrfToken = "valid-csrf";
+const localDevGoogleEmail = (
+  process.env.FOUNDER_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
+).toLowerCase();
+const sessionCookieName = "founder_session_user";
+const csrfCookieName = "founder_csrf";
+const emailCookieName = "founder_auth_email";
+const providerCookieName = "founder_auth_provider";
+const pendingGoogleStates = new Map();
+let googleJwksCache = { expiresAt: 0, keys: [] };
 
-const funnelSteps = [
-  { id: "data", label: "Data", status: "ready", href: "/data" },
-  { id: "metadata", label: "Metadata", status: "not-started", href: "/metadata" },
-  { id: "univariate", label: "Univariate", status: "running", href: "/univariate" },
-  { id: "filter", label: "Filter", status: "warning", href: "/filter" },
-  { id: "diversification", label: "Diversification", status: "stale", href: "/diversification" },
-  { id: "portfolio", label: "Portfolio", status: "complete", href: "/portfolio" },
-  { id: "validation", label: "Validation", status: "failed", href: "/validation" },
-  { id: "report", label: "Report", status: "not-started", href: "/report" },
-];
-
-const routeSkeletons = [
-  { id: "dashboard", title: "Dashboard", tone: "ready" },
-  { id: "projects", title: "Projects", tone: "complete" },
-  { id: "data", title: "Data", tone: "ready" },
-  { id: "metadata", title: "Metadata", tone: "not-started" },
-  { id: "univariate", title: "Univariate", tone: "running" },
-  { id: "filter", title: "Filter", tone: "warning" },
-  { id: "diversification", title: "Diversification", tone: "stale" },
-  { id: "portfolio", title: "Portfolio", tone: "complete" },
-  { id: "validation", title: "Validation", tone: "failed" },
-  { id: "report", title: "Report", tone: "not-started" },
-  { id: "settings", title: "Settings", tone: "ready" },
+const statisticsSteps = [
+  { id: "univariate", label: "Univariate Statistics" },
+  { id: "bivariate", label: "Bivariate Statistics" },
+  { id: "multivariate", label: "Multivariate Statistics" },
 ];
 
 const designTokens = {
@@ -77,36 +82,213 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function navItem(route) {
-  return `<a class="nav-link nav-link--${route.tone}" href="/${route.id}" data-route="${route.id}">
-    <span class="nav-dot" aria-hidden="true"></span>
-    <span>${escapeHtml(route.title)}</span>
-  </a>`;
+function base64Url(buffer) {
+  return Buffer.from(buffer).toString("base64url");
 }
 
-function funnelItem(step, index) {
-  return `<a class="funnel-step funnel-step--${step.status}" href="${step.href}" data-funnel-step="${step.id}" data-state="${step.status}">
-    <span class="funnel-index" aria-hidden="true">${index + 1}</span>
+function randomToken(bytes = 32) {
+  return base64Url(crypto.randomBytes(bytes));
+}
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function stableGoogleUserId(subject) {
+  return "google-" + sha256Hex(subject).slice(0, 32);
+}
+
+function localDevAuthEnabled() {
+  if (authMode === "local-dev") return true;
+  return false;
+}
+
+function googleAuthConfigured() {
+  return Boolean(googleClientId && googleRedirectUri);
+}
+
+function privateIpv4Address(hostname) {
+  const parts = hostname.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((part) => Number.parseInt(part, 10));
+  if (
+    octets.some(
+      (octet, index) => !Number.isInteger(octet) || String(octet) !== parts[index] || octet < 0 || octet > 255
+    )
+  ) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function googleRedirectUsesPrivateIp() {
+  try {
+    return privateIpv4Address(new URL(googleRedirectUri).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function applyGooglePrivateIpDeviceParams(url) {
+  if (!googleRedirectUsesPrivateIp()) return;
+  url.searchParams.set("device_id", "founder-" + sha256Hex(googleRedirectUri).slice(0, 32));
+  url.searchParams.set("device_name", "Founder Research Local");
+}
+
+function readGoogleClientSecret() {
+  if (process.env.FOUNDER_GOOGLE_CLIENT_SECRET) return process.env.FOUNDER_GOOGLE_CLIENT_SECRET;
+  const secretPath = process.env.FOUNDER_GOOGLE_CLIENT_SECRET_FILE;
+  if (!secretPath) return "";
+  return fs.readFileSync(secretPath, "utf8").trim();
+}
+
+function pruneExpiredGoogleStates(now = Date.now()) {
+  for (const [stateHash, pending] of pendingGoogleStates.entries()) {
+    if (pending.expiresAt <= now || pending.consumed) pendingGoogleStates.delete(stateHash);
+  }
+}
+
+function createGoogleAuthRequest() {
+  pruneExpiredGoogleStates();
+  const state = randomToken();
+  const nonce = randomToken();
+  const codeVerifier = randomToken(48);
+  const codeChallenge = base64Url(crypto.createHash("sha256").update(codeVerifier).digest());
+  pendingGoogleStates.set(sha256Hex(state), {
+    codeVerifier,
+    nonce,
+    expiresAt: Date.now() + googleStateTtlMs,
+    consumed: false,
+  });
+  const url = new URL(googleAuthEndpoint);
+  url.searchParams.set("client_id", googleClientId);
+  url.searchParams.set("redirect_uri", googleRedirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "openid email profile");
+  url.searchParams.set("state", state);
+  url.searchParams.set("nonce", nonce);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+  url.searchParams.set("prompt", "select_account");
+  applyGooglePrivateIpDeviceParams(url);
+  return url.toString();
+}
+
+async function exchangeGoogleCode(code, codeVerifier) {
+  const clientSecret = readGoogleClientSecret();
+  if (!clientSecret) throw new Error("google_client_secret_missing");
+  const body = new URLSearchParams({
+    client_id: googleClientId,
+    client_secret: clientSecret,
+    code,
+    code_verifier: codeVerifier,
+    grant_type: "authorization_code",
+    redirect_uri: googleRedirectUri,
+  });
+  const response = await fetch(googleTokenEndpoint, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    body,
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.id_token) throw new Error("google_token_exchange_failed");
+  return payload.id_token;
+}
+
+async function googleJwks() {
+  if (googleJwksCache.expiresAt > Date.now() && googleJwksCache.keys.length > 0) {
+    return googleJwksCache.keys;
+  }
+  const response = await fetch(googleJwksUri, { headers: { accept: "application/json" } });
+  const payload = await response.json();
+  if (!response.ok || !Array.isArray(payload.keys)) throw new Error("google_jwks_unavailable");
+  googleJwksCache = { expiresAt: Date.now() + 3600 * 1000, keys: payload.keys };
+  return googleJwksCache.keys;
+}
+
+function jsonPart(value) {
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+}
+
+async function verifyGoogleIdToken(idToken, expectedNonce) {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("invalid_google_id_token");
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const header = jsonPart(encodedHeader);
+  const claims = jsonPart(encodedPayload);
+  if (header.alg !== "RS256" || !header.kid) throw new Error("invalid_google_id_token_algorithm");
+  const keys = await googleJwks();
+  const jwk = keys.find((key) => key.kid === header.kid && key.kty === "RSA");
+  if (!jwk) throw new Error("google_jwk_not_found");
+  const verifier = crypto.createVerify("RSA-SHA256");
+  verifier.update(`${encodedHeader}.${encodedPayload}`);
+  verifier.end();
+  const valid = verifier.verify(crypto.createPublicKey({ key: jwk, format: "jwk" }), Buffer.from(encodedSignature, "base64url"));
+  if (!valid) throw new Error("invalid_google_id_token_signature");
+  const now = Math.floor(Date.now() / 1000);
+  if (!["https://accounts.google.com", "accounts.google.com"].includes(claims.iss)) {
+    throw new Error("invalid_google_issuer");
+  }
+  if (claims.aud !== googleClientId) throw new Error("invalid_google_audience");
+  if (!claims.sub) throw new Error("missing_google_subject");
+  if (claims.nonce !== expectedNonce) throw new Error("invalid_google_nonce");
+  if (Number(claims.exp || 0) <= now) throw new Error("expired_google_id_token");
+  if (claims.email_verified !== true && claims.email_verified !== "true") {
+    throw new Error("google_email_unverified");
+  }
+  if (googleAllowedDomain && claims.hd !== googleAllowedDomain) {
+    throw new Error("google_hosted_domain_not_allowed");
+  }
+  return claims;
+}
+
+function userLabel(session) {
+  if (!session) return "";
+  return String(session.email || session.display_name || session.user_id || "").toLowerCase();
+}
+
+function authProviderLabel(session) {
+  if (!session || !session.auth_provider) return "";
+  return String(session.auth_provider).toLowerCase();
+}
+
+function brandMarkup(session = null) {
+  const label = userLabel(session);
+  const provider = authProviderLabel(session);
+  const userLine = label
+    ? `<span class="brand-user" data-auth-user>${escapeHtml(label)}${provider ? ` · ${escapeHtml(provider)}` : ""}</span>`
+    : "";
+  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Founder Research</span>${userLine}</span></div>`;
+}
+
+function statisticsStepButton(step, index) {
+  const current = index === 0 ? ' aria-current="step"' : "";
+  const disabled = index === 0 ? "" : " disabled";
+  return `<button class="statistics-path__step" type="button" data-statistics-step="${step.id}"${current}${disabled}>
+    <span class="statistics-path__index" aria-hidden="true">${index + 1}</span>
     <span class="funnel-copy">
       <span class="funnel-label">${escapeHtml(step.label)}</span>
-      <span class="funnel-status">${escapeHtml(step.status)}</span>
+      <span class="funnel-status">ready</span>
     </span>
-  </a>`;
+  </button>`;
 }
 
-function routePanel(route) {
-  return `<section class="route-panel route-panel--${route.tone}" id="${route.id}" data-route-skeleton="${route.id}">
-    <div class="route-panel__header">
-      <p class="eyebrow">${escapeHtml(route.tone)}</p>
-      <h2>${escapeHtml(route.title)}</h2>
-    </div>
-    <div class="route-panel__body">
-      <div class="metric-strip" aria-label="${escapeHtml(route.title)} summary">
-        <span><strong data-synthetic-count="${route.id}">0</strong><small>items</small></span>
-        <span><strong>ready</strong><small>state</small></span>
-        <span><strong>snapshot</strong><small>source</small></span>
+function statisticsPanel(step, index) {
+  return `<section class="statistics-page" data-statistics-page="${step.id}"${index === 0 ? "" : " hidden"}>
+    <div class="progress-banner" data-statistics-progress-banner="${step.id}">
+      <div>
+        <p class="eyebrow">statistics compute</p>
+        <h2>${escapeHtml(step.label)}</h2>
+        <p class="subtle" data-statistics-status="${step.id}">Idle. Select Compute to run this statistic for the current project.</p>
       </div>
-      <div class="empty-state" data-empty-state="${route.id}">No user-owned run is loaded for this route.</div>
+      <button class="primary" type="button" data-compute-statistics="${step.id}">Compute</button>
+      <progress value="0" max="100" data-statistics-progress="${step.id}"></progress>
     </div>
   </section>`;
 }
@@ -141,6 +323,7 @@ function renderStyles() {
   --radius-control: ${designTokens.radius.control};
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { background: var(--canvas); }
 body {
   margin: 0;
@@ -184,9 +367,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   outline-offset: 2px;
 }
 .app-shell {
+  --sidebar-width: 280px;
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) 8px minmax(0, 1fr);
 }
 .login-gate {
   min-height: 100vh;
@@ -220,14 +404,42 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-right: 1px solid var(--line);
   background: #f1f3f4;
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-resizer {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  padding: 0;
+}
+.sidebar-resizer:hover, .sidebar-resizer:focus-visible, .app-shell--resizing .sidebar-resizer {
+  background: #e8f0fe;
+  border-color: var(--accent);
 }
 .brand {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-height: 42px;
   margin-bottom: 18px;
   font-weight: 700;
+}
+.brand-copy {
+  display: grid;
+  gap: 1px;
+}
+.brand-user {
+  color: var(--muted);
+  font-size: var(--meta);
+  font-weight: 500;
+  line-height: 1.25;
+  text-transform: lowercase;
 }
 .brand-mark {
   width: 34px;
@@ -244,38 +456,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   background: var(--surface);
   padding: 12px;
   margin-bottom: 18px;
+  display: grid;
+  gap: 8px;
+}
+.snapshot-indicator[aria-disabled="true"], .project-definition[aria-disabled="true"] {
+  opacity: .46;
 }
 .snapshot-indicator span {
   display: block;
   color: var(--muted);
   font-size: var(--meta);
 }
-.nav-group {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 18px;
+.sidebar-auth {
+  margin-top: auto;
+  padding-top: 18px;
 }
-.nav-link {
-  min-height: 38px;
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: var(--radius-control);
-  text-decoration: none;
+.sidebar-auth button {
+  width: 100%;
 }
-.nav-link:hover { background: #e8f0fe; }
-.nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-.nav-link--complete .nav-dot { background: var(--complete); }
-.nav-link--running .nav-dot { background: var(--running); }
-.nav-link--warning .nav-dot { background: var(--warning); }
-.nav-link--failed .nav-dot { background: var(--danger); }
 .workspace {
   min-width: 0;
   padding: var(--space-page);
@@ -289,6 +487,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-bottom: 1px solid var(--line);
   padding-bottom: 16px;
 }
+.eodhd-fetch {
+  width: min(620px, 100%);
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.eodhd-fetch label {
+  color: var(--muted);
+}
+.eodhd-fetch button {
+  min-width: 150px;
+}
+.eodhd-fetch__status {
+  grid-column: 1 / -1;
+  min-height: 18px;
+  color: var(--muted);
+  font-size: var(--meta);
+}
 h1, h2, p { margin: 0; }
 h1 { font-size: var(--page-title); font-weight: 720; letter-spacing: 0; }
 h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
@@ -298,13 +515,13 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   flex-wrap: wrap;
   gap: 8px;
 }
-.funnel {
+.statistics-path {
   display: grid;
-  grid-template-columns: repeat(8, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
   gap: 8px;
   margin: 18px 0;
 }
-.funnel-step {
+.statistics-path__step {
   min-height: 66px;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -314,9 +531,24 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   border-radius: var(--radius-panel);
   background: var(--surface);
   padding: 10px;
-  text-decoration: none;
+  color: var(--ink);
+  text-align: left;
 }
-.funnel-index {
+.statistics-path__step:hover, .statistics-path__step[aria-current="step"] {
+  border-color: var(--accent);
+  background: #e8f0fe;
+}
+.statistics-path__step:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: #f1f3f4;
+  opacity: .52;
+}
+.statistics-path__step:disabled:hover {
+  border-color: var(--line);
+  background: #f1f3f4;
+}
+.statistics-path__index {
   width: 28px;
   height: 28px;
   display: grid;
@@ -334,36 +566,64 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
 }
 .funnel-label { font-weight: 700; }
 .funnel-status { color: var(--muted); font-size: var(--meta); }
-.funnel-step--complete { border-color: color-mix(in srgb, var(--complete) 40%, var(--line)); }
-.funnel-step--running { border-color: color-mix(in srgb, var(--running) 50%, var(--line)); }
-.funnel-step--warning { border-color: color-mix(in srgb, var(--warning) 50%, var(--line)); }
-.funnel-step--failed { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
-.funnel-step--stale { border-color: color-mix(in srgb, var(--stale) 50%, var(--line)); }
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr);
-  gap: 16px;
-  align-items: start;
-}
-.route-stack, .side-stack {
+.statistics-pages {
   display: grid;
   gap: 12px;
+  margin-bottom: 16px;
 }
-.route-panel, .control-panel {
+.progress-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
   padding: var(--space-panel);
   box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
 }
-.route-panel__header {
+.progress-banner progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 12px;
+  accent-color: var(--accent);
+}
+.project-empty-state {
+  min-height: 360px;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 14px;
+  color: var(--muted);
+  text-align: center;
+  padding: 28px 0;
+}
+.project-definition {
+  width: min(760px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 18px;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .16);
+}
+.project-definition__header {
+  display: grid;
+  gap: 4px;
+}
+.project-definition__actions {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
-  margin-bottom: 12px;
+  justify-content: flex-end;
+}
+.project-definition__actions button {
+  min-width: 220px;
+  min-height: 46px;
+  font-weight: 700;
+}
+.project-workspace[hidden] {
+  display: none !important;
 }
 .eyebrow {
   color: var(--muted);
@@ -371,29 +631,14 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
   text-transform: uppercase;
   letter-spacing: .08em;
 }
-.metric-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.metric-strip span {
-  min-height: 58px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  padding: 8px;
-}
-.metric-strip strong { font-size: 16px; }
-.metric-strip small { color: var(--muted); }
-.empty-state {
-  margin-top: 10px;
-  color: var(--muted);
-}
 form {
   display: grid;
   gap: 12px;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 label {
   display: grid;
@@ -410,32 +655,21 @@ input, select {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
 }
-pre {
-  max-height: 220px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: #fbfdfc;
-  padding: 10px;
-  color: var(--muted);
-}
 @media (max-width: 1040px) {
   .app-shell { grid-template-columns: 1fr; }
+  .sidebar-resizer { display: none; }
   .sidebar {
     position: static;
     height: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  .nav-group { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .funnel { grid-template-columns: repeat(4, minmax(120px, 1fr)); }
-  .content-grid { grid-template-columns: 1fr; }
+  .statistics-path { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .workspace { padding: 16px; }
   .topbar { align-items: flex-start; flex-direction: column; }
-  .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .metric-strip { grid-template-columns: 1fr; }
+  .eodhd-fetch { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -447,150 +681,117 @@ pre {
 </style>`;
 }
 
-function renderAppShell(apiUrl) {
+function renderAuthenticatedShell(escapedApiUrl, session = null) {
+  return `<div class="app-shell" data-design-system-version="founder-web-shell-v1">
+  <aside class="sidebar" aria-label="Founder navigation">
+    ${brandMarkup(session)}
+    <div class="snapshot-indicator" data-snapshot-indicator aria-disabled="true">
+      <label>
+        <strong>Project Snapshot</strong>
+        <select name="project_snapshot" data-project-selector disabled>
+          <option value="">No project selected</option>
+        </select>
+      </label>
+      <span data-project-summary>Not selected</span>
+    </div>
+    <div class="sidebar-auth">
+      <a href="/auth/logout"><button type="button" data-action="google-auth">Google Auth</button></a>
+    </div>
+  </aside>
+  <button class="sidebar-resizer" type="button" data-sidebar-resizer aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="520" aria-valuenow="280"></button>
+  <main class="workspace">
+    <header class="topbar">
+      <div>
+        <h1 data-workspace-title>Project Snapshot</h1>
+        <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
+      </div>
+      <form class="eodhd-fetch" data-form="eodhd-fetch">
+        <label>EODHD Key<input name="provider_key" type="password" autocomplete="new-password" placeholder="Paste EODHD API key"></label>
+        <button class="primary" type="submit" data-action="fetch-all-isins" disabled>Fetch all ISINs</button>
+        <span class="eodhd-fetch__status" data-eodhd-fetch-status>Enter an EODHD key to enable project setup.</span>
+      </form>
+    </header>
+
+    <section class="project-empty-state" data-project-empty-state>
+      <h2>No project selected</h2>
+      <p>Select a project from Project Snapshot or define a new ISIN search project.</p>
+      <form class="project-definition" data-form="project-definition" aria-disabled="true">
+        <div class="project-definition__header">
+          <h2>Project Definition</h2>
+          <p class="subtle">Filter the all-ISIN metadata universe and create a project from the resulting list.</p>
+        </div>
+        <fieldset class="field-grid" data-project-definition-fields disabled>
+          <label>Exchange<select name="exchange" data-metadata-option="exchange"><option value="">Any</option></select></label>
+          <label>Name<input name="name" placeholder="UCITS ETF"></label>
+          <label>Instrument Type<select name="instrument_type" data-metadata-option="instrument_type"><option value="">Any</option></select></label>
+          <label>Country<select name="country" data-metadata-option="country"><option value="">Any</option></select></label>
+          <label>Currency<select name="currency" data-metadata-option="currency"><option value="">Any</option></select></label>
+        </fieldset>
+        <div class="project-definition__actions">
+          <button class="primary" type="submit" data-action="create-metadata-project" disabled>Create New Project</button>
+        </div>
+        <p class="subtle" data-project-definition-status></p>
+      </form>
+    </section>
+
+    <section class="project-workspace" data-project-workspace hidden>
+      <nav class="statistics-path" aria-label="Statistics path map">
+        ${statisticsSteps.map(statisticsStepButton).join("")}
+      </nav>
+      <div class="statistics-pages">
+        ${statisticsSteps.map(statisticsPanel).join("")}
+      </div>
+    </section>
+  </main>
+</div>`;
+}
+
+function renderAppShell(apiUrl, initialSession = null) {
   const escapedApiUrl = escapeHtml(apiUrl);
+  const escapedCsrfToken = initialSession && initialSession.csrf_token ? escapeHtml(initialSession.csrf_token) : "";
+  const initialShell =
+    initialSession && initialSession.authenticated === true
+      ? renderAuthenticatedShell(escapedApiUrl, initialSession)
+      : "";
+  const gateHidden = initialSession && initialSession.authenticated === true ? " hidden" : "";
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="founder-csrf-token" content="">
+<meta name="founder-csrf-token" content="${escapedCsrfToken}">
 <title>Founder Research</title>
 ${renderStyles()}
 </head>
 <body>
-<div class="login-gate" data-auth-gate>
+<div class="login-gate" data-auth-gate${gateHidden}>
   <section class="login-panel" aria-label="Founder login">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
+    ${brandMarkup()}
     <h1>Sign in to continue</h1>
     <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
     <div class="actions">
-      <a href="/auth/google/start" data-action="start-google-login"><button class="primary" type="button" aria-label="Start Google login">Google Login</button></a>
+      <form action="/auth/google/start" method="get" data-form="google-login">
+        <button class="primary" type="submit" aria-label="Start Google login">Google Login</button>
+      </form>
     </div>
     <p class="login-panel__status" data-auth-status>Checking session...</p>
   </section>
 </div>
-<div id="authenticated-root" data-authenticated-root></div>
+<div id="authenticated-root" data-authenticated-root>${initialShell}</div>
 <template id="authenticated-shell-template" data-authenticated-template>
-<div class="app-shell" data-design-system-version="founder-web-shell-v1">
-  <aside class="sidebar" aria-label="Founder navigation">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Founder Research</span></div>
-    <div class="snapshot-indicator" data-snapshot-indicator>
-      <strong>Project snapshot</strong>
-      <span>Not selected</span>
-    </div>
-    <nav class="nav-group" aria-label="Primary routes">
-      ${routeSkeletons.map(navItem).join("")}
-    </nav>
-  </aside>
-  <main class="workspace">
-    <header class="topbar">
-      <div>
-        <h1>Research Workspace</h1>
-        <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
-      </div>
-      <div class="actions">
-        <a href="/auth/logout"><button type="button" data-action="logout">Logout</button></a>
-      </div>
-    </header>
-
-    <nav class="funnel" aria-label="Persisted research funnel">
-      ${funnelSteps.map(funnelItem).join("")}
-    </nav>
-
-    <div class="content-grid">
-      <div class="route-stack">
-        ${routeSkeletons.map(routePanel).join("")}
-      </div>
-      <div class="side-stack">
-        <section class="control-panel" id="credentials" data-route-skeleton="credentials">
-          <div class="route-panel__header"><h2>Credentials</h2><p class="eyebrow">write-only</p></div>
-          <form data-form="credential">
-            <div class="field-grid">
-              <label>EODHD provider key<input name="provider_key" type="password" autocomplete="new-password" required></label>
-              <label>Status<input name="credential_status" value="not loaded" readonly></label>
-            </div>
-            <div class="actions">
-              <button class="primary" type="submit">Save Key</button>
-              <button class="danger" type="button" data-action="delete-credential">Delete Key</button>
-            </div>
-          </form>
-        </section>
-
-        <section class="control-panel" id="downloads" data-route-skeleton="downloads">
-          <div class="route-panel__header"><h2>Downloads</h2><p class="eyebrow">user scoped</p></div>
-          <form data-form="download">
-            <div class="field-grid">
-              <label>Symbols<input name="symbols" placeholder="AAA.XETRA, BBB.XETRA"></label>
-              <label>Run status<input name="download_status" value="idle" readonly></label>
-            </div>
-            <div class="actions">
-              <button type="button" data-action="plan-download">Plan</button>
-              <button class="primary" type="submit">Run</button>
-            </div>
-          </form>
-        </section>
-
-        <section class="control-panel" id="metadata-filter" data-route-skeleton="metadata-filter">
-          <div class="route-panel__header"><h2>Metadata Filter</h2><p class="eyebrow">server backed</p></div>
-          <form data-form="metadata-filter">
-            <div class="field-grid">
-              <label>Name contains<input name="name_contains" placeholder="UCITS ETF"></label>
-              <label>Exchange<select name="exchange"><option value="">Any</option><option>XETRA</option><option>LSE</option></select></label>
-              <label>Distribution<select name="distribution_frequency"><option value="">Any</option><option>monthly</option><option>quarterly</option><option>annual</option></select></label>
-            </div>
-            <div class="actions"><button class="primary" type="submit">Create Selection</button></div>
-          </form>
-        </section>
-
-        <section class="control-panel" id="statistics-controls" data-route-skeleton="statistics-controls">
-          <div class="route-panel__header"><h2>Statistics</h2><p class="eyebrow">API produced</p></div>
-          <div class="actions">
-            <button data-action="run-univariate-statistics">Univariate Statistics</button>
-            <button data-action="run-univariate-filter">Univariate Filter</button>
-            <button data-action="run-bivariate-statistics">Bivariate Statistics</button>
-            <button data-action="run-multivariate-statistics">Multivariate Statistics</button>
-          </div>
-        </section>
-
-        <section class="control-panel" id="analysis-controls" data-route-skeleton="analysis-controls">
-          <div class="route-panel__header"><h2>Portfolio Analysis</h2><p class="eyebrow">no browser math</p></div>
-          <form data-form="analysis">
-            <div class="field-grid">
-              <label>Project<input name="project_name" value="ETF Research"></label>
-              <label>Objective<select name="objective"><option>minimum_variance</option><option>risk_parity</option><option>maximum_diversification</option></select></label>
-            </div>
-            <div class="actions">
-              <button class="primary" type="submit">Analyze</button>
-              <button type="button" data-action="load-report">Report</button>
-            </div>
-          </form>
-          <pre data-analysis-output>{}</pre>
-        </section>
-
-        <section class="control-panel" id="account" data-route-skeleton="account">
-          <div class="route-panel__header"><h2>Account</h2><p class="eyebrow">owned data</p></div>
-          <div class="actions">
-            <button class="danger" type="button" data-action="delete-account">Delete Account Data</button>
-          </div>
-        </section>
-      </div>
-    </div>
-  </main>
-</div>
+${renderAuthenticatedShell(escapedApiUrl)}
 </template>
 <script>
+const initialSession = ${JSON.stringify(initialSession)};
 const apiBaseUrl = "/api";
 const apiRoutes = {
   session: "/session",
   credential: "/credentials/eodhd",
-  datasets: "/datasets",
-  downloadPlan: "/downloads/plan",
-  downloadRun: "/downloads/run",
   projects: "/projects",
-  selections: "/selections",
-  analyses: "/analyses",
-  account: "/account"
+  metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
+  metadataFilterOptions: "/metadata-filter/options",
+  metadataFilterProjects: "/metadata-filter/projects",
+  statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute"
 };
 function csrfToken() {
   return document.querySelector('meta[name="founder-csrf-token"]').content;
@@ -614,63 +815,310 @@ async function apiRequest(path, options = {}) {
   if (!response.ok) throw new Error("api_error_" + response.status);
   return response.json();
 }
-function writeJson(selector, value) {
-  const target = document.querySelector(selector);
-  if (target) target.textContent = JSON.stringify(value, null, 2);
-}
 function setAuthStatus(message) {
   const status = document.querySelector("[data-auth-status]");
   if (status) status.textContent = message;
 }
-function parseSymbols(value) {
-  return value.split(",").map((symbol) => symbol.trim()).filter(Boolean);
+function clientEscapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 async function refreshSession() {
-  const session = await apiRequest(apiRoutes.session);
-  writeJson("[data-analysis-output]", { session });
+  return apiRequest(apiRoutes.session);
 }
-async function refreshDatasets() {
-  const datasets = await apiRequest(apiRoutes.datasets);
-  writeJson("[data-analysis-output]", { datasets });
+let projectState = {
+  projects: [],
+  selectedProjectId: "",
+  metadataReady: false,
+  eodhdCredentialSaved: false,
+  statisticsComplete: { univariate: false, bivariate: false, multivariate: false }
+};
+function normalizeProjectItems(payload) {
+  if (!payload || !Array.isArray(payload.items)) return [];
+  return payload.items.filter((project) => project && project.project_id && project.name);
+}
+function projectLabel(project) {
+  return String(project.name || project.project_id || "Untitled project");
+}
+function selectedProject() {
+  return projectState.projects.find((project) => project.project_id === projectState.selectedProjectId) || null;
+}
+function setEodhdFetchStatus(message) {
+  const target = document.querySelector("[data-eodhd-fetch-status]");
+  if (target) target.textContent = message;
+}
+function eodhdKeyInput() {
+  return document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]');
+}
+function setEodhdCredentialSaved(saved, maskedLabel = "") {
+  projectState.eodhdCredentialSaved = saved;
+  const input = eodhdKeyInput();
+  if (input) {
+    input.placeholder = saved ? "Saved EODHD key available" : "Paste EODHD API key";
+    if (saved && maskedLabel && (!input.value || input.dataset.credentialDisplay === "masked")) {
+      input.value = maskedLabel;
+      input.dataset.credentialDisplay = "masked";
+    }
+    if (!saved) {
+      delete input.dataset.credentialDisplay;
+    }
+  }
+  updateFetchButtonState();
+}
+function setProjectGateEnabled(enabled) {
+  projectState.metadataReady = enabled;
+  const selector = document.querySelector("[data-project-selector]");
+  const snapshot = document.querySelector("[data-snapshot-indicator]");
+  const definition = document.querySelector('[data-form="project-definition"]');
+  const definitionFields = document.querySelector("[data-project-definition-fields]");
+  const createButton = document.querySelector('[data-action="create-metadata-project"]');
+  if (selector) selector.disabled = !enabled;
+  if (snapshot) snapshot.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (definition) definition.setAttribute("aria-disabled", enabled ? "false" : "true");
+  if (definitionFields) definitionFields.disabled = !enabled;
+  if (createButton) createButton.disabled = !enabled;
+  if (!enabled) {
+    projectState.projects = [];
+    projectState.selectedProjectId = "";
+    renderProjectOptions();
+    selectProject("");
+  }
+}
+function eodhdKeyValue() {
+  const input = eodhdKeyInput();
+  if (input && input.dataset.credentialDisplay === "masked") return "";
+  return input ? String(input.value || "").trim() : "";
+}
+function updateFetchButtonState() {
+  const button = document.querySelector('[data-action="fetch-all-isins"]');
+  const hasKey = Boolean(eodhdKeyValue());
+  const hasUsableCredential = hasKey || projectState.eodhdCredentialSaved;
+  if (button) button.disabled = !hasUsableCredential;
+  setProjectGateEnabled(false);
+  setEodhdFetchStatus(
+    hasKey
+      ? "Fetch all ISINs to enable project setup."
+      : projectState.eodhdCredentialSaved
+        ? "Saved EODHD key available. Fetch all ISINs to enable project setup."
+        : "Enter an EODHD key to enable project setup."
+  );
+}
+async function refreshEodhdCredentialStatus() {
+  try {
+    const status = await apiRequest(apiRoutes.credential);
+    const saved = status && status.status === "active";
+    setEodhdCredentialSaved(saved, saved ? String(status.masked_label || "") : "");
+    if (saved) {
+      setProjectGateEnabled(true);
+      await refreshMetadataFilterOptions();
+      await refreshProjects();
+      setEodhdFetchStatus("Saved EODHD key available. Projects restored for this user.");
+    }
+  } catch (_error) {
+    setEodhdCredentialSaved(false);
+  }
+}
+async function fetchAllIsinsForProjects(form) {
+  const providerKey = eodhdKeyValue();
+  if (!providerKey && !projectState.eodhdCredentialSaved) {
+    updateFetchButtonState();
+    return;
+  }
+  setProjectGateEnabled(false);
+  setEodhdFetchStatus("Fetching all ISINs...");
+  if (providerKey) {
+    await apiRequest(apiRoutes.credential, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("credential") },
+      body: { provider_key: providerKey }
+    });
+    setEodhdCredentialSaved(true);
+  }
+  const result = await apiRequest(apiRoutes.metadataFilterFetchAllIsins, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey("fetch-all-isins") }
+  });
+  setProjectGateEnabled(true);
+  await refreshMetadataFilterOptions();
+  await refreshProjects();
+  setEodhdFetchStatus("Fetched " + result.row_count + " ISIN listings.");
+}
+function optionMarkup(value) {
+  return '<option value="' + clientEscapeHtml(value) + '">' + clientEscapeHtml(value) + "</option>";
+}
+function setProjectDefinitionStatus(message) {
+  const target = document.querySelector("[data-project-definition-status]");
+  if (target) target.textContent = message;
+}
+function projectDefinitionPayload(form) {
+  const data = new FormData(form);
+  return {
+    exchange: String(data.get("exchange") || ""),
+    name: String(data.get("name") || ""),
+    instrument_type: String(data.get("instrument_type") || ""),
+    country: String(data.get("country") || ""),
+    currency: String(data.get("currency") || "")
+  };
+}
+async function refreshMetadataFilterOptions() {
+  let payload = {};
+  try {
+    payload = await apiRequest(apiRoutes.metadataFilterOptions);
+  } catch (_error) {
+    setProjectDefinitionStatus("Metadata options are not available.");
+  }
+  for (const field of ["exchange", "instrument_type", "country", "currency"]) {
+    const select = document.querySelector('[data-metadata-option="' + field + '"]');
+    if (!select) continue;
+    const values = Array.isArray(payload[field]) ? payload[field] : [];
+    select.innerHTML = '<option value="">Any</option>' + values.map(optionMarkup).join("");
+  }
+}
+function renderProjectOptions() {
+  const selector = document.querySelector("[data-project-selector]");
+  if (!selector) return;
+  const current = projectState.selectedProjectId;
+  selector.innerHTML = '<option value="">No project selected</option>' + projectState.projects.map((project) => {
+    const selected = project.project_id === current ? " selected" : "";
+    return '<option value="' + clientEscapeHtml(project.project_id) + '"' + selected + ">"
+      + clientEscapeHtml(projectLabel(project)) + "</option>";
+  }).join("");
+}
+function statisticsStepIndex(kind) {
+  return statisticsSteps.findIndex((step) => step.id === kind);
+}
+function statisticsStepEnabled(kind) {
+  const index = statisticsStepIndex(kind);
+  if (index <= 0) return true;
+  const previous = statisticsSteps[index - 1];
+  return Boolean(previous && projectState.statisticsComplete[previous.id]);
+}
+function updateStatisticsPathAccess() {
+  for (const button of document.querySelectorAll("[data-statistics-step]")) {
+    const kind = button.dataset.statisticsStep || "";
+    const enabled = statisticsStepEnabled(kind);
+    const status = button.querySelector(".funnel-status");
+    button.disabled = !enabled;
+    if (status) {
+      status.textContent = projectState.statisticsComplete[kind] ? "complete" : enabled ? "ready" : "locked";
+    }
+  }
+}
+function resetStatisticsWorkflow() {
+  projectState.statisticsComplete = { univariate: false, bivariate: false, multivariate: false };
+  for (const step of statisticsSteps) {
+    setStatisticsProgress(step.id, 0, "Idle. Select Compute to run this statistic for the current project.");
+  }
+  updateStatisticsPathAccess();
+  showStatisticsPage("univariate");
+}
+function showStatisticsPage(kind) {
+  if (!statisticsStepEnabled(kind)) return;
+  for (const page of document.querySelectorAll("[data-statistics-page]")) {
+    page.hidden = page.dataset.statisticsPage !== kind;
+  }
+  for (const button of document.querySelectorAll("[data-statistics-step]")) {
+    if (button.dataset.statisticsStep === kind) {
+      button.setAttribute("aria-current", "step");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  }
+}
+function setStatisticsProgress(kind, progress, message) {
+  const progressBar = document.querySelector('[data-statistics-progress="' + kind + '"]');
+  const status = document.querySelector('[data-statistics-status="' + kind + '"]');
+  if (progressBar) progressBar.value = progress;
+  if (status) status.textContent = message;
+}
+async function computeStatistics(kind) {
+  const project = selectedProject();
+  if (!project) {
+    setStatisticsProgress(kind, 0, "Select a project before computing statistics.");
+    return;
+  }
+  setStatisticsProgress(kind, 12, "Starting " + kind + " statistics...");
+  const result = await apiRequest(apiRoutes.statisticsCompute(kind), {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey(kind + "-statistics") },
+    body: { project_id: project.project_id }
+  });
+  setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
+  projectState.statisticsComplete[kind] = true;
+  updateStatisticsPathAccess();
+}
+function selectProject(projectId) {
+  const previousProjectId = projectState.selectedProjectId;
+  projectState.selectedProjectId = projectId;
+  const project = selectedProject();
+  const workspace = document.querySelector("[data-project-workspace]");
+  const emptyState = document.querySelector("[data-project-empty-state]");
+  const title = document.querySelector("[data-workspace-title]");
+  const summary = document.querySelector("[data-project-summary]");
+  if (workspace) workspace.hidden = !project;
+  if (emptyState) emptyState.hidden = Boolean(project);
+  if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
+  if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
+  renderProjectOptions();
+  if (previousProjectId !== projectId) resetStatisticsWorkflow();
+}
+async function refreshProjects() {
+  if (!projectState.metadataReady) {
+    renderProjectOptions();
+    selectProject("");
+    return;
+  }
+  try {
+    const payload = await apiRequest(apiRoutes.projects);
+    projectState.projects = normalizeProjectItems(payload);
+  } catch (_error) {
+    projectState.projects = [];
+  }
+  if (!selectedProject()) projectState.selectedProjectId = "";
+  renderProjectOptions();
+  selectProject(projectState.selectedProjectId);
+}
+function clientUserLabel(session) {
+  if (!session) return "";
+  return String(session.email || session.display_name || session.user_id || "").toLowerCase();
+}
+function clientAuthProviderLabel(session) {
+  if (!session || !session.auth_provider) return "";
+  return String(session.auth_provider).toLowerCase();
 }
 function mountAuthenticatedShell(session) {
   const gate = document.querySelector("[data-auth-gate]");
   const root = document.querySelector("[data-authenticated-root]");
   const template = document.querySelector("[data-authenticated-template]");
-  if (!root || !template || root.childElementCount > 0) return;
-  root.appendChild(template.content.cloneNode(true));
+  if (!root || !template) return;
+  if (root.childElementCount === 0) root.appendChild(template.content.cloneNode(true));
   const csrfMeta = document.querySelector('meta[name="founder-csrf-token"]');
   if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
+  const authUser = document.querySelector("[data-auth-user]");
+  if (authUser && session) {
+    const label = clientUserLabel(session);
+    const provider = clientAuthProviderLabel(session);
+    authUser.textContent = label + (provider ? " · " + provider : "");
+  }
   if (gate) gate.hidden = true;
-  writeJson("[data-analysis-output]", { session });
   bindAuthenticatedHandlers();
+  setProjectGateEnabled(false);
+  void refreshEodhdCredentialStatus();
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");
   if (gate) gate.hidden = false;
   setAuthStatus("Google login is required before the dashboard is shown.");
 }
-async function startGoogleLogin(event) {
-  event.preventDefault();
-  setAuthStatus("Starting Google login...");
-  try {
-    await fetch("/auth/google/start", { credentials: "include", redirect: "follow" });
-    const session = await apiRequest(apiRoutes.session);
-    if (session && session.authenticated === true) {
-      mountAuthenticatedShell(session);
-      return;
-    }
-  } catch (_error) {
-    window.location.assign("/auth/google/start");
+async function initializeAuthGate() {
+  if (initialSession && initialSession.authenticated === true) {
+    mountAuthenticatedShell(initialSession);
     return;
   }
-  setAuthStatus("Google login did not create a session. Try again.");
-}
-function bindLoginGateHandlers() {
-  const loginLink = document.querySelector('[data-action="start-google-login"]');
-  if (loginLink) loginLink.addEventListener("click", startGoogleLogin);
-}
-async function initializeAuthGate() {
   try {
     const session = await apiRequest(apiRoutes.session);
     if (session && session.authenticated === true) {
@@ -683,69 +1131,108 @@ async function initializeAuthGate() {
   }
   showLoginGate();
 }
-function bindAuthenticatedHandlers() {
-document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const providerKey = new FormData(form).get("provider_key");
-  const status = await apiRequest(apiRoutes.credential, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("credential") },
-    body: { provider_key: providerKey }
+let authenticatedHandlersBound = false;
+const sidebarWidthBounds = { min: 220, max: 520, step: 16 };
+function clampSidebarWidth(width) {
+  return Math.max(sidebarWidthBounds.min, Math.min(sidebarWidthBounds.max, width));
+}
+function setSidebarWidth(width) {
+  const shell = document.querySelector(".app-shell");
+  const resizer = document.querySelector("[data-sidebar-resizer]");
+  const nextWidth = clampSidebarWidth(width);
+  if (shell) shell.style.setProperty("--sidebar-width", nextWidth + "px");
+  if (resizer) resizer.setAttribute("aria-valuenow", String(nextWidth));
+}
+function currentSidebarWidth() {
+  const sidebar = document.querySelector(".sidebar");
+  return sidebar ? sidebar.getBoundingClientRect().width : 280;
+}
+function bindSidebarResizer() {
+  const resizer = document.querySelector("[data-sidebar-resizer]");
+  const shell = document.querySelector(".app-shell");
+  if (!resizer || !shell) return;
+  resizer.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    resizer.setPointerCapture(event.pointerId);
+    shell.classList.add("app-shell--resizing");
   });
-  form.elements.credential_status.value = status.status;
-  form.elements.provider_key.value = "";
-});
-document.querySelector('[data-action="delete-credential"]').addEventListener("click", async () => {
-  await apiRequest(apiRoutes.credential, { method: "DELETE" });
-  document.querySelector('[name="credential_status"]').value = "deleted";
-});
-document.querySelector('[data-action="plan-download"]').addEventListener("click", async () => {
-  const symbols = parseSymbols(document.querySelector('[name="symbols"]').value);
-  const plan = await apiRequest(apiRoutes.downloadPlan, { method: "POST", body: { symbols } });
-  document.querySelector('[name="download_status"]').value = plan.status;
-});
-document.querySelector('[data-form="download"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const symbols = parseSymbols(new FormData(event.currentTarget).get("symbols"));
-  const run = await apiRequest(apiRoutes.downloadRun, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("download") },
-    body: { symbols }
+  resizer.addEventListener("pointermove", (event) => {
+    if (!resizer.hasPointerCapture(event.pointerId)) return;
+    setSidebarWidth(event.clientX);
   });
-  document.querySelector('[name="download_status"]').value = run.status;
-  await refreshDatasets();
-});
-document.querySelector('[data-form="analysis"]').addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const project = await apiRequest(apiRoutes.projects, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("project") },
-    body: { name: new FormData(form).get("project_name") }
-  });
-  const selection = await apiRequest(apiRoutes.selections, {
-    method: "POST",
-    body: { project_id: project.project_id, name: "Current Selection", member_ids: ["example-member"] }
-  });
-  const analysis = await apiRequest(apiRoutes.analyses, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("analysis") },
-    body: {
-      project_id: project.project_id,
-      selection_id: selection.selection_id,
-      settings: { objective: new FormData(form).get("objective") }
+  function endResize(event) {
+    if (resizer.hasPointerCapture(event.pointerId)) resizer.releasePointerCapture(event.pointerId);
+    shell.classList.remove("app-shell--resizing");
+  }
+  resizer.addEventListener("pointerup", endResize);
+  resizer.addEventListener("pointercancel", endResize);
+  resizer.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setSidebarWidth(currentSidebarWidth() - sidebarWidthBounds.step);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setSidebarWidth(currentSidebarWidth() + sidebarWidthBounds.step);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidthBounds.min);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setSidebarWidth(sidebarWidthBounds.max);
     }
   });
-  writeJson("[data-analysis-output]", analysis);
+}
+function bindAuthenticatedHandlers() {
+if (authenticatedHandlersBound) return;
+authenticatedHandlersBound = true;
+bindSidebarResizer();
+document.querySelector('[data-form="eodhd-fetch"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await fetchAllIsinsForProjects(event.currentTarget);
+  } catch (_error) {
+    setProjectGateEnabled(false);
+    setEodhdFetchStatus("Fetch failed. Check the EODHD key and all-ISIN reference data.");
+  }
 });
-document.querySelector('[data-action="delete-account"]').addEventListener("click", async () => {
-  await apiRequest(apiRoutes.account, { method: "DELETE" });
-  writeJson("[data-analysis-output]", { status: "deleted" });
+document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]').addEventListener("input", () => {
+  delete eodhdKeyInput().dataset.credentialDisplay;
+  updateFetchButtonState();
+});
+document.querySelector("[data-project-selector]").addEventListener("change", (event) => {
+  if (!projectState.metadataReady) return;
+  selectProject(event.currentTarget.value);
+});
+for (const button of document.querySelectorAll("[data-statistics-step]")) {
+  button.addEventListener("click", () => showStatisticsPage(button.dataset.statisticsStep || "univariate"));
+}
+for (const button of document.querySelectorAll("[data-compute-statistics]")) {
+  button.addEventListener("click", () => {
+    void computeStatistics(button.dataset.computeStatistics || "univariate");
+  });
+}
+document.querySelector('[data-form="project-definition"]').addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!projectState.metadataReady) return;
+  const form = event.currentTarget;
+  setProjectDefinitionStatus("Creating project...");
+  try {
+    const created = await apiRequest(apiRoutes.metadataFilterProjects, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("metadata-project") },
+      body: projectDefinitionPayload(form)
+    });
+    await refreshProjects();
+    if (created && created.project && created.project.project_id) {
+      selectProject(created.project.project_id);
+      setProjectDefinitionStatus("Created " + created.project.name + " with " + created.selected_count + " listings.");
+    }
+  } catch (_error) {
+    setProjectDefinitionStatus("Choose at least one filter with matching ISINs.");
+  }
 });
 }
-window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshDatasets, refreshSession };
-bindLoginGateHandlers();
+window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
 initializeAuthGate();
 </script>
 </body>
@@ -762,15 +1249,143 @@ const server = http.createServer((request, response) => {
     proxyApiRequest(request, response);
     return;
   }
+  const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  if (requestUrl.pathname === "/auth/google/start") {
+    void startGoogleLogin(response);
+    return;
+  }
+  if (requestUrl.pathname === "/auth/google/callback") {
+    void completeGoogleLogin(requestUrl, response);
+    return;
+  }
+  if (requestUrl.pathname === "/auth/logout") {
+    logoutLocalGoogleSession(response);
+    return;
+  }
   if (request.url && request.url.startsWith("/auth/")) {
     proxyAuthRequest(request, response);
     return;
   }
+  const session = sessionFromRequest(request);
+  if (requestUrl.pathname === "/" && session === null) {
+    void startGoogleLogin(response);
+    return;
+  }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end(renderAppShell(apiBaseUrl));
+  response.end(renderAppShell(apiBaseUrl, session));
 });
 
 server.listen(port, "0.0.0.0");
+
+function cookieHeader(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", "SameSite=Lax"];
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  return parts.join("; ");
+}
+
+async function startGoogleLogin(response) {
+  try {
+    if (localDevAuthEnabled()) {
+      startLocalGoogleLogin(response);
+      return;
+    }
+    if (!googleAuthConfigured()) throw new Error("google_auth_not_configured");
+    response.writeHead(303, { location: createGoogleAuthRequest() });
+    response.end();
+  } catch (_error) {
+    writeAuthError(response, "google_auth_start_failed");
+  }
+}
+
+async function completeGoogleLogin(callbackUrl, response) {
+  try {
+    const code = callbackUrl.searchParams.get("code");
+    const state = callbackUrl.searchParams.get("state");
+    if (!code || !state) throw new Error("google_callback_missing_code_or_state");
+    const pending = pendingGoogleStates.get(sha256Hex(state));
+    if (!pending || pending.consumed || pending.expiresAt <= Date.now()) {
+      throw new Error("google_callback_invalid_state");
+    }
+    pending.consumed = true;
+    pendingGoogleStates.delete(sha256Hex(state));
+    const idToken = await exchangeGoogleCode(code, pending.codeVerifier);
+    const claims = await verifyGoogleIdToken(idToken, pending.nonce);
+    startGoogleSession(response, claims);
+  } catch (_error) {
+    writeAuthError(response, "google_auth_callback_failed");
+  }
+}
+
+function startLocalGoogleLogin(response) {
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, localDevUserId, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(csrfCookieName, localDevCsrfToken, { maxAge: 3600 }),
+      cookieHeader(emailCookieName, localDevGoogleEmail, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(providerCookieName, "local-dev-google", { httpOnly: true, maxAge: 3600 }),
+    ],
+  });
+  response.end();
+}
+
+function startGoogleSession(response, claims) {
+  const csrfToken = randomToken();
+  const email = String(claims.email || "").toLowerCase();
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, stableGoogleUserId(claims.sub), { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(csrfCookieName, csrfToken, { maxAge: 3600 }),
+      cookieHeader(emailCookieName, email, { httpOnly: true, maxAge: 3600 }),
+      cookieHeader(providerCookieName, "google-oidc", { httpOnly: true, maxAge: 3600 }),
+    ],
+  });
+  response.end();
+}
+
+function logoutLocalGoogleSession(response) {
+  response.writeHead(303, {
+    location: "/",
+    "set-cookie": [
+      cookieHeader(sessionCookieName, "", { httpOnly: true, maxAge: 0 }),
+      cookieHeader(csrfCookieName, "", { maxAge: 0 }),
+      cookieHeader(emailCookieName, "", { httpOnly: true, maxAge: 0 }),
+      cookieHeader(providerCookieName, "", { httpOnly: true, maxAge: 0 }),
+    ],
+  });
+  response.end();
+}
+
+function writeAuthError(response, errorCode) {
+  response.writeHead(503, { "content-type": "application/json" });
+  response.end(JSON.stringify({ error: errorCode }));
+}
+
+function parseCookies(cookieHeaderValue) {
+  const cookies = {};
+  for (const part of String(cookieHeaderValue || "").split(";")) {
+    const [rawName, ...rawValueParts] = part.trim().split("=");
+    if (!rawName) continue;
+    cookies[rawName] = decodeURIComponent(rawValueParts.join("="));
+  }
+  return cookies;
+}
+
+function sessionFromRequest(request) {
+  const cookies = parseCookies(request.headers.cookie);
+  if (!cookies[sessionCookieName]) return null;
+  return {
+    authenticated: true,
+    user_id: cookies[sessionCookieName],
+    email: cookies[emailCookieName] || cookies[sessionCookieName],
+    display_name: cookies[emailCookieName] || cookies[sessionCookieName],
+    auth_provider: cookies[providerCookieName] || "unknown",
+    csrf_token: cookies[csrfCookieName] || localDevCsrfToken,
+  };
+}
 
 function proxyApiRequest(clientRequest, clientResponse) {
   const target = new URL(clientRequest.url.replace(/^\/api/, ""), apiBaseUrl);
@@ -803,9 +1418,13 @@ function proxyRequestToTarget(clientRequest, clientResponse, target) {
 
 module.exports = {
   designTokens,
-  funnelSteps,
+  logoutLocalGoogleSession,
+  parseCookies,
   proxyApiRequest,
   proxyAuthRequest,
   renderAppShell,
-  routeSkeletons,
+  renderAuthenticatedShell,
+  sessionFromRequest,
+  startLocalGoogleLogin,
+  statisticsSteps,
 };
