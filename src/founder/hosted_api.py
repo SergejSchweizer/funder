@@ -724,7 +724,6 @@ def _metadata_filter_predicates(payload: MetadataFilterProjectRequest) -> tuple[
 def _metadata_filter_project_name(payload: MetadataFilterProjectRequest) -> str:
     parts = [
         _project_name_part(payload.exchange),
-        f"name_{_project_name_part(payload.name)}" if _project_name_part(payload.name) else "",
         _project_name_part(payload.instrument_type),
         _project_name_part(payload.country),
         _project_name_part(payload.currency),

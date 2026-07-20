@@ -208,7 +208,8 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
         "instrument_type": ["Common Stock", "ETF"],
     }
     assert created == repeated
-    assert created["project"]["name"] == "xetra_name_ucits_etf_etf_ie_eur"
+    assert created["project"]["name"] == "xetra_etf_ie_eur"
+    assert "ucits" not in created["project"]["name"]
     assert created["selection"]["member_ids"] == ["IE1:XETRA:AAA"]
     assert created["selected_count"] == 1
     assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
