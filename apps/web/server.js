@@ -993,7 +993,8 @@ async function refreshDatasets() {
 let projectState = {
   projects: [],
   selectedProjectId: "",
-  metadataReady: false
+  metadataReady: false,
+  eodhdCredentialSaved: false
 };
 function normalizeProjectItems(payload) {
   if (!payload || !Array.isArray(payload.items)) return [];
@@ -1008,6 +1009,17 @@ function selectedProject() {
 function setEodhdFetchStatus(message) {
   const target = document.querySelector("[data-eodhd-fetch-status]");
   if (target) target.textContent = message;
+}
+function eodhdKeyInput() {
+  return document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]');
+}
+function setEodhdCredentialSaved(saved) {
+  projectState.eodhdCredentialSaved = saved;
+  const input = eodhdKeyInput();
+  if (input) {
+    input.placeholder = saved ? "Saved EODHD key available" : "Paste EODHD API key";
+  }
+  updateFetchButtonState();
 }
 function setProjectGateEnabled(enabled) {
   projectState.metadataReady = enabled;
@@ -1034,31 +1046,49 @@ function setProjectGateEnabled(enabled) {
   }
 }
 function eodhdKeyValue() {
-  const input = document.querySelector('[data-form="eodhd-fetch"] [name="provider_key"]');
+  const input = eodhdKeyInput();
   return input ? String(input.value || "").trim() : "";
 }
 function updateFetchButtonState() {
   const button = document.querySelector('[data-action="fetch-all-isins"]');
   const hasKey = Boolean(eodhdKeyValue());
-  if (button) button.disabled = !hasKey;
+  const hasUsableCredential = hasKey || projectState.eodhdCredentialSaved;
+  if (button) button.disabled = !hasUsableCredential;
   setProjectGateEnabled(false);
   setEodhdFetchStatus(
-    hasKey ? "Fetch all ISINs to enable project setup." : "Enter an EODHD key to enable project setup."
+    hasKey
+      ? "Fetch all ISINs to enable project setup."
+      : projectState.eodhdCredentialSaved
+        ? "Saved EODHD key available. Fetch all ISINs to enable project setup."
+        : "Enter an EODHD key to enable project setup."
   );
+}
+async function refreshEodhdCredentialStatus() {
+  try {
+    const status = await apiRequest(apiRoutes.credential);
+    setEodhdCredentialSaved(status && status.status === "active");
+  } catch (_error) {
+    setEodhdCredentialSaved(false);
+  }
 }
 async function fetchAllIsinsForProjects(form) {
   const providerKey = eodhdKeyValue();
-  if (!providerKey) {
+  if (!providerKey && !projectState.eodhdCredentialSaved) {
     updateFetchButtonState();
     return;
   }
   setProjectGateEnabled(false);
   setEodhdFetchStatus("Fetching all ISINs...");
-  await apiRequest(apiRoutes.credential, {
-    method: "POST",
-    headers: { "Idempotency-Key": idempotencyKey("credential") },
-    body: { provider_key: providerKey }
-  });
+  if (providerKey) {
+    await apiRequest(apiRoutes.credential, {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey("credential") },
+      body: { provider_key: providerKey }
+    });
+    setEodhdCredentialSaved(true);
+    const input = eodhdKeyInput();
+    if (input) input.value = "";
+  }
   const result = await apiRequest(apiRoutes.metadataFilterFetchAllIsins, {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey("fetch-all-isins") }
@@ -1181,7 +1211,7 @@ function mountAuthenticatedShell(session) {
   if (gate) gate.hidden = true;
   bindAuthenticatedHandlers();
   setProjectGateEnabled(false);
-  updateFetchButtonState();
+  void refreshEodhdCredentialStatus();
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");

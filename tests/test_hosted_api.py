@@ -240,10 +240,13 @@ def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:
         headers=_headers(idempotency="credential-fetch-all-isins"),
         json={"provider_key": "secret-provider-token"},
     )
+    credential_status = _json(client.get("/credentials/eodhd", headers=_headers(csrf=False)))
     fetched = _json(client.post("/metadata-filter/fetch-all-isins", headers=_headers()))
+    fetched_again = _json(client.post("/metadata-filter/fetch-all-isins", headers=_headers()))
 
     assert rejected.status_code == 422
     assert _json(rejected)["detail"]["code"] == "eodhd_key_required"
+    assert credential_status["status"] == "active"
     assert fetched == {
         "country_count": 1,
         "currency_count": 1,
@@ -252,6 +255,7 @@ def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:
         "row_count": 1,
         "status": "succeeded",
     }
+    assert fetched_again == fetched
 
 
 def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> None:
