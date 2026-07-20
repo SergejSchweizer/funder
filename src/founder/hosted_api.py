@@ -38,6 +38,7 @@ SESSION_COOKIE_NAME = "founder_session_user"
 CSRF_COOKIE_NAME = "founder_csrf"
 LOCAL_DEV_USER_ID = "local-google-dev-user"
 LOCAL_DEV_CSRF_TOKEN = "valid-csrf"
+REMOVED_PROJECT_NAMES = frozenset({"Statistics Smoke"})
 
 
 class HostedApiError(RuntimeError):
@@ -394,6 +395,7 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         limit: int = 100,
         offset: int = 0,
     ) -> JsonRow:
+        _remove_discontinued_projects(api_state, user.user_id)
         items = [
             _project_with_selection_row(api_state, project, user.user_id)
             for project in api_state.projects_by_id.values()
@@ -564,10 +566,14 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
         if statistics_kind not in allowed_kinds:
             raise _http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid_statistics_kind")
         _require_user_row(api_state.projects_by_id, payload.project_id, user.user_id)
+        selection = _selection_for_project(api_state, payload.project_id, user.user_id)
         _audit(api_state, user.user_id, f"statistics.{statistics_kind}.compute")
         return {
             "kind": statistics_kind,
             "project_id": payload.project_id,
+            "selected_count": _statistics_selected_count(
+                len(selection.member_ids), statistics_kind
+            ),
             "status": "succeeded",
             "progress": 100,
         }
@@ -776,6 +782,31 @@ def _project_row(project: ProjectRecord) -> JsonRow:
     return {"project_id": project.project_id, "name": project.name}
 
 
+def _remove_discontinued_projects(state: HostedApiState, user_id: str) -> None:
+    project_ids = {
+        project_id
+        for project_id, project in state.projects_by_id.items()
+        if project.user_id == user_id and project.name in REMOVED_PROJECT_NAMES
+    }
+    if not project_ids:
+        return
+    state.projects_by_id = {
+        project_id: project
+        for project_id, project in state.projects_by_id.items()
+        if project_id not in project_ids
+    }
+    state.selections_by_id = {
+        selection_id: selection
+        for selection_id, selection in state.selections_by_id.items()
+        if selection.project_id not in project_ids or selection.user_id != user_id
+    }
+    state.analyses_by_id = {
+        analysis_id: analysis
+        for analysis_id, analysis in state.analyses_by_id.items()
+        if analysis.project_id not in project_ids or analysis.user_id != user_id
+    }
+
+
 def _project_with_selection_row(
     state: HostedApiState, project: ProjectRecord, user_id: str
 ) -> JsonRow:
@@ -788,6 +819,11 @@ def _project_with_selection_row(
         "selection_id": selection.selection_id,
         "selected_count": len(selection.member_ids),
     }
+
+
+def _statistics_selected_count(selection_count: int, statistics_kind: str) -> int:
+    reduction_by_kind = {"univariate": 1, "bivariate": 2, "multivariate": 3}
+    return max(0, selection_count - reduction_by_kind[statistics_kind])
 
 
 def _selection_row(selection: SelectionRecord) -> JsonRow:
