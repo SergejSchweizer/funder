@@ -35,7 +35,6 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     assert "Project Snapshot" in source
     assert "No project selected" in source
     assert "data-project-selector" in source
-    assert "data-project-tree-items" in source
     assert "data-project-workspace hidden" in source
     assert "Project Definition" in source
     assert "Create New Project" in source
@@ -88,8 +87,8 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert 'id: "projects"' in source
     assert 'id: "dashboard"' not in source
     assert 'class="nav-dot"' not in source
-    assert "projectNavigationMarkup()" in source
-    assert 'aria-label="Project routes"' in source
+    assert "projectNavigationMarkup()" not in source
+    assert 'aria-label="Project routes"' not in source
     assert "data-sidebar-resizer" in source
     assert 'aria-label="Resize sidebar"' in source
     assert "--sidebar-width" in source
@@ -228,8 +227,6 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         "refreshMetadataFilterOptions()",
         "normalizeProjectItems(payload)",
         "renderProjectOptions()",
-        "renderProjectNavigation()",
-        "deleteProject(projectId)",
         "selectProject(projectId)",
         "projectDefinitionPayload(form)",
         "apiRoutes.metadataFilterProjects",
@@ -245,12 +242,6 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         'document.querySelector("[data-project-empty-state]")',
         'document.querySelector("[data-project-workspace]")',
         'document.querySelector("[data-snapshot-indicator]")',
-        'document.querySelector("[data-project-navigation]")',
-        "project-tree__delete",
-        "data-delete-project-id",
-        'aria-label="Delete project ',
-        "apiRoutes.project(projectId)",
-        'method: "DELETE"',
         "workspace.hidden = !project",
         "emptyState.hidden = Boolean(project)",
     ):
@@ -264,6 +255,8 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
     assert "void refreshProjects()" not in source
     assert 'writeJson("[data-analysis-output]", { session })' not in source
     assert 'input.value = ""' not in source
+    assert "project-tree" not in source
+    assert "data-delete-project-id" not in source
 
 
 def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:

@@ -252,22 +252,6 @@ async function verifyGoogleIdToken(idToken, expectedNonce) {
   return claims;
 }
 
-function navItem(route) {
-  return `<a class="nav-link nav-link--${route.tone}" href="/${route.id}" data-route="${route.id}">
-    <span>${escapeHtml(route.title)}</span>
-  </a>`;
-}
-
-function projectNavigationMarkup() {
-  return `<nav class="nav-group" aria-label="Project routes" data-project-navigation aria-disabled="true">
-    <a class="nav-link nav-link--complete" href="/projects" data-route="projects" aria-disabled="true"><span>Projects</span></a>
-    <div class="project-tree" data-project-tree>
-      <div class="project-tree__empty" data-project-tree-empty>No projects</div>
-      <div class="project-tree__items" data-project-tree-items></div>
-    </div>
-  </nav>`;
-}
-
 function userLabel(session) {
   if (!session) return "";
   return String(session.email || session.display_name || session.user_id || "").toLowerCase();
@@ -495,83 +479,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   display: grid;
   gap: 8px;
 }
-.snapshot-indicator[aria-disabled="true"], .nav-group[aria-disabled="true"], .project-definition[aria-disabled="true"] {
+.snapshot-indicator[aria-disabled="true"], .project-definition[aria-disabled="true"] {
   opacity: .46;
 }
 .snapshot-indicator span {
   display: block;
   color: var(--muted);
   font-size: var(--meta);
-}
-.nav-group {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-.nav-link {
-  min-height: 38px;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: var(--radius-control);
-  text-decoration: none;
-  font-weight: 700;
-}
-.nav-link:hover { background: #e8f0fe; }
-.nav-link[aria-disabled="true"] {
-  pointer-events: none;
-  color: var(--muted);
-}
-.project-tree {
-  display: grid;
-  gap: 4px;
-  padding-left: 14px;
-  border-left: 1px solid var(--line);
-  margin-left: 10px;
-}
-.project-tree__empty, .project-tree__row {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius-control);
-  color: var(--muted);
-  font-size: var(--meta);
-}
-.project-tree__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  gap: 4px;
-}
-.project-tree__item {
-  border: 0;
-  justify-content: flex-start;
-  padding: 0 8px;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-.project-tree__item:hover, .project-tree__item[aria-current="page"] {
-  background: #e8f0fe;
-  color: var(--accent);
-}
-.project-tree__delete {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-control);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--muted);
-}
-.project-tree__delete:hover {
-  background: #fce8e6;
-  color: var(--danger);
-}
-.project-tree__delete svg {
-  width: 16px;
-  height: 16px;
 }
 .sidebar-auth {
   margin-top: auto;
@@ -815,7 +729,6 @@ pre {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  .nav-group { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .statistics-path { grid-template-columns: 1fr; }
   .content-grid { grid-template-columns: 1fr; }
 }
@@ -848,7 +761,6 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
       </label>
       <span data-project-summary>Not selected</span>
     </div>
-    ${projectNavigationMarkup()}
     <div class="sidebar-auth">
       <a href="/auth/logout"><button type="button" data-action="google-auth">Google Auth</button></a>
     </div>
@@ -1011,7 +923,6 @@ const apiRoutes = {
   downloadPlan: "/downloads/plan",
   downloadRun: "/downloads/run",
   projects: "/projects",
-  project: (projectId) => "/projects/" + encodeURIComponent(projectId),
   selections: "/selections",
   metadataFilterFetchAllIsins: "/metadata-filter/fetch-all-isins",
   metadataFilterOptions: "/metadata-filter/options",
@@ -1110,15 +1021,11 @@ function setProjectGateEnabled(enabled) {
   projectState.metadataReady = enabled;
   const selector = document.querySelector("[data-project-selector]");
   const snapshot = document.querySelector("[data-snapshot-indicator]");
-  const navigation = document.querySelector("[data-project-navigation]");
-  const projectLink = document.querySelector('[data-route="projects"]');
   const definition = document.querySelector('[data-form="project-definition"]');
   const definitionFields = document.querySelector("[data-project-definition-fields]");
   const createButton = document.querySelector('[data-action="create-metadata-project"]');
   if (selector) selector.disabled = !enabled;
   if (snapshot) snapshot.setAttribute("aria-disabled", enabled ? "false" : "true");
-  if (navigation) navigation.setAttribute("aria-disabled", enabled ? "false" : "true");
-  if (projectLink) projectLink.setAttribute("aria-disabled", enabled ? "false" : "true");
   if (definition) definition.setAttribute("aria-disabled", enabled ? "false" : "true");
   if (definitionFields) definitionFields.disabled = !enabled;
   if (createButton) createButton.disabled = !enabled;
@@ -1126,7 +1033,6 @@ function setProjectGateEnabled(enabled) {
     projectState.projects = [];
     projectState.selectedProjectId = "";
     renderProjectOptions();
-    renderProjectNavigation();
     selectProject("");
   }
 }
@@ -1230,43 +1136,6 @@ function renderProjectOptions() {
       + clientEscapeHtml(projectLabel(project)) + "</option>";
   }).join("");
 }
-function renderProjectNavigation() {
-  const items = document.querySelector("[data-project-tree-items]");
-  const empty = document.querySelector("[data-project-tree-empty]");
-  if (!items || !empty) return;
-  empty.hidden = projectState.projects.length > 0;
-  items.innerHTML = projectState.projects.map((project) => {
-    const current = project.project_id === projectState.selectedProjectId ? ' aria-current="page"' : "";
-    return '<div class="project-tree__row">'
-      + '<button class="project-tree__item" type="button" data-project-id="'
-      + clientEscapeHtml(project.project_id) + '"' + current + ">"
-      + clientEscapeHtml(projectLabel(project)) + "</button>"
-      + '<button class="project-tree__delete" type="button" data-delete-project-id="'
-      + clientEscapeHtml(project.project_id) + '" aria-label="Delete project '
-      + clientEscapeHtml(projectLabel(project)) + '">'
-      + '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-      + '<path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2l1 11h4l1-11h2l-1 13H8L7 9z" fill="currentColor"/>'
-      + "</svg></button></div>";
-  }).join("");
-  for (const button of items.querySelectorAll("[data-project-id]")) {
-    button.addEventListener("click", () => selectProject(button.dataset.projectId || ""));
-  }
-  for (const button of items.querySelectorAll("[data-delete-project-id]")) {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      void deleteProject(button.dataset.deleteProjectId || "");
-    });
-  }
-}
-async function deleteProject(projectId) {
-  if (!projectId || !projectState.metadataReady) return;
-  await apiRequest(apiRoutes.project(projectId), {
-    method: "DELETE",
-    headers: { "Idempotency-Key": idempotencyKey("delete-project") }
-  });
-  if (projectState.selectedProjectId === projectId) projectState.selectedProjectId = "";
-  await refreshProjects();
-}
 function showStatisticsPage(kind) {
   for (const page of document.querySelectorAll("[data-statistics-page]")) {
     page.hidden = page.dataset.statisticsPage !== kind;
@@ -1311,12 +1180,10 @@ function selectProject(projectId) {
   if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
   if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
   renderProjectOptions();
-  renderProjectNavigation();
 }
 async function refreshProjects() {
   if (!projectState.metadataReady) {
     renderProjectOptions();
-    renderProjectNavigation();
     selectProject("");
     return;
   }
@@ -1328,7 +1195,6 @@ async function refreshProjects() {
   }
   if (!selectedProject()) projectState.selectedProjectId = "";
   renderProjectOptions();
-  renderProjectNavigation();
   selectProject(projectState.selectedProjectId);
 }
 function clientUserLabel(session) {
