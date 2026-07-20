@@ -335,57 +335,20 @@ field<value      numeric less-than
 field<=value     numeric less-than-or-equal
 ```
 
-Filterable univariate fields are the `univariate_statistics` columns:
+Filterable univariate fields are the `univariate_statistics` columns. For portfolio compilation they are grouped by decision use:
 
-```text
-isin
-exchange
-code
-confidence_level
-first_quote_date
-last_quote_date
-quote_observation_count
-first_return_date
-last_return_date
-return_observation_count
-start_adjusted_close
-end_adjusted_close
-total_return
-cagr
-cumulative_log_return
-mean_log_return
-median_log_return
-min_log_return
-max_log_return
-mean_simple_return
-median_simple_return
-min_simple_return
-max_simple_return
-daily_log_return_std
-daily_simple_return_std
-annualized_return
-annualized_log_return
-annualized_simple_return
-annualized_geometric_return
-annualized_volatility
-realized_variance
-realized_volatility
-downside_deviation
-sharpe_ratio
-sortino_ratio
-var
-expected_shortfall
-tail_observation_count
-max_drawdown
-positive_day_ratio
-log_price_slope
-trend_r_squared
-availability_reason
-distribution_frequency
-distribution_events_per_year
-last_distribution_date
-distribution_observation_count
-```
+| Portfolio category | Purpose | Fields |
+| --- | --- | --- |
+| Instrument Identity | Identify the listing before deduplication, broker mapping, and portfolio display. | `isin`, `exchange`, `code` |
+| History Coverage | Decide whether a listing has enough aligned history for portfolio inputs. | `first_quote_date`, `last_quote_date`, `quote_observation_count`, `first_return_date`, `last_return_date`, `return_observation_count`, `meets_min_history_252`, `meets_min_history_504`, `meets_min_history_756` |
+| Return Level | Rank and sanity-check absolute performance without treating it as a forecast. | `start_adjusted_close`, `end_adjusted_close`, `total_return`, `cagr`, `cumulative_log_return`, `annualized_return`, `annualized_log_return`, `annualized_simple_return`, `annualized_geometric_return` |
+| Return Distribution | Inspect day-to-day return shape before risk and allocation decisions. | `mean_log_return`, `median_log_return`, `min_log_return`, `max_log_return`, `mean_simple_return`, `median_simple_return`, `min_simple_return`, `max_simple_return`, `positive_day_ratio` |
+| Volatility And Downside Risk | Screen unstable instruments before covariance, risk-parity, and frontier work. | `daily_log_return_std`, `daily_simple_return_std`, `annualized_volatility`, `realized_variance`, `realized_volatility`, `downside_deviation` |
+| Risk-Adjusted Performance | Compare return per unit of broad or downside risk while avoiding single-metric selection. | `sharpe_ratio`, `sortino_ratio` |
+| Tail Risk | Filter instruments with unacceptable historical loss tails for defensive profiles. | `confidence_level`, `var`, `expected_shortfall`, `tail_observation_count` |
+| Drawdown And Trend | Assess NAV erosion, recovery risk, and trend quality before portfolio inclusion. | `max_drawdown`, `log_price_slope`, `trend_r_squared` |
+| Income Distribution | Support income-oriented portfolios and distinguish distributing from accumulating funds. | `distribution_frequency`, `distribution_events_per_year`, `last_distribution_date`, `distribution_observation_count` |
+| Data Quality And Production Readiness | Exclude unreliable listings before bivariate statistics and portfolio optimization. | `availability_reason`, `quarantined_price_count`, `non_positive_price_detected`, `duplicate_date_detected`, `stale_price_detected`, `unexplained_gap_detected`, `production_eligible`, `data_quality_reason` |
 
 Univariate feature semantics, ranges, and units. The empirical column is computed from the current local `lake/gold/univariate_statistics` snapshot with 1,759 rows. It is a descriptive `mean +/- 3 std` band and is not clipped to the valid technical range:
 
@@ -434,6 +397,16 @@ Univariate feature semantics, ranges, and units. The empirical column is compute
 | `log_price_slope` | Linear-regression slope of `ln(adjusted_close)` over quote index. | `(-inf, +inf)`. | Log-price change per quote row | `0.000253 [-0.001997, 0.002502]` |
 | `trend_r_squared` | R-squared of the log-price trend regression. | `[0, 1]` in normal cases. | Unitless ratio | `0.642729 [-0.291661, 1.5771]` |
 | `availability_reason` | Basic availability status for the statistic row. | `ok` or `insufficient_returns`. | Category | n/a |
+| `quarantined_price_count` | Count of invalid price rows excluded by the shared return-quality policy. | Integer `>= 0`. | Rows | n/a |
+| `non_positive_price_detected` | Whether any non-positive price was detected. | `true` or `false`. | Boolean | n/a |
+| `duplicate_date_detected` | Whether duplicate quote dates were detected. | `true` or `false`. | Boolean | n/a |
+| `stale_price_detected` | Whether stale repeated prices were detected by the quality gate. | `true` or `false`. | Boolean | n/a |
+| `unexplained_gap_detected` | Whether unexplained quote-date gaps were detected. | `true` or `false`. | Boolean | n/a |
+| `meets_min_history_252` | Whether the listing has at least 252 valid observations. | `true` or `false`. | Boolean | n/a |
+| `meets_min_history_504` | Whether the listing has at least 504 valid observations. | `true` or `false`. | Boolean | n/a |
+| `meets_min_history_756` | Whether the listing has at least 756 valid observations. | `true` or `false`. | Boolean | n/a |
+| `production_eligible` | Whether the listing passes the current production-quality gate. | `true` or `false`. | Boolean | n/a |
+| `data_quality_reason` | Main reason explaining production eligibility or exclusion. | Category text such as `ok` or a quality-failure reason. | Category | n/a |
 | `distribution_frequency` | Inferred dividend distribution cadence from Bronze dividend dates. | `monthly`, `quarterly`, `semiannual`, `annual`, `irregular`, `accumulating`, or `unknown`. | Category | `accumulating=1104`, `irregular=349`, `quarterly=94`, `semiannual=91`, `annual=77`, `unknown=24`, `monthly=20` |
 | `distribution_events_per_year` | Annualized event rate from first to last positive dividend event. | `[0, +inf)`. | Events per year | `1.0295 [-4.8443, 6.9032]` |
 | `last_distribution_date` | Latest positive dividend event date. | ISO date, or empty when no dividend event exists. | Date | n/a |
