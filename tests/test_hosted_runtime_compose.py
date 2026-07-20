@@ -34,6 +34,9 @@ def test_compose_defines_persistent_internal_postgres_and_shared_data() -> None:
     assert "5432" in postgres["expose"]
     assert "founder-postgres-data:/var/lib/postgresql/data" in postgres["volumes"]
     assert "founder-shared-data:/srv/founder/shared-data" in api["volumes"]
+    assert "./lake:/srv/founder/lake:ro" in api["volumes"]
+    assert api["environment"]["FOUNDER_LAKE_ROOT"] == "/srv/founder/lake"
+    assert api["group_add"] == ["${FOUNDER_LAKE_GROUP_ID:-10}"]
 
 
 def test_compose_exposes_only_api_and_web_development_ports() -> None:
@@ -48,13 +51,22 @@ def test_compose_exposes_only_api_and_web_development_ports() -> None:
     assert "ports" not in cast(ComposeMapping, services["postgres"])
 
 
-def test_web_has_no_shared_data_or_secret_mounts() -> None:
+def test_web_has_no_shared_data_mount_and_only_google_auth_secret() -> None:
     services = cast(ComposeMapping, _compose()["services"])
     web = cast(ComposeMapping, services["web"])
 
     assert "volumes" not in web
-    assert "secrets" not in web
+    assert web["secrets"] == ["google_client_secret"]
     assert "FOUNDER_API_BASE_URL" in web["environment"]
+    assert web["environment"]["FOUNDER_AUTH_MODE"] == "${FOUNDER_AUTH_MODE:-google}"
+    assert (
+        web["environment"]["FOUNDER_GOOGLE_ALLOWED_DOMAIN"] == "${FOUNDER_GOOGLE_ALLOWED_DOMAIN:-}"
+    )
+    assert (
+        web["environment"]["FOUNDER_LOCAL_DEV_GOOGLE_EMAIL"]
+        == "${FOUNDER_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}"
+    )
+    assert "FOUNDER_GOOGLE_CLIENT_SECRET_FILE" in web["environment"]
 
 
 def test_web_compose_develop_watch_rebuilds_local_ui_changes() -> None:

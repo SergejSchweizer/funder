@@ -473,7 +473,7 @@ Idempotency: Retrying the complete workflow creates no duplicate users, credenti
 
 PR97 remains the minimum functional hosted Web UI required by PR100. The following post-cutover series turns that baseline into the approved Founder product interface: a simple Google- and Apple-inspired research workspace built around the persisted funnel `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. These PRs must not move financial calculations or authorization decisions into the browser, weaken the PR99 readiness gate, or replace immutable project, snapshot, selection, and run identities with client-only state.
 
-PR102 through PR108 are a stacked UI branch tree. PR102 starts from the current post-PR101 `main`, and each following UI PR starts from the previous UI branch until the tree is explicitly landed. Do not merge any UI stack branch into `main` unless the maintainer explicitly requests that `main` merge. During UI stack development, run `docker compose --env-file .env.local up --build --watch web` from the active UI branch so every local UI change is visible in Docker; use `uv run founder-compose-web-watch` when Compose watch is unavailable.
+PR109, then PR102 through PR108 are a stacked UI branch tree. PR109 starts from the current local-login hardening branch, PR102 starts from PR109, and each following UI PR starts from the previous UI branch until the tree is explicitly landed. Do not merge any UI stack branch into `main` unless the maintainer explicitly requests that `main` merge. During UI stack development, run `docker compose --env-file .env.local up --build --watch web` from the active UI branch so every local UI change is visible in Docker; use `uv run founder-compose-web-watch` when Compose watch is unavailable.
 
 ### PR101. Web Design System, Application Shell, And Visual Baseline
 
@@ -495,6 +495,26 @@ Determinism: Design tokens, route definitions, formatter rules, icon mappings, f
 
 Idempotency: Reloading or revisiting a route reconstructs the same shell from server state without creating projects, selections, downloads, or analyses.
 
+### PR109. Real Google OIDC Runtime Login And Account Identity Display
+
+Branch: `feat/web-google-oidc-runtime-login`.
+
+Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/162.
+
+Priority: P0 authenticated user boundary for the local and hosted Web UI.
+
+Depends on: PR101 and PR #160 local login hardening.
+
+Scope: Replace the local `local-dev-google` session stub as the default Web login path with a real Google OpenID Connect authorization-code flow. Wire `/auth/google/start` to create a PKCE, state, and nonce login request; redirect the browser to Google's account chooser; add `/auth/google/callback` to exchange the authorization code with Google, verify the ID token issuer, audience, signature, expiry, nonce, email verification, and optional hosted-domain rule; resolve the stable Google `sub` into the Founder user identity; issue opaque HttpOnly session and CSRF cookies; and keep an explicit opt-in local-dev auth mode for offline Docker development. Surface the authenticated Google email or display name in lowercase under `Founder Research` in every authenticated shell and mark local-dev sessions as `local-dev-google`.
+
+Acceptance: Tests cover Google account chooser redirect construction, callback success, first login, repeat login with changed email and unchanged `sub`, invalid state, replayed state, invalid nonce, invalid issuer, invalid audience, expired ID token, unverified email, optional hosted-domain rejection, token-exchange failure, logout, session status, local-dev fallback disabled by default outside development, and the visible lowercase identity line. Docker documentation shows the required Google OAuth client id, secret-file path, redirect URI, and local-dev override. Browser tests or HTTP-level tests prove the dashboard is not shown before real Google callback completion when local-dev mode is disabled.
+
+Security: Google client secret, session secret, tokens, authorization codes, ID tokens, refresh tokens, code verifier, nonce, state, and session cookies are never committed, logged, rendered, stored in browser storage, or included in URLs after callback completion. State and nonce are single-use and short-lived. Session cookies are HttpOnly, Secure outside local HTTP development, SameSite=Lax or stricter, path-scoped, and revocable. Local-dev auth is visibly labelled and cannot be confused with verified Google OIDC.
+
+Determinism: OIDC request serialization, state hashing, nonce validation, user identity resolution from Google `sub`, session status response shape, identity display formatting, and local-dev gating are versioned and covered by deterministic fake Google providers in tests.
+
+Idempotency: Repeating a valid login for the same Google `sub` updates permitted profile metadata without creating duplicate users. Retrying failed callbacks never creates users or sessions. Refreshing the authenticated page reuses the existing server-side session and does not create projects, selections, downloads, or analyses.
+
 ### PR102. Project Dashboard, First-Run Onboarding, And Persisted Funnel State
 
 Branch: `feat/web-project-dashboard-funnel-state`.
@@ -503,7 +523,7 @@ Git status: not started. PR: TBD.
 
 Priority: P1 usable product navigation.
 
-Depends on: PR101.
+Depends on: PR109.
 
 Scope: Implement the project dashboard, recent-project table, continue-research action, data-status summary, portfolio-monitoring summary, warnings, account navigation, and first-run onboarding. Guide a new Google-authenticated user through EODHD credential setup, Free-versus-paid capability discovery, creation of a starter project, first permitted refresh, and entry into the research funnel. Persist and display the current project snapshot, universe version, candidate selection, analysis runs, completed steps, warnings, and stale downstream steps when an upstream snapshot or filter changes. The Free-key starter path must show a meaningful supported example without exposing pre-existing data the user has not refreshed with their own key.
 
@@ -641,7 +661,7 @@ Final hosted-security branch: `feat/hosted-multitenant-cutover`.
 
 Final UI branch: `feat/web-ui-production-cutover`.
 
-Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 remain stacked on their declared dependencies. PR101 through PR108 form a sequential post-PR100 UI stack and must be restacked after predecessor merges.
+Squash rule: Every PR title and final squash commit subject must use `type(optional-scope): subject`. Branches PR85 through PR100 remain stacked on their declared dependencies. PR101, PR109, and PR102 through PR108 form a sequential post-PR100 UI stack and must be restacked after predecessor merges.
 
 Main-merge rule: No branch or pull request is merged into `main` unless the maintainer explicitly requests that `main` merge in the current task. Backlog continuation and UI work produce stacked, pushed PR branches by default; they remain open until the maintainer asks to land a PR or the full stack.
 
