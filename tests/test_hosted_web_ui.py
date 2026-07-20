@@ -196,8 +196,16 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
     for expected in (
         "let projectState =",
         "metadataReady: false",
+        "eodhdCredentialSaved: false",
         "setProjectGateEnabled(false)",
         "setProjectGateEnabled(true)",
+        "refreshEodhdCredentialStatus()",
+        "setEodhdCredentialSaved(saved)",
+        'status && status.status === "active"',
+        "projectState.eodhdCredentialSaved",
+        "Saved EODHD key available",
+        "if (providerKey) {",
+        'input.value = ""',
         "fetchAllIsinsForProjects",
         "apiRoutes.metadataFilterFetchAllIsins",
         'Fetched " + result.row_count + " ISIN listings.',
@@ -228,7 +236,9 @@ def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> 
         assert expected in source
 
     assert (
-        "bindAuthenticatedHandlers();\n  setProjectGateEnabled(false);\n  updateFetchButtonState();"
+        "bindAuthenticatedHandlers();\n"
+        "  setProjectGateEnabled(false);\n"
+        "  void refreshEodhdCredentialStatus();"
     ) in source
     assert "void refreshProjects()" not in source
     assert 'writeJson("[data-analysis-output]", { session })' not in source
