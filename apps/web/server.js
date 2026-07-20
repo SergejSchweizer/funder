@@ -126,6 +126,40 @@ function googleAuthConfigured() {
   return Boolean(googleClientId && googleRedirectUri);
 }
 
+function privateIpv4Address(hostname) {
+  const parts = hostname.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((part) => Number.parseInt(part, 10));
+  if (
+    octets.some(
+      (octet, index) => !Number.isInteger(octet) || String(octet) !== parts[index] || octet < 0 || octet > 255
+    )
+  ) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function googleRedirectUsesPrivateIp() {
+  try {
+    return privateIpv4Address(new URL(googleRedirectUri).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function applyGooglePrivateIpDeviceParams(url) {
+  if (!googleRedirectUsesPrivateIp()) return;
+  url.searchParams.set("device_id", "founder-" + sha256Hex(googleRedirectUri).slice(0, 32));
+  url.searchParams.set("device_name", "Founder Research Local");
+}
+
 function readGoogleClientSecret() {
   if (process.env.FOUNDER_GOOGLE_CLIENT_SECRET) return process.env.FOUNDER_GOOGLE_CLIENT_SECRET;
   const secretPath = process.env.FOUNDER_GOOGLE_CLIENT_SECRET_FILE;
@@ -161,6 +195,7 @@ function createGoogleAuthRequest() {
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("prompt", "select_account");
+  applyGooglePrivateIpDeviceParams(url);
   return url.toString();
 }
 
