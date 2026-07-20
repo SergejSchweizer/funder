@@ -28,10 +28,14 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
     ):
         assert expected in source
 
-    assert "Project Snapshot" in source
+    assert "Project Snapshot" not in source
+    assert "<strong>Projects</strong>" in source
+    assert "<h1 data-workspace-title>Projects</h1>" in source
     assert "No project selected" in source
     assert "Consisting currently of 0 ISINs" in source
+    assert "API ${escapedApiUrl}" not in source
     assert "currentSelectionSummary(project)" in source
+    assert "updateCurrentSelectionSummary(project)" in source
     assert "selectedIsinCount(project)" in source
     assert "data-project-selector" in source
     assert "data-project-workspace hidden" in source
@@ -101,6 +105,7 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     assert 'event.key === "ArrowRight"' in source
     assert "pointerdown" in source
     assert "pointermove" in source
+    assert "margin-bottom: 32px;" in source
 
     for removed in (
         "Downloads",
@@ -154,11 +159,13 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "showStatisticsPage(kind)",
         "statisticsStepEnabled(kind)",
         "nextStatisticsStep(kind)",
-        "completeStatisticsStep(kind)",
+        "completeStatisticsStep(kind, result = {})",
         "updateStatisticsPathAccess()",
         "resetStatisticsWorkflow()",
         "setStatisticsProgress(kind, progress, message)",
-        'if (result.status === "succeeded") completeStatisticsStep(kind);',
+        "project.selected_count = Number(result.selected_count);",
+        "updateCurrentSelectionSummary(project)",
+        'if (result.status === "succeeded") completeStatisticsStep(kind, result);',
         "showStatisticsPage(nextStep.id)",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',

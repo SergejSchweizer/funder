@@ -486,6 +486,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   align-items: center;
   border-bottom: 1px solid var(--line);
   padding-bottom: 16px;
+  margin-bottom: 32px;
 }
 .eodhd-fetch {
   width: min(620px, 100%);
@@ -687,7 +688,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
     ${brandMarkup(session)}
     <div class="snapshot-indicator" data-snapshot-indicator aria-disabled="true">
       <label>
-        <strong>Project Snapshot</strong>
+        <strong>Projects</strong>
         <select name="project_snapshot" data-project-selector disabled>
           <option value="">No project selected</option>
         </select>
@@ -702,7 +703,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
   <main class="workspace">
     <header class="topbar">
       <div>
-        <h1 data-workspace-title>Project Snapshot</h1>
+        <h1 data-workspace-title>Projects</h1>
         <p class="subtle" data-api-base="${escapedApiUrl}" data-current-selection-summary>Consisting currently of 0 ISINs</p>
       </div>
       <form class="eodhd-fetch" data-form="eodhd-fetch">
@@ -714,7 +715,7 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
 
     <section class="project-empty-state" data-project-empty-state>
       <h2>No project selected</h2>
-      <p>Select a project from Project Snapshot or define a new ISIN search project.</p>
+      <p>Select a project from Projects or define a new ISIN search project.</p>
       <form class="project-definition" data-form="project-definition" aria-disabled="true">
         <div class="project-definition__header">
           <h2>Project Definition</h2>
@@ -856,6 +857,10 @@ function selectedIsinCount(project) {
 function currentSelectionSummary(project) {
   const count = selectedIsinCount(project);
   return "Consisting currently of " + count + " ISIN" + (count === 1 ? "" : "s");
+}
+function updateCurrentSelectionSummary(project = selectedProject()) {
+  const selectionSummary = document.querySelector("[data-current-selection-summary]");
+  if (selectionSummary) selectionSummary.textContent = currentSelectionSummary(project);
 }
 function setEodhdFetchStatus(message) {
   const target = document.querySelector("[data-eodhd-fetch-status]");
@@ -1050,8 +1055,13 @@ function setStatisticsProgress(kind, progress, message) {
   if (progressBar) progressBar.value = progress;
   if (status) status.textContent = message;
 }
-function completeStatisticsStep(kind) {
+function completeStatisticsStep(kind, result = {}) {
+  const project = selectedProject();
+  if (project && Number.isFinite(result.selected_count)) {
+    project.selected_count = Number(result.selected_count);
+  }
   projectState.statisticsComplete[kind] = true;
+  updateCurrentSelectionSummary(project);
   updateStatisticsPathAccess();
   const nextStep = nextStatisticsStep(kind);
   if (nextStep && statisticsStepEnabled(nextStep.id)) {
@@ -1071,7 +1081,7 @@ async function computeStatistics(kind) {
     body: { project_id: project.project_id }
   });
   setStatisticsProgress(kind, Number(result.progress || 100), "Completed " + kind + " statistics.");
-  if (result.status === "succeeded") completeStatisticsStep(kind);
+  if (result.status === "succeeded") completeStatisticsStep(kind, result);
 }
 function selectProject(projectId) {
   const previousProjectId = projectState.selectedProjectId;
@@ -1081,12 +1091,11 @@ function selectProject(projectId) {
   const emptyState = document.querySelector("[data-project-empty-state]");
   const title = document.querySelector("[data-workspace-title]");
   const summary = document.querySelector("[data-project-summary]");
-  const selectionSummary = document.querySelector("[data-current-selection-summary]");
   if (workspace) workspace.hidden = !project;
   if (emptyState) emptyState.hidden = Boolean(project);
-  if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
+  if (title) title.textContent = project ? projectLabel(project) : "Projects";
   if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
-  if (selectionSummary) selectionSummary.textContent = currentSelectionSummary(project);
+  updateCurrentSelectionSummary(project);
   renderProjectOptions();
   if (previousProjectId !== projectId) resetStatisticsWorkflow();
 }

@@ -336,8 +336,19 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
         "kind": "univariate",
         "progress": 100,
         "project_id": project["project_id"],
+        "selected_count": 1,
         "status": "succeeded",
     }
+    assert (
+        _json(
+            client.post(
+                "/statistics/bivariate/compute",
+                headers=_headers(idempotency="statistics-bivariate-1"),
+                json={"project_id": project["project_id"]},
+            )
+        )["selected_count"]
+        == 0
+    )
     assert analysis["cache_hit"] is False
     assert repeated_analysis["run_id"] == analysis["run_id"]
     assert repeated_analysis["cache_hit"] is True
@@ -401,6 +412,36 @@ def test_projects_selections_and_analyses_are_user_scoped_and_paginated() -> Non
         == 404
     )
     assert client.get("/projects?limit=0", headers=_headers(csrf=False)).status_code == 422
+
+
+def test_projects_listing_removes_discontinued_statistics_smoke_project() -> None:
+    client = _client()
+    project = _json(
+        client.post(
+            "/projects",
+            headers=_headers(idempotency="statistics-smoke-project"),
+            json={"name": "Statistics Smoke"},
+        )
+    )
+    selection = _json(
+        client.post(
+            "/selections",
+            headers=_headers(),
+            json={
+                "project_id": project["project_id"],
+                "name": "Smoke Selection",
+                "member_ids": ["IE1", "IE2"],
+            },
+        )
+    )
+
+    assert _json(client.get("/projects", headers=_headers(csrf=False))) == {"items": []}
+    assert (
+        client.get(
+            f"/selections/{selection['selection_id']}", headers=_headers(csrf=False)
+        ).status_code
+        == 404
+    )
 
 
 def test_account_deletion_removes_user_owned_api_state() -> None:
