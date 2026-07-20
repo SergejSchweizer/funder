@@ -7,17 +7,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import statistics
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from founder.config import EodhdConfig
 from founder.entitlements import (
     InMemoryEntitlementStore,
     ProviderDownloadRun,
@@ -26,13 +29,21 @@ from founder.entitlements import (
 )
 from founder.hosted_credentials import (
     CredentialStatus,
+    CredentialVaultError,
     EodhdCredentialVault,
     InMemoryCredentialStore,
     KeyEncryptionKey,
 )
+from founder.metadata_filter import write_metadata_selection
 from founder.paths import LakePaths
+from founder.schemas import required_fields
 from founder.selection_filters import Predicate, filter_rows
 from founder.table_io import JsonRow, read_rows
+from founder.univariate_categories import (
+    UNIVARIATE_PORTFOLIO_CATEGORIES,
+    category_for_univariate_field,
+)
+from founder.workflows import run_fetch_all_quotes_workflow
 
 SESSION_COOKIE_NAME = "founder_session_user"
 CSRF_COOKIE_NAME = "founder_csrf"
@@ -91,6 +102,12 @@ class AnalysisCreateRequest(BaseModel):
 
 class StatisticsComputeRequest(BaseModel):
     """Request to compute one statistics layer for a user-owned project."""
+
+    project_id: str
+
+
+class LoadSelectedIsinsRequest(BaseModel):
+    """Request to load quote data for one user-owned project selection."""
 
     project_id: str
 
@@ -163,6 +180,9 @@ class HostedApiState:
     downloads_by_id: dict[str, ProviderDownloadRun] = field(
         default_factory=lambda: dict[str, ProviderDownloadRun]()
     )
+    download_summaries_by_id: dict[str, JsonRow] = field(
+        default_factory=lambda: dict[str, JsonRow]()
+    )
     analyses_by_id: dict[str, AnalysisRecord] = field(
         default_factory=lambda: dict[str, AnalysisRecord]()
     )
@@ -171,6 +191,7 @@ class HostedApiState:
     )
     audit_events: list[JsonRow] = field(default_factory=lambda: list[JsonRow]())
     all_isins_rows: tuple[JsonRow, ...] = field(default_factory=tuple)
+    univariate_statistics_rows: tuple[JsonRow, ...] = field(default_factory=tuple)
 
     def credential_vault(self) -> EodhdCredentialVault:
         """Return a deterministic local credential vault."""
@@ -509,6 +530,7 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
             member_ids=member_ids,
         )
         api_state.selections_by_id.setdefault(selection_id, selection)
+        _write_hosted_metadata_selection(selection_id, selected_rows, predicates)
         _remember_idempotency(
             api_state,
             user.user_id,
@@ -555,6 +577,70 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
             _require_user_row(api_state.selections_by_id, selection_id, user.user_id)
         )
 
+    @app.post("/data/load-selected-isins")
+    def load_selected_isins(
+        payload: LoadSelectedIsinsRequest,
+        user: ApiUser = Depends(csrf_user),
+        api_state: HostedApiState = Depends(current_state),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> JsonRow:
+        _require_user_row(api_state.projects_by_id, payload.project_id, user.user_id)
+        selection = _selection_for_project(api_state, payload.project_id, user.user_id)
+        cached_run_id = _idempotent_response(
+            api_state,
+            user_id=user.user_id,
+            operation=f"fetch-all-quotes:{payload.project_id}",
+            idempotency_key=idempotency_key,
+        )
+        if cached_run_id is not None:
+            return _load_selected_isins_row(
+                api_state.downloads_by_id[cached_run_id],
+                summary=api_state.download_summaries_by_id.get(cached_run_id),
+            )
+        request_hash = _stable_hash(
+            {
+                "project_id": payload.project_id,
+                "selection_id": selection.selection_id,
+                "member_ids": list(selection.member_ids),
+            }
+        )
+        try:
+            provider_key = api_state.credential_vault().unwrap_for_provider_call(
+                user_id=user.user_id
+            )
+        except CredentialVaultError as error:
+            raise _http_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "eodhd_credential_required"
+            ) from error
+        summary = run_fetch_all_quotes_workflow(
+            root=_lake_paths().root,
+            run_id=_opaque_id("fetch-all-quotes", request_hash),
+            selection_id=selection.selection_id,
+            concurrency=max(1, os.cpu_count() or 1),
+            eodhd_config=EodhdConfig(api_token=provider_key),
+        )
+        run = ProviderDownloadRun(
+            download_run_id=_opaque_id("fetch-all-quotes", f"{user.user_id}:{request_hash}"),
+            user_id=user.user_id,
+            credential_id="project-selection",
+            provider="eodhd",
+            status="succeeded",
+            returned_observation_ids=selection.member_ids,
+            request_hash=request_hash,
+        )
+        api_state.downloads_by_id[run.download_run_id] = run
+        api_state.download_summaries_by_id[run.download_run_id] = dict(summary)
+        publish_user_data_snapshot(store=api_state.entitlements, run=run)
+        _remember_idempotency(
+            api_state,
+            user.user_id,
+            f"fetch-all-quotes:{payload.project_id}",
+            idempotency_key,
+            run.download_run_id,
+        )
+        _audit(api_state, user.user_id, "fetch_all_quotes.load_selected_isins")
+        return _load_selected_isins_row(run, summary=summary)
+
     @app.post("/statistics/{statistics_kind}/compute")
     def compute_statistics(
         statistics_kind: str,
@@ -576,6 +662,24 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
             ),
             "status": "succeeded",
             "progress": 100,
+        }
+
+    @app.get("/statistics/univariate/summary")
+    def univariate_statistics_summary(
+        user: ApiUser = Depends(current_user),
+        api_state: HostedApiState = Depends(current_state),
+    ) -> JsonRow:
+        _ = user
+        return {
+            "items": _univariate_summary_rows(_univariate_statistics_rows(api_state)),
+            "categories": [
+                {
+                    "key": category.key,
+                    "label": category.label,
+                    "purpose": category.purpose,
+                }
+                for category in UNIVARIATE_PORTFOLIO_CATEGORIES
+            ],
         }
 
     @app.post("/analyses")
@@ -699,11 +803,110 @@ def create_app(state: HostedApiState | None = None) -> FastAPI:
     return app
 
 
+def _lake_paths() -> LakePaths:
+    return LakePaths(root=Path(os.environ.get("FOUNDER_LAKE_ROOT", "lake")))
+
+
 def _all_isins_rows(state: HostedApiState) -> tuple[JsonRow, ...]:
     if state.all_isins_rows:
         return state.all_isins_rows
-    lake_root = Path(os.environ.get("FOUNDER_LAKE_ROOT", "lake"))
-    return tuple(read_rows(LakePaths(root=lake_root).all_isins()))
+    return tuple(read_rows(_lake_paths().all_isins()))
+
+
+def _univariate_statistics_rows(state: HostedApiState) -> tuple[JsonRow, ...]:
+    if state.univariate_statistics_rows:
+        return state.univariate_statistics_rows
+    root = _lake_paths().gold / "univariate_statistics"
+    rows: list[JsonRow] = []
+    for path in sorted(root.glob("*/*.parquet")):
+        rows.extend(read_rows(path))
+    return tuple(rows)
+
+
+def _write_hosted_metadata_selection(
+    selection_id: str,
+    selected_rows: Iterable[Mapping[str, Any]],
+    predicates: tuple[Predicate, ...],
+) -> None:
+    if "FOUNDER_LAKE_ROOT" not in os.environ:
+        return
+    paths = _lake_paths()
+    write_metadata_selection(
+        paths,
+        selection_id,
+        tuple(selected_rows),
+        predicates=predicates,
+        source_path=str(paths.all_isins()),
+    )
+
+
+def _univariate_summary_rows(rows: tuple[JsonRow, ...]) -> list[JsonRow]:
+    return [
+        _univariate_field_summary(field, rows) for field in required_fields("univariate_statistics")
+    ]
+
+
+def _univariate_field_summary(field: str, rows: tuple[JsonRow, ...]) -> JsonRow:
+    category = category_for_univariate_field(field)
+    numeric_values = _finite_numeric_values(row.get(field) for row in rows)
+    distinct_values = sorted(
+        {str(row.get(field, "")).strip() for row in rows if str(row.get(field, "")).strip()}
+    )
+    if numeric_values:
+        mean_value = statistics.fmean(numeric_values)
+        std_value = statistics.stdev(numeric_values) if len(numeric_values) > 1 else 0.0
+        median_value: float | str | None = statistics.median(numeric_values)
+        mean_output: float | str | None = mean_value
+        lower_bound = mean_value - (3 * std_value)
+        upper_bound = mean_value + (3 * std_value)
+        band_output: str | None = f"{lower_bound:.6g}..{upper_bound:.6g}"
+    else:
+        mean_output = None
+        median_value = _categorical_median(distinct_values)
+        band_output = None
+    return {
+        "name": field,
+        "category": category.label if category is not None else "Uncategorized",
+        "mean": mean_output,
+        "median": median_value,
+        "three_std_range": band_output,
+        "filter_options": _univariate_filter_options(field, numeric_values, distinct_values),
+    }
+
+
+def _finite_numeric_values(values: Iterable[object]) -> list[float]:
+    numbers: list[float] = []
+    for value in values:
+        if isinstance(value, bool) or value is None:
+            continue
+        if isinstance(value, int | float):
+            number = float(value)
+        else:
+            try:
+                number = float(str(value))
+            except ValueError:
+                continue
+        if math.isfinite(number):
+            numbers.append(number)
+    return numbers
+
+
+def _categorical_median(values: list[str]) -> str | None:
+    if not values:
+        return None
+    return values[len(values) // 2]
+
+
+def _univariate_filter_options(
+    field: str, numeric_values: list[float], distinct_values: list[str]
+) -> list[JsonRow]:
+    if numeric_values:
+        return [
+            {"value": operator, "label": operator} for operator in (">", ">=", "<", "<=", "=", "!=")
+        ]
+    if distinct_values:
+        return [{"value": f"{field}={value}", "label": value} for value in distinct_values[:100]]
+    return [{"value": operator, "label": operator} for operator in ("=", "!=", "~")]
 
 
 def _distinct_options(rows: tuple[JsonRow, ...], field: str) -> list[str]:
@@ -730,6 +933,7 @@ def _metadata_filter_predicates(payload: MetadataFilterProjectRequest) -> tuple[
 def _metadata_filter_project_name(payload: MetadataFilterProjectRequest) -> str:
     parts = [
         _project_name_part(payload.exchange),
+        _project_name_part(payload.name),
         _project_name_part(payload.instrument_type),
         _project_name_part(payload.country),
         _project_name_part(payload.currency),
@@ -778,6 +982,29 @@ def _download_row(run: ProviderDownloadRun) -> JsonRow:
     }
 
 
+def _load_selected_isins_row(
+    run: ProviderDownloadRun,
+    *,
+    summary: Mapping[str, Any] | None = None,
+) -> JsonRow:
+    workflow_summary = dict(summary or {})
+    return {
+        **_download_row(run),
+        "kind": "load-data",
+        "progress": 100,
+        "quote_errors": int(workflow_summary.get("quote_errors", 0)),
+        "quote_successes": int(workflow_summary.get("quote_successes", 0)),
+        "raw_dataset_errors": int(workflow_summary.get("raw_dataset_errors", 0)),
+        "raw_dataset_successes": int(workflow_summary.get("raw_dataset_successes", 0)),
+        "run_id": str(workflow_summary.get("run_id", run.download_run_id)),
+        "selected_listing_count": int(
+            workflow_summary.get("selected_listing_count", len(run.returned_observation_ids))
+        ),
+        "selected_count": len(run.returned_observation_ids),
+        "silver_quote_rows": int(workflow_summary.get("silver_quote_rows", 0)),
+    }
+
+
 def _project_row(project: ProjectRecord) -> JsonRow:
     return {"project_id": project.project_id, "name": project.name}
 
@@ -813,12 +1040,28 @@ def _project_with_selection_row(
     try:
         selection = _selection_for_project(state, project.project_id, user_id)
     except HTTPException:
-        return {**_project_row(project), "selected_count": 0}
+        return {**_project_row(project), "selected_count": 0, "data_loaded": False}
     return {
         **_project_row(project),
         "selection_id": selection.selection_id,
         "selected_count": len(selection.member_ids),
+        "data_loaded": _project_data_loaded(state, project.project_id, user_id),
     }
+
+
+def _project_data_loaded(state: HostedApiState, project_id: str, user_id: str) -> bool:
+    operation_prefix = f"fetch-all-quotes:{project_id}"
+    for (
+        stored_user_id,
+        operation,
+        _idempotency_key,
+    ), download_run_id in state.idempotency_refs.items():
+        if stored_user_id != user_id or operation != operation_prefix:
+            continue
+        run = state.downloads_by_id.get(download_run_id)
+        if run is not None and run.status == "succeeded":
+            return True
+    return False
 
 
 def _statistics_selected_count(selection_count: int, statistics_kind: str) -> int:

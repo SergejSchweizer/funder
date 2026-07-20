@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
 from founder.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
+from founder.paths import LakePaths
+from founder.table_io import read_json, read_rows
 
 
 def _client(state: HostedApiState | None = None) -> TestClient:
@@ -14,7 +17,7 @@ def _client(state: HostedApiState | None = None) -> TestClient:
 def _headers(
     user_id: str = "user-a", *, csrf: bool = True, idempotency: str | None = None
 ) -> dict[str, str]:
-    headers = {"X-Founder-User": user_id}
+    headers: dict[str, str] = {"X-Founder-User": user_id}
     if csrf:
         headers["X-Founder-CSRF"] = "valid-csrf"
     if idempotency is not None:
@@ -25,7 +28,7 @@ def _headers(
 def _json(response: Any) -> dict[str, Any]:
     payload = response.json()
     assert isinstance(payload, dict)
-    return payload
+    return cast("dict[str, Any]", payload)
 
 
 def test_session_requires_authentication() -> None:
@@ -208,13 +211,14 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
         "instrument_type": ["Common Stock", "ETF"],
     }
     assert created == repeated
-    assert created["project"]["name"] == "xetra_etf_ie_eur"
-    assert "ucits" not in created["project"]["name"]
+    assert created["project"]["name"] == "xetra_ucits_etf_etf_ie_eur"
+    assert "name_" not in created["project"]["name"]
     assert created["selection"]["member_ids"] == ["IE1:XETRA:AAA"]
     assert created["selected_count"] == 1
     assert _json(client.get("/projects", headers=_headers(csrf=False)))["items"] == [
         {
             **created["project"],
+            "data_loaded": False,
             "selected_count": 1,
             "selection_id": created["selection"]["selection_id"],
         }
@@ -227,6 +231,107 @@ def test_metadata_filter_options_and_project_creation_use_all_isins_reference() 
         ).status_code
         == 404
     )
+
+
+def test_load_selected_isins_runs_fetch_all_quotes_for_metadata_selection(
+    tmp_path: Path,
+    monkeypatch: Any,
+) -> None:
+    lake_root = tmp_path / "lake"
+    monkeypatch.setenv("FOUNDER_LAKE_ROOT", str(lake_root))
+    calls: list[dict[str, Any]] = []
+    state = HostedApiState(
+        all_isins_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "name": "Example UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+                "source_exchange": "XETRA",
+                "fetched_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+    )
+
+    def fake_fetch_all_quotes_workflow(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {
+            "coverage_rows": 1,
+            "raw_dataset_errors": 0,
+            "raw_dataset_successes": 2,
+            "quote_errors": 0,
+            "quote_successes": 1,
+            "run_id": kwargs["run_id"],
+            "selection_id": kwargs["selection_id"],
+            "selected_listing_count": 1,
+            "silver_quote_rows": 42,
+        }
+
+    monkeypatch.setattr(
+        "founder.hosted_api.run_fetch_all_quotes_workflow",
+        fake_fetch_all_quotes_workflow,
+    )
+    client = _client(state)
+    client.post(
+        "/credentials/eodhd",
+        headers=_headers(idempotency="credential-load-selected-isins"),
+        json={"provider_key": "secret-provider-token"},
+    )
+    created = _json(
+        client.post(
+            "/metadata-filter/projects",
+            headers=_headers(idempotency="metadata-project-load-selected-isins"),
+            json={
+                "exchange": "XETRA",
+                "name": "UCITS ETF",
+                "instrument_type": "ETF",
+                "country": "IE",
+                "currency": "EUR",
+            },
+        )
+    )
+    selection_id = created["selection"]["selection_id"]
+
+    loaded_data = _json(
+        client.post(
+            "/data/load-selected-isins",
+            headers=_headers(idempotency="load-selected-isins-1"),
+            json={"project_id": created["project"]["project_id"]},
+        )
+    )
+    loaded_data_again = _json(
+        client.post(
+            "/data/load-selected-isins",
+            headers=_headers(idempotency="load-selected-isins-1"),
+            json={"project_id": created["project"]["project_id"]},
+        )
+    )
+    paths = LakePaths(root=lake_root)
+    persisted_selection_rows = read_rows(paths.metadata_filter_isins(selection_id))
+    current_selection = read_json(paths.current_metadata_filter_selection())
+    reloaded_project = _json(client.get("/projects", headers=_headers(csrf=False)))["items"][0]
+
+    assert len(calls) == 1
+    assert calls[0]["root"] == lake_root
+    assert calls[0]["selection_id"] == selection_id
+    assert calls[0]["eodhd_config"].api_token == "secret-provider-token"
+    assert persisted_selection_rows[0]["isin"] == "IE1"
+    assert persisted_selection_rows[0]["exchange"] == "XETRA"
+    assert persisted_selection_rows[0]["code"] == "AAA"
+    assert current_selection["selection_id"] == selection_id
+    assert loaded_data == loaded_data_again
+    assert loaded_data["kind"] == "load-data"
+    assert loaded_data["observation_count"] == 1
+    assert loaded_data["quote_successes"] == 1
+    assert loaded_data["raw_dataset_successes"] == 2
+    assert loaded_data["selected_listing_count"] == 1
+    assert loaded_data["selected_count"] == 1
+    assert loaded_data["silver_quote_rows"] == 42
+    assert loaded_data["status"] == "succeeded"
+    assert reloaded_project["data_loaded"] is True
 
 
 def test_fetch_all_isins_for_metadata_filter_requires_eodhd_key() -> None:
@@ -442,6 +547,50 @@ def test_projects_listing_removes_discontinued_statistics_smoke_project() -> Non
         ).status_code
         == 404
     )
+
+
+def test_univariate_statistics_summary_exposes_table_metrics_and_filter_options() -> None:
+    state = HostedApiState(
+        univariate_statistics_rows=(
+            {
+                "isin": "IE1",
+                "exchange": "XETRA",
+                "code": "AAA",
+                "annualized_volatility": 0.10,
+                "distribution_frequency": "monthly",
+            },
+            {
+                "isin": "IE2",
+                "exchange": "XETRA",
+                "code": "BBB",
+                "annualized_volatility": 0.20,
+                "distribution_frequency": "quarterly",
+            },
+        )
+    )
+    client = _client(state)
+
+    payload = _json(client.get("/statistics/univariate/summary", headers=_headers(csrf=False)))
+    rows = {row["name"]: row for row in payload["items"]}
+
+    assert payload["categories"][0]["label"] == "Instrument Identity"
+    assert rows["annualized_volatility"]["category"] == "Volatility And Downside Risk"
+    assert round(rows["annualized_volatility"]["mean"], 6) == 0.15
+    assert round(rows["annualized_volatility"]["median"], 6) == 0.15
+    assert rows["annualized_volatility"]["three_std_range"] is not None
+    assert rows["annualized_volatility"]["filter_options"] == [
+        {"label": ">", "value": ">"},
+        {"label": ">=", "value": ">="},
+        {"label": "<", "value": "<"},
+        {"label": "<=", "value": "<="},
+        {"label": "=", "value": "="},
+        {"label": "!=", "value": "!="},
+    ]
+    assert rows["distribution_frequency"]["category"] == "Income Distribution"
+    assert rows["distribution_frequency"]["filter_options"] == [
+        {"label": "monthly", "value": "distribution_frequency=monthly"},
+        {"label": "quarterly", "value": "distribution_frequency=quarterly"},
+    ]
 
 
 def test_account_deletion_removes_user_owned_api_state() -> None:

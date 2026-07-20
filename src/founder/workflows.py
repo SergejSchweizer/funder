@@ -21,7 +21,7 @@ from founder.bronze import (
     write_quotes_to_bronze,
     write_raw_eodhd_datasets_to_bronze,
 )
-from founder.config import load_eodhd_config
+from founder.config import EodhdConfig, load_eodhd_config
 from founder.fetch_all_isins import fetch_all_isins, write_all_isins
 from founder.http import EodhdClient
 from founder.logging import get_logger, log_event
@@ -150,6 +150,7 @@ def run_fetch_all_quotes_workflow(
     *,
     root: Path,
     run_id: str | None = None,
+    selection_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     limit: int | None = None,
@@ -157,14 +158,15 @@ def run_fetch_all_quotes_workflow(
     gap_aware: bool = True,
     include_raw_datasets: bool = True,
     concurrency: int = 2,
+    eodhd_config: EodhdConfig | None = None,
 ) -> dict[str, Any]:
     """Fetch Bronze quote inputs for the latest Metadata Filter selection."""
     paths = LakePaths(root=root)
     with module_run_lock(paths, "fetch-all-quotes"):
         resolved_end_date = end_date or date.today()
         resolved_run_id = run_id or generated_run_id("fetch-all-quotes", run_date=resolved_end_date)
-        selection_id = _latest_metadata_selection_id(paths)
-        selection_rows = _metadata_selection_rows(paths, selection_id)
+        resolved_selection_id = selection_id or _latest_metadata_selection_id(paths)
+        selection_rows = _metadata_selection_rows(paths, resolved_selection_id)
         if isin is not None:
             normalized_isin = isin.casefold()
             selection_rows = [
@@ -187,7 +189,7 @@ def run_fetch_all_quotes_workflow(
                 plan, read_silver_quotes(paths), end_date=resolved_end_date
             )
         write_rows(paths.bronze_plan(resolved_run_id), plan)
-        client = EodhdClient(load_eodhd_config())
+        client = EodhdClient(eodhd_config or load_eodhd_config())
         quote_successes, quote_errors = write_quotes_to_bronze(
             paths,
             plan,
@@ -235,7 +237,7 @@ def run_fetch_all_quotes_workflow(
             "quote_errors": len(quote_errors),
             "quote_successes": len(quote_successes),
             "run_id": resolved_run_id,
-            "selection_id": selection_id,
+            "selection_id": resolved_selection_id,
             "selected_listing_count": len(selection_rows),
             "silver_quote_rows": len(silver_rows),
         }

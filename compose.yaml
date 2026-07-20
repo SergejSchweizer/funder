@@ -55,7 +55,7 @@ services:
       - google_client_secret
     volumes:
       - founder-shared-data:/srv/founder/shared-data
-      - ./lake:/srv/founder/lake:ro
+      - ./lake:/srv/founder/lake
     depends_on:
       postgres:
         condition: service_healthy

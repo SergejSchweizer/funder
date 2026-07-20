@@ -139,12 +139,27 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
     source = _web_source()
 
     positions = [
-        source.index(f'id: "{step}"') for step in ("univariate", "bivariate", "multivariate")
+        source.index(f'id: "{step}"')
+        for step in ("load-data", "univariate", "bivariate", "multivariate")
     ]
     assert positions == sorted(positions)
 
     for expected in (
         "statisticsSteps",
+        "Load Data",
+        "Load selected ISINs",
+        "apiRoutes.loadSelectedIsins",
+        "isLoadData ? apiRoutes.loadSelectedIsins : apiRoutes.statisticsCompute(kind)",
+        'isLoadData ? "load-data" : kind + "-statistics"',
+        "Loaded selected ISINs.",
+        "display: flex;",
+        "flex-wrap: nowrap;",
+        "overflow-x: auto;",
+        "if (nextStep && statisticsStepEnabled(nextStep.id)) showStatisticsPage(nextStep.id);",
+        'if (!result.status || result.status === "succeeded")',
+        '"load-data": Boolean(project && project.data_loaded === true)',
+        'if (project && kind === "load-data") project.data_loaded = true;',
+        'projectState.statisticsComplete["load-data"] ? "univariate" : "load-data"',
         "statisticsStepButton(step, index)",
         "statisticsPanel(step, index)",
         "statistics-path",
@@ -152,6 +167,16 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "progress-banner",
         "data-statistics-progress",
         "data-compute-statistics",
+        "Univariate Statistics Filters",
+        "data-univariate-summary-body",
+        "data-univariate-summary-status",
+        "renderUnivariateStatisticsSummary(items)",
+        "loadUnivariateStatisticsSummary()",
+        "resetUnivariateStatisticsSummary()",
+        "formatSummaryValue(value)",
+        "filterOptionMarkup(option)",
+        "apiRoutes.univariateStatisticsSummary",
+        "Compute univariate statistics to populate this table.",
         " disabled",
         "locked",
         "complete",
@@ -165,12 +190,14 @@ def test_web_shell_models_statistics_path_order_and_compute_pages() -> None:
         "setStatisticsProgress(kind, progress, message)",
         "project.selected_count = Number(result.selected_count);",
         "updateCurrentSelectionSummary(project)",
-        'if (result.status === "succeeded") completeStatisticsStep(kind, result);',
-        "showStatisticsPage(nextStep.id)",
+        'if (kind === "univariate") {',
+        "void loadUnivariateStatisticsSummary();",
         "apiRoutes.statisticsCompute(kind)",
         'method: "POST"',
     ):
         assert expected in source
+
+    assert 'if (kind === "univariate") void loadUnivariateStatisticsSummary();' not in source
 
 
 def test_web_shell_keeps_secret_inputs_write_only_and_uses_google_entrypoint() -> None:

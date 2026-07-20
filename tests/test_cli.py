@@ -288,8 +288,12 @@ def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
                 return [{"date": "2026-01-02", "split": "1/1"}]
             raise AssertionError(path)
 
+    def fake_client_factory(config: object) -> FakeClient:
+        del config
+        return FakeClient()
+
     monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
-    monkeypatch.setattr("founder.workflows.EodhdClient", lambda config: FakeClient())
+    monkeypatch.setattr("founder.workflows.EodhdClient", fake_client_factory)
 
     summary = run_fetch_all_quotes_workflow(
         root=root,
@@ -309,6 +313,90 @@ def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
     )
     assert len(read_rows(paths.bronze_dataset_file("splits", "XETRA", 2026, "IE0000000001"))) == 1
     assert len(read_rows(paths.silver_quote_file("XETRA", "IE0000000001"))) == 2
+
+
+def test_fetch_all_quotes_workflow_accepts_explicit_metadata_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "lake"
+    paths = LakePaths(root=root)
+    write_rows(
+        paths.metadata_filter_isins("selected-selection"),
+        [
+            {
+                "selection_id": "selected-selection",
+                "isin": "IE0000000001",
+                "code": "AAA",
+                "exchange": "XETRA",
+                "name": "Selected ETF",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
+    write_rows(
+        paths.metadata_filter_isins("latest-selection"),
+        [
+            {
+                "selection_id": "latest-selection",
+                "isin": "IE0000000002",
+                "code": "BBB",
+                "exchange": "XETRA",
+                "name": "Latest ETF",
+                "source_module": "metadata_filter",
+            }
+        ],
+    )
+    write_json(
+        paths.metadata_filter_manifest("latest-selection"),
+        {
+            "selection_id": "latest-selection",
+            "created_at": "2026-01-02T00:00:00+00:00",
+        },
+    )
+    requested_paths: list[str] = []
+
+    class FakeClient:
+        def get_json(
+            self, path: str, params: dict[str, str] | None = None
+        ) -> list[dict[str, object]]:
+            del params
+            requested_paths.append(path)
+            if path == "/eod/AAA.XETRA":
+                return [
+                    {
+                        "date": "2026-01-02",
+                        "open": 101.0,
+                        "high": 102.0,
+                        "low": 100.0,
+                        "close": 101.0,
+                        "adjusted_close": 101.0,
+                        "volume": 11,
+                    }
+                ]
+            if path in {"/div/AAA.XETRA", "/splits/AAA.XETRA"}:
+                return []
+            raise AssertionError(path)
+
+    def fake_client_factory(config: object) -> FakeClient:
+        del config
+        return FakeClient()
+
+    monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
+    monkeypatch.setattr("founder.workflows.EodhdClient", fake_client_factory)
+
+    summary = run_fetch_all_quotes_workflow(
+        root=root,
+        run_id="quotes-run",
+        selection_id="selected-selection",
+        end_date=date.fromisoformat("2026-01-02"),
+        concurrency=1,
+    )
+
+    assert summary["selection_id"] == "selected-selection"
+    assert summary["selected_listing_count"] == 1
+    assert "/eod/AAA.XETRA" in requested_paths
+    assert "/eod/BBB.XETRA" not in requested_paths
+    assert len(read_rows(paths.silver_quote_file("XETRA", "IE0000000001"))) == 1
 
 
 def test_cli_runs_univariate_and_bivariate_statistics_modules(
