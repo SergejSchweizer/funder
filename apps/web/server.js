@@ -44,17 +44,7 @@ const funnelSteps = [
 ];
 
 const routeSkeletons = [
-  { id: "dashboard", title: "Dashboard", tone: "ready" },
   { id: "projects", title: "Projects", tone: "complete" },
-  { id: "data", title: "Data", tone: "ready" },
-  { id: "metadata", title: "Metadata", tone: "not-started" },
-  { id: "univariate", title: "Univariate", tone: "running" },
-  { id: "filter", title: "Filter", tone: "warning" },
-  { id: "diversification", title: "Diversification", tone: "stale" },
-  { id: "portfolio", title: "Portfolio", tone: "complete" },
-  { id: "validation", title: "Validation", tone: "failed" },
-  { id: "report", title: "Report", tone: "not-started" },
-  { id: "settings", title: "Settings", tone: "ready" },
 ];
 
 const designTokens = {
@@ -269,9 +259,18 @@ async function verifyGoogleIdToken(idToken, expectedNonce) {
 
 function navItem(route) {
   return `<a class="nav-link nav-link--${route.tone}" href="/${route.id}" data-route="${route.id}">
-    <span class="nav-dot" aria-hidden="true"></span>
     <span>${escapeHtml(route.title)}</span>
   </a>`;
+}
+
+function projectNavigationMarkup() {
+  return `<nav class="nav-group" aria-label="Project routes" data-project-navigation>
+    ${navItem(routeSkeletons[0])}
+    <div class="project-tree" data-project-tree>
+      <div class="project-tree__empty" data-project-tree-empty>No projects</div>
+      <div class="project-tree__items" data-project-tree-items></div>
+    </div>
+  </nav>`;
 }
 
 function userLabel(session) {
@@ -465,6 +464,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   background: var(--surface);
   padding: 12px;
   margin-bottom: 18px;
+  display: grid;
+  gap: 8px;
 }
 .snapshot-indicator span {
   display: block;
@@ -478,25 +479,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 }
 .nav-link {
   min-height: 38px;
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
   align-items: center;
   padding: 0 10px;
   border-radius: var(--radius-control);
   text-decoration: none;
+  font-weight: 700;
 }
 .nav-link:hover { background: #e8f0fe; }
-.nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted);
+.project-tree {
+  display: grid;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+  margin-left: 10px;
 }
-.nav-link--complete .nav-dot { background: var(--complete); }
-.nav-link--running .nav-dot { background: var(--running); }
-.nav-link--warning .nav-dot { background: var(--warning); }
-.nav-link--failed .nav-dot { background: var(--danger); }
+.project-tree__empty, .project-tree__item {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--meta);
+}
+.project-tree__item {
+  border: 0;
+  justify-content: flex-start;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.project-tree__item:hover, .project-tree__item[aria-current="page"] {
+  background: #e8f0fe;
+  color: var(--accent);
+}
 .workspace {
   min-width: 0;
   padding: var(--space-page);
@@ -569,6 +586,18 @@ h2 { font-size: var(--section-title); font-weight: 700; letter-spacing: 0; }
 .route-stack, .side-stack {
   display: grid;
   gap: 12px;
+}
+.project-empty-state {
+  min-height: 360px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+.project-workspace[hidden] {
+  display: none !important;
 }
 .route-panel, .control-panel {
   border: 1px solid var(--line);
@@ -673,17 +702,20 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
   <aside class="sidebar" aria-label="Founder navigation">
     ${brandMarkup(session)}
     <div class="snapshot-indicator" data-snapshot-indicator>
-      <strong>Project snapshot</strong>
-      <span>Not selected</span>
+      <label>
+        <strong>Project Snapshot</strong>
+        <select name="project_snapshot" data-project-selector>
+          <option value="">No project selected</option>
+        </select>
+      </label>
+      <span data-project-summary>Not selected</span>
     </div>
-    <nav class="nav-group" aria-label="Primary routes">
-      ${routeSkeletons.map(navItem).join("")}
-    </nav>
+    ${projectNavigationMarkup()}
   </aside>
   <main class="workspace">
     <header class="topbar">
       <div>
-        <h1>Research Workspace</h1>
+        <h1 data-workspace-title>Project Snapshot</h1>
         <p class="subtle" data-api-base="${escapedApiUrl}">API ${escapedApiUrl}</p>
       </div>
       <div class="actions">
@@ -691,15 +723,21 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
       </div>
     </header>
 
-    <nav class="funnel" aria-label="Persisted research funnel">
-      ${funnelSteps.map(funnelItem).join("")}
-    </nav>
+    <section class="project-empty-state" data-project-empty-state>
+      <h2>No project selected</h2>
+      <p>Select a project from Project Snapshot to load its workspace.</p>
+    </section>
 
-    <div class="content-grid">
-      <div class="route-stack">
-        ${routeSkeletons.map(routePanel).join("")}
-      </div>
-      <div class="side-stack">
+    <section class="project-workspace" data-project-workspace hidden>
+      <nav class="funnel" aria-label="Persisted research funnel">
+        ${funnelSteps.map(funnelItem).join("")}
+      </nav>
+
+      <div class="content-grid">
+        <div class="route-stack">
+          ${routeSkeletons.map(routePanel).join("")}
+        </div>
+        <div class="side-stack">
         <section class="control-panel" id="credentials" data-route-skeleton="credentials">
           <div class="route-panel__header"><h2>Credentials</h2><p class="eyebrow">write-only</p></div>
           <form data-form="credential">
@@ -771,8 +809,9 @@ function renderAuthenticatedShell(escapedApiUrl, session = null) {
             <button class="danger" type="button" data-action="delete-account">Delete Account Data</button>
           </div>
         </section>
+        </div>
       </div>
-    </div>
+    </section>
   </main>
 </div>`;
 }
@@ -859,13 +898,85 @@ function setAuthStatus(message) {
 function parseSymbols(value) {
   return value.split(",").map((symbol) => symbol.trim()).filter(Boolean);
 }
+function clientEscapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 async function refreshSession() {
-  const session = await apiRequest(apiRoutes.session);
-  writeJson("[data-analysis-output]", { session });
+  return apiRequest(apiRoutes.session);
 }
 async function refreshDatasets() {
   const datasets = await apiRequest(apiRoutes.datasets);
   writeJson("[data-analysis-output]", { datasets });
+}
+let projectState = {
+  projects: [],
+  selectedProjectId: ""
+};
+function normalizeProjectItems(payload) {
+  if (!payload || !Array.isArray(payload.items)) return [];
+  return payload.items.filter((project) => project && project.project_id && project.name);
+}
+function projectLabel(project) {
+  return String(project.name || project.project_id || "Untitled project");
+}
+function selectedProject() {
+  return projectState.projects.find((project) => project.project_id === projectState.selectedProjectId) || null;
+}
+function renderProjectOptions() {
+  const selector = document.querySelector("[data-project-selector]");
+  if (!selector) return;
+  const current = projectState.selectedProjectId;
+  selector.innerHTML = '<option value="">No project selected</option>' + projectState.projects.map((project) => {
+    const selected = project.project_id === current ? " selected" : "";
+    return '<option value="' + clientEscapeHtml(project.project_id) + '"' + selected + ">"
+      + clientEscapeHtml(projectLabel(project)) + "</option>";
+  }).join("");
+}
+function renderProjectNavigation() {
+  const items = document.querySelector("[data-project-tree-items]");
+  const empty = document.querySelector("[data-project-tree-empty]");
+  if (!items || !empty) return;
+  empty.hidden = projectState.projects.length > 0;
+  items.innerHTML = projectState.projects.map((project) => {
+    const current = project.project_id === projectState.selectedProjectId ? ' aria-current="page"' : "";
+    return '<button class="project-tree__item" type="button" data-project-id="'
+      + clientEscapeHtml(project.project_id) + '"' + current + ">"
+      + clientEscapeHtml(projectLabel(project)) + "</button>";
+  }).join("");
+  for (const button of items.querySelectorAll("[data-project-id]")) {
+    button.addEventListener("click", () => selectProject(button.dataset.projectId || ""));
+  }
+}
+function selectProject(projectId) {
+  projectState.selectedProjectId = projectId;
+  const project = selectedProject();
+  const workspace = document.querySelector("[data-project-workspace]");
+  const emptyState = document.querySelector("[data-project-empty-state]");
+  const title = document.querySelector("[data-workspace-title]");
+  const summary = document.querySelector("[data-project-summary]");
+  if (workspace) workspace.hidden = !project;
+  if (emptyState) emptyState.hidden = Boolean(project);
+  if (title) title.textContent = project ? projectLabel(project) : "Project Snapshot";
+  if (summary) summary.textContent = project ? projectLabel(project) : "Not selected";
+  renderProjectOptions();
+  renderProjectNavigation();
+}
+async function refreshProjects() {
+  try {
+    const payload = await apiRequest(apiRoutes.projects);
+    projectState.projects = normalizeProjectItems(payload);
+  } catch (_error) {
+    projectState.projects = [];
+  }
+  if (!selectedProject()) projectState.selectedProjectId = "";
+  renderProjectOptions();
+  renderProjectNavigation();
+  selectProject(projectState.selectedProjectId);
 }
 function clientUserLabel(session) {
   if (!session) return "";
@@ -890,8 +1001,8 @@ function mountAuthenticatedShell(session) {
     authUser.textContent = label + (provider ? " · " + provider : "");
   }
   if (gate) gate.hidden = true;
-  writeJson("[data-analysis-output]", { session });
   bindAuthenticatedHandlers();
+  void refreshProjects();
 }
 function showLoginGate() {
   const gate = document.querySelector("[data-auth-gate]");
@@ -919,6 +1030,9 @@ let authenticatedHandlersBound = false;
 function bindAuthenticatedHandlers() {
 if (authenticatedHandlersBound) return;
 authenticatedHandlersBound = true;
+document.querySelector("[data-project-selector]").addEventListener("change", (event) => {
+  selectProject(event.currentTarget.value);
+});
 document.querySelector('[data-form="credential"]').addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;

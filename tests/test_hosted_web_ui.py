@@ -18,7 +18,6 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
 
     for expected in (
         "Google Login",
-        "Dashboard",
         "Projects",
         "Data",
         "Credentials",
@@ -34,10 +33,15 @@ def test_web_shell_exposes_user_research_funnel_surfaces() -> None:
         "Portfolio Analysis",
         "Validation",
         "Report",
-        "Settings",
         "Delete Account Data",
     ):
         assert expected in source
+
+    assert "Project Snapshot" in source
+    assert "No project selected" in source
+    assert "data-project-selector" in source
+    assert "data-project-tree-items" in source
+    assert "data-project-workspace hidden" in source
 
 
 def test_dashboard_shell_is_gated_until_authenticated_session() -> None:
@@ -81,20 +85,11 @@ def test_web_shell_defines_versioned_design_system_and_route_skeletons() -> None
     ):
         assert token in source
 
-    for route in (
-        "dashboard",
-        "projects",
-        "data",
-        "metadata",
-        "univariate",
-        "filter",
-        "diversification",
-        "portfolio",
-        "validation",
-        "report",
-        "settings",
-    ):
-        assert f'id: "{route}"' in source
+    assert 'id: "projects"' in source
+    assert 'id: "dashboard"' not in source
+    assert 'class="nav-dot"' not in source
+    assert "projectNavigationMarkup()" in source
+    assert 'aria-label="Project routes"' in source
 
     assert 'data-route-skeleton="${route.id}"' in source
 
@@ -182,6 +177,30 @@ def test_web_shell_consumes_api_contracts_with_csrf_and_idempotency_helpers() ->
         "/account",
     ):
         assert route in source
+
+
+def test_web_shell_uses_project_scoped_navigation_and_empty_snapshot_state() -> None:
+    source = _web_source()
+
+    for expected in (
+        "let projectState =",
+        "refreshProjects()",
+        "normalizeProjectItems(payload)",
+        "renderProjectOptions()",
+        "renderProjectNavigation()",
+        "selectProject(projectId)",
+        "selectedProject()",
+        "clientEscapeHtml(projectLabel(project))",
+        'document.querySelector("[data-project-selector]")',
+        'document.querySelector("[data-project-empty-state]")',
+        'document.querySelector("[data-project-workspace]")',
+        "workspace.hidden = !project",
+        "emptyState.hidden = Boolean(project)",
+    ):
+        assert expected in source
+
+    assert source.index("bindAuthenticatedHandlers()") < source.index("void refreshProjects()")
+    assert 'writeJson("[data-analysis-output]", { session })' not in source
 
 
 def test_web_server_proxies_api_requests_same_origin_to_internal_api() -> None:
