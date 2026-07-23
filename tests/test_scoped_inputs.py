@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from founder.entitlements import (
+from camovar.entitlements import (
     InMemoryEntitlementStore,
     ProviderDownloadRun,
     publish_user_data_snapshot,
 )
-from founder.scoped_inputs import (
+from camovar.scoped_inputs import (
     EntitledSnapshotReader,
     LocalLakeSnapshotReader,
     ScopedInputError,

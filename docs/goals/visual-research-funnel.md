@@ -4,7 +4,7 @@ Last reviewed: 2026-07-17
 
 ## Purpose
 
-Founder should present its quantitative research pipeline through a professional, calm, and highly focused interface. The visual direction should take inspiration from the clarity of Google product entry points and the hierarchy, spacing, typography, and interaction discipline associated with Apple product experiences.
+Camovar should present its quantitative research pipeline through a professional, calm, and highly focused interface. The visual direction should take inspiration from the clarity of Google product entry points and the hierarchy, spacing, typography, and interaction discipline associated with Apple product experiences.
 
 The interface must not resemble a dense trading terminal during onboarding. It should guide the user from a broad investment universe to a small set of explainable portfolio candidates through one understandable decision or insight at a time.
 
@@ -12,13 +12,13 @@ This document complements `guided-free-key-first-run.md`. That document defines 
 
 ## Core Experience
 
-Founder should feel like a guided research workspace rather than a generic portfolio dashboard.
+Camovar should feel like a guided research workspace rather than a generic portfolio dashboard.
 
 Each screen should contain:
 
 1. one central question;
 2. one primary visualization;
-3. one main Founder insight;
+3. one main Camovar insight;
 4. one primary action;
 5. optional detail available through progressive disclosure.
 
@@ -118,12 +118,12 @@ This continuity should make the pipeline feel like one research story rather tha
 The public landing page should be sparse.
 
 ```text
-FOUNDER
+CAMOVAR
 
 From thousands of funds
 to a portfolio you understand.
 
-Founder filters, analyzes, and combines investment funds
+Camovar filters, analyzes, and combines investment funds
 through a transparent quantitative research process.
 
 [ Start with my EODHD key ]
@@ -162,7 +162,7 @@ During the guided first run, the page should use a centered research canvas with
 
 ```text
 +------------------------------------------------------------------+
-| Founder     Research: Monthly Income      Data calls 8/20    User |
+| Camovar     Research: Monthly Income      Data calls 8/20    User |
 +------------------------------------------------------------------+
 | Universe       Quality       Relationships       Portfolio        |
 |    complete       active          pending           pending       |
@@ -172,7 +172,7 @@ During the guided first run, the page should use a centered research canvas with
 |                                                                  |
 |                  Primary visualization                           |
 |                                                                  |
-|                  Founder Insight                                 |
+|                  Camovar Insight                                 |
 |                                                                  |
 |                    [ Primary action ]                             |
 |                                                                  |
@@ -197,7 +197,7 @@ Settings
 Mobile should preserve the same research sequence, but show only one primary visualization at a time.
 
 ```text
-Founder                                      8/20
+Camovar                                      8/20
 
 Step 5 of 10
 Understanding each fund
@@ -207,7 +207,7 @@ Progress
 
 Primary visualization
 
-Founder Insight
+Camovar Insight
 
 [ Continue ]
 ```
@@ -241,12 +241,12 @@ RELATIONSHIPS · Bivariate analysis
 
 Which funds are telling the same story?
 
-Founder compares the surviving instruments to identify hidden
+Camovar compares the surviving instruments to identify hidden
 duplication and genuinely different recent risk behavior.
 
 [ Cluster map ]
 
-Founder Insight
+Camovar Insight
 Eight suitable funds form only five distinct risk groups.
 
 [ Continue to portfolio structure ]
@@ -257,7 +257,7 @@ Eight suitable funds form only five distinct risk groups.
 ```text
 Connect your market data
 
-Founder uses your EODHD key for your personal research project.
+Camovar uses your EODHD key for your personal research project.
 
 [ EODHD API key                                      ]
 
@@ -277,7 +277,7 @@ Available history: limited
 Operating mode: Guided research set
 Data calls used today: 0
 
-Founder will estimate usage before every external data request.
+Camovar will estimate usage before every external data request.
 ```
 
 The data-call indicator should be informative rather than alarming.
@@ -310,7 +310,7 @@ All advanced constraints should remain collapsed under a secondary action.
 User-facing heading:
 
 ```text
-What can Founder invest in?
+What can Camovar invest in?
 ```
 
 The discovery animation should show the universe forming without exposing implementation logs.
@@ -350,7 +350,7 @@ Regions             Global, Europe, USA
 Currencies          EUR and USD
 Structures          Exclude leveraged and inverse
 
-[ Apply Founder recommendation ]
+[ Apply Camovar recommendation ]
 ```
 
 The primary visualization should be a selection waterfall:
@@ -378,7 +378,7 @@ When the eligible universe exceeds the available data capacity, the interface sh
 Your current data access can deeply analyze
 15 instruments in this run.
 
-[ Use a representative Founder set ]
+[ Use a representative Camovar set ]
 [ Select the instruments manually ]
 ```
 
@@ -461,7 +461,7 @@ Data confidence: Limited
 Only one interpretation should be emphasized below the chart:
 
 ```text
-Founder Insight
+Camovar Insight
 
 The highest-yield instruments also show the weakest
 recent capital preservation.
@@ -508,7 +508,7 @@ Selected limit         -25.0%
 This instrument does not satisfy the selected recent-loss rule.
 ```
 
-Founder should describe the fund as incompatible with the chosen rules, not universally bad.
+Camovar should describe the fund as incompatible with the chosen rules, not universally bad.
 
 ## Bivariate Analysis Screen
 
@@ -604,7 +604,7 @@ The user should not need to understand eigenvalues before understanding the dive
 
 ## Portfolio Candidate Screen
 
-Founder should display three or four large portfolio cards rather than a large optimizer table.
+Camovar should display three or four large portfolio cards rather than a large optimizer table.
 
 Initial categories:
 
@@ -638,12 +638,12 @@ Each card should initially expose only:
 
 The quantitative method should appear as secondary methodology, not as the primary card title.
 
-## Final Founder Moment
+## Final Camovar Moment
 
 The completed research project should summarize the full transformation:
 
 ```text
-Founder Research Complete
+Camovar Research Complete
 
 3,104  unique instruments discovered
 96     matched the metadata rules
@@ -683,7 +683,7 @@ AI should not be introduced as an empty chat surface.
 It should appear after deterministic analysis as contextual assistance under labels such as:
 
 ```text
-Founder Insight
+Camovar Insight
 Research Assistant
 ```
 
@@ -703,7 +703,7 @@ AI responses must cite the current run's persisted metrics, exclusions, model ou
 
 ### Color
 
-The interface should use a neutral base with one primary Founder accent.
+The interface should use a neutral base with one primary Camovar accent.
 
 ```text
 Background          #F7F7F5
@@ -711,7 +711,7 @@ Surface             #FFFFFF
 Primary text        #111111
 Secondary text      #6B6B70
 Border               #E5E5E3
-Founder accent      #315EFB
+Camovar accent      #315EFB
 Positive            #16855B
 Caution             #B7791F
 Critical            #C63C3C
@@ -743,7 +743,7 @@ Tabular numbers should be used for metrics so values remain visually stable when
 
 ### Spacing
 
-Founder should use a consistent eight-pixel spacing system:
+Camovar should use a consistent eight-pixel spacing system:
 
 ```text
 8    compact spacing
@@ -893,7 +893,7 @@ Mobile emphasizes:
 
 ## Non-Goals
 
-The guided Founder interface should not initially become:
+The guided Camovar interface should not initially become:
 
 - a real-time trading terminal;
 - a social investment feed;
@@ -916,16 +916,16 @@ The visual research funnel is successful when:
 7. desktop and mobile preserve the same research meaning with different layouts;
 8. animation clarifies data transformation rather than decorating the page;
 9. AI appears only after deterministic analysis exists;
-10. the final screen clearly communicates what Founder discovered, removed, grouped, and constructed.
+10. the final screen clearly communicates what Camovar discovered, removed, grouped, and constructed.
 
 The intended experience combines:
 
 ```text
 Google-like clarity of entry
   + Apple-like hierarchy and interaction discipline
-  + Founder's transparent quantitative transformation
+  + Camovar's transparent quantitative transformation
 ```
 
 The defining design rule is:
 
-> A screen should not show everything Founder calculated. It should show exactly what the user must understand or decide next.
+> A screen should not show everything Camovar calculated. It should show exactly what the user must understand or decide next.

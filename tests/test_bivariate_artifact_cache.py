@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from founder.artifact_cache import (
+from camovar.artifact_cache import (
     ArtifactCacheError,
     BivariateArtifactKey,
     InMemoryArtifactCache,
@@ -13,7 +13,7 @@ from founder.artifact_cache import (
     create_return_artifact,
     validate_bivariate_bucket_rows,
 )
-from founder.scoped_inputs import ScopedMarketInputs, SelectionInputRef, UserDataSnapshotRef
+from camovar.scoped_inputs import ScopedMarketInputs, SelectionInputRef, UserDataSnapshotRef
 
 
 def _inputs(user_id: str = "user-a", snapshot_hash: str = "quote-hash") -> ScopedMarketInputs:

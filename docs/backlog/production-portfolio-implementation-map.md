@@ -21,8 +21,8 @@ The remaining implementation work begins with PR57.
 
 ## Architecture Ownership Rules
 
-1. Do not add further production implementations to `src/founder/evaluation.py` or `src/founder/portfolio.py`.
-2. Keep `founder.evaluation` and `founder.portfolio` as compatibility facades that re-export stable public functions.
+1. Do not add further production implementations to `src/camovar/evaluation.py` or `src/camovar/portfolio.py`.
+2. Keep `camovar.evaluation` and `camovar.portfolio` as compatibility facades that re-export stable public functions.
 3. Move the real implementations into `evaluation_parts`, `portfolio_parts`, and the dedicated `risk_model` and `income` packages.
 4. Keep pure mathematics separate from lake reads and writes.
 5. Only writer or service modules may depend on `LakePaths`, `read_rows`, or `write_rows`.
@@ -45,12 +45,12 @@ refresh
 
 ## Shared Return Mathematics
 
-PR56 already introduced `src/founder/return_quality.py`. Keep data-quality policy there.
+PR56 already introduced `src/camovar/return_quality.py`. Keep data-quality policy there.
 
 Add a small pure module:
 
 ```text
-src/founder/return_math.py
+src/camovar/return_math.py
 ```
 
 It should own:
@@ -64,11 +64,11 @@ It should own:
 
 Callers:
 
-- `src/founder/gold.py`;
-- `src/founder/univariate_statistics.py`;
-- `src/founder/evaluation_parts/portfolio_returns.py`;
-- `src/founder/evaluation_parts/rebalance.py`;
-- `src/founder/evaluation_parts/backtest.py`.
+- `src/camovar/gold.py`;
+- `src/camovar/univariate_statistics.py`;
+- `src/camovar/evaluation_parts/portfolio_returns.py`;
+- `src/camovar/evaluation_parts/rebalance.py`;
+- `src/camovar/evaluation_parts/backtest.py`.
 
 Tests:
 
@@ -89,15 +89,15 @@ Required invariants:
 Primary implementation files:
 
 ```text
-src/founder/evaluation_parts/rebalance.py
-src/founder/evaluation_parts/rebalance_contracts.py
-src/founder/evaluation_parts/portfolio_returns.py
+src/camovar/evaluation_parts/rebalance.py
+src/camovar/evaluation_parts/rebalance_contracts.py
+src/camovar/evaluation_parts/portfolio_returns.py
 ```
 
 Compatibility files to reduce to facades after migration:
 
 ```text
-src/founder/evaluation.py
+src/camovar/evaluation.py
 ```
 
 Contracts to introduce:
@@ -131,8 +131,8 @@ pre_trade_weight_i = post_return_value_i / total_post_return_value
 Persistence changes:
 
 ```text
-src/founder/schemas.py
-src/founder/paths.py
+src/camovar/schemas.py
+src/camovar/paths.py
 CONTRACTS.md
 ```
 
@@ -189,7 +189,7 @@ Required invariants:
 Create:
 
 ```text
-src/founder/risk_model/
+src/camovar/risk_model/
     __init__.py
     contracts.py
     matrix.py
@@ -260,14 +260,14 @@ Own all `LakePaths` and table serialization for risk-model artifacts.
 Integration files:
 
 ```text
-src/founder/update/contracts.py
-src/founder/update/ports.py
-src/founder/update/service.py
-src/founder/schemas.py
-src/founder/paths.py
+src/camovar/update/contracts.py
+src/camovar/update/ports.py
+src/camovar/update/service.py
+src/camovar/schemas.py
+src/camovar/paths.py
 ```
 
-Legacy `src/founder/gold.py` may retain sample covariance compatibility outputs, but production optimization must consume an explicit risk-model artifact reference.
+Legacy `src/camovar/gold.py` may retain sample covariance compatibility outputs, but production optimization must consume an explicit risk-model artifact reference.
 
 Datasets:
 
@@ -301,7 +301,7 @@ Required invariants:
 Refactor the portfolio implementation into:
 
 ```text
-src/founder/portfolio_parts/
+src/camovar/portfolio_parts/
     constraints.py
     objectives.py
     baseline.py
@@ -317,7 +317,7 @@ src/founder/portfolio_parts/
 Keep:
 
 ```text
-src/founder/portfolio.py
+src/camovar/portfolio.py
 ```
 
 as a compatibility facade only.
@@ -435,11 +435,11 @@ Required invariants:
 Primary files:
 
 ```text
-src/founder/portfolio_parts/objectives.py
-src/founder/portfolio_parts/solver.py
-src/founder/portfolio_parts/risk_parity.py
-src/founder/portfolio_parts/diagnostics.py
-src/founder/portfolio_parts/writers.py
+src/camovar/portfolio_parts/objectives.py
+src/camovar/portfolio_parts/solver.py
+src/camovar/portfolio_parts/risk_parity.py
+src/camovar/portfolio_parts/diagnostics.py
+src/camovar/portfolio_parts/writers.py
 ```
 
 Minimum Variance must consume a validated shrinkage or EWMA risk-model artifact and solve under explicit constraints.
@@ -477,7 +477,7 @@ Required invariants:
 Primary file:
 
 ```text
-src/founder/portfolio_parts/hrp.py
+src/camovar/portfolio_parts/hrp.py
 ```
 
 Own explicit steps:
@@ -512,7 +512,7 @@ production_eligible = false
 Create or complete:
 
 ```text
-src/founder/portfolio_parts/cvar.py
+src/camovar/portfolio_parts/cvar.py
 ```
 
 Keep the boundary:
@@ -552,7 +552,7 @@ Required invariants:
 Create:
 
 ```text
-src/founder/income/
+src/camovar/income/
     __init__.py
     contracts.py
     distributions.py
@@ -617,12 +617,12 @@ Persist immutable income artifacts and warnings.
 Integration files:
 
 ```text
-src/founder/update/contracts.py
-src/founder/update/ports.py
-src/founder/update/service.py
-src/founder/selection/contracts.py
-src/founder/schemas.py
-src/founder/paths.py
+src/camovar/update/contracts.py
+src/camovar/update/ports.py
+src/camovar/update/service.py
+src/camovar/selection/contracts.py
+src/camovar/schemas.py
+src/camovar/paths.py
 ```
 
 Selection may expose income fields, but it consumes typed Update evidence and must never calculate these metrics itself.
@@ -660,13 +660,13 @@ Production pair statistics should use the Update pair cache and not one Parquet 
 Pure mathematical engine:
 
 ```text
-src/founder/gold_pair_stats.py
+src/camovar/gold_pair_stats.py
 ```
 
 Artifact and cache ownership:
 
 ```text
-src/founder/update/pair_cache.py
+src/camovar/update/pair_cache.py
 ```
 
 `gold_pair_stats.py` should own:
@@ -690,7 +690,7 @@ src/founder/update/pair_cache.py
 - locks and artifact persistence;
 - threshold and top-k edge views.
 
-Keep `src/founder/bivariate_statistics.py` as a compatibility facade during migration.
+Keep `src/camovar/bivariate_statistics.py` as a compatibility facade during migration.
 
 Suggested storage:
 
@@ -708,7 +708,7 @@ Required invariant: an unordered pair is calculated once per complete cache key 
 Create or extend:
 
 ```text
-src/founder/portfolio_profiles/
+src/camovar/portfolio_profiles/
     __init__.py
     contracts.py
     profiles.py
@@ -744,9 +744,9 @@ Required invariant: a profile is a versioned configuration expansion, not hidden
 Primary implementation files:
 
 ```text
-src/founder/evaluation_parts/backtest.py
-src/founder/evaluation_parts/backtest_contracts.py
-src/founder/evaluation_parts/scorecard.py
+src/camovar/evaluation_parts/backtest.py
+src/camovar/evaluation_parts/backtest_contracts.py
+src/camovar/evaluation_parts/scorecard.py
 ```
 
 `WalkForwardSpec` should include:
@@ -808,7 +808,7 @@ Required invariants:
 Suggested package:
 
 ```text
-src/founder/stress/
+src/camovar/stress/
 ```
 
 Own historical stress definitions, seeded block bootstrap, covariance perturbation, correlation convergence, distribution-cut shocks, and sensitivity summaries. Persist seeds and scenario versions.
@@ -818,7 +818,7 @@ Own historical stress definitions, seeded block bootstrap, covariance perturbati
 Suggested package:
 
 ```text
-src/founder/recommendation/
+src/camovar/recommendation/
 ```
 
 Consume completed scorecards, stress results, income artifacts, constraints, and warnings. Produce structured report data with inclusion and exclusion reasons, candidate disadvantages, traceable assumptions, and no guaranteed-return wording.
@@ -828,7 +828,7 @@ Consume completed scorecards, stress results, income artifacts, constraints, and
 Primary package:
 
 ```text
-src/founder/trading/
+src/camovar/trading/
 ```
 
 Own current positions, target differences, whole-share rounding, minimum order size, fees, taxes, FX assumptions, cash remainder, and deterministic Flatex-oriented exports. It must consume an approved recommendation and must not choose the optimization objective.
@@ -838,9 +838,9 @@ Own current positions, target differences, whole-share rounding, minimum order s
 Suggested packages:
 
 ```text
-src/founder/projects/
-src/founder/reporting/
-src/founder/monitoring/
+src/camovar/projects/
+src/camovar/reporting/
+src/camovar/monitoring/
 ```
 
 Own local project state, report rendering, drift checks, risk-limit checks, distribution-cut checks, NAV-erosion checks, stale-data checks, and alert-ready statuses.
@@ -850,8 +850,8 @@ Own local project state, report rendering, drift checks, risk-limit checks, dist
 Every new dataset must update these files together:
 
 ```text
-src/founder/schemas.py
-src/founder/paths.py
+src/camovar/schemas.py
+src/camovar/paths.py
 CONTRACTS.md
 ARCHITECTURE.md
 DECISIONS.md

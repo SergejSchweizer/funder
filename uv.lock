@@ -258,7 +258,7 @@ wheels = [
 ]
 
 [[package]]
-name = "founder"
+name = "camovar"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

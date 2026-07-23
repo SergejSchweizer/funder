@@ -6,8 +6,8 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN uv pip install --system .
 
-RUN useradd --system --create-home --uid 10001 founder
-USER founder
+RUN useradd --system --create-home --uid 10001 camovar
+USER camovar
 
 EXPOSE 8000
-CMD ["python", "-m", "founder.hosted_runtime", "api"]
+CMD ["python", "-m", "camovar.hosted_runtime", "api"]

@@ -4,8 +4,8 @@ from io import BytesIO
 
 import pytest
 
-from founder.config import EodhdConfig
-from founder.http import EodhdClient, EodhdHttpError
+from camovar.config import EodhdConfig
+from camovar.http import EodhdClient, EodhdHttpError
 
 
 class JsonResponse:

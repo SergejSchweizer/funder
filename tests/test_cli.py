@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from founder.cli import build_parser, main
-from founder.fetch_all_quotes import main as fetch_all_quotes_main
-from founder.paths import LakePaths
-from founder.table_io import read_json, read_rows, write_json, write_rows
-from founder.workflows import run_fetch_all_quotes_workflow
+from camovar.cli import build_parser, main
+from camovar.fetch_all_quotes import main as fetch_all_quotes_main
+from camovar.paths import LakePaths
+from camovar.table_io import read_json, read_rows, write_json, write_rows
+from camovar.workflows import run_fetch_all_quotes_workflow
 
 
 def _quote(isin: str, exchange: str, code: str, date: str, close: float) -> dict[str, object]:
@@ -44,7 +44,7 @@ def test_cli_prints_project_name(capsys: pytest.CaptureFixture[str]) -> None:
     main([])
 
     output = capsys.readouterr()
-    assert output.out == "founder\n"
+    assert output.out == "camovar\n"
 
 
 def test_multivariate_statistics_concurrency_defaults_to_all_core_mode() -> None:
@@ -103,7 +103,7 @@ def test_cli_runs_fetch_all_quotes_module(
         captured.update(kwargs)
         return {"run_id": "quotes-cli", "quote_successes": 2}
 
-    monkeypatch.setattr("founder.cli.run_fetch_all_quotes_workflow", fake_workflow)
+    monkeypatch.setattr("camovar.cli.run_fetch_all_quotes_workflow", fake_workflow)
 
     main(
         [
@@ -153,7 +153,7 @@ def test_fetch_all_quotes_cli_defaults_to_two_workers(
         captured.update(kwargs)
         return {"run_id": "quotes-cli"}
 
-    monkeypatch.setattr("founder.cli.run_fetch_all_quotes_workflow", fake_workflow)
+    monkeypatch.setattr("camovar.cli.run_fetch_all_quotes_workflow", fake_workflow)
 
     main(["fetch-all-quotes", "--root", str(root)])
 
@@ -170,7 +170,7 @@ def test_standalone_fetch_all_quotes_cli(
         captured.update(kwargs)
         return {"run_id": "standalone-quotes", "quote_errors": 0}
 
-    monkeypatch.setattr("founder.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
+    monkeypatch.setattr("camovar.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
 
     fetch_all_quotes_main(
         [
@@ -203,7 +203,7 @@ def test_standalone_fetch_all_quotes_cli_defaults_to_two_workers(
         captured.update(kwargs)
         return {"run_id": "standalone-quotes"}
 
-    monkeypatch.setattr("founder.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
+    monkeypatch.setattr("camovar.fetch_all_quotes.run_fetch_all_quotes_workflow", fake_workflow)
 
     fetch_all_quotes_main(["--root", str(root)])
 
@@ -292,8 +292,8 @@ def test_fetch_all_quotes_workflow_writes_bronze_and_silver(
         del config
         return FakeClient()
 
-    monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
-    monkeypatch.setattr("founder.workflows.EodhdClient", fake_client_factory)
+    monkeypatch.setattr("camovar.workflows.load_eodhd_config", lambda: object())
+    monkeypatch.setattr("camovar.workflows.EodhdClient", fake_client_factory)
 
     summary = run_fetch_all_quotes_workflow(
         root=root,
@@ -381,8 +381,8 @@ def test_fetch_all_quotes_workflow_accepts_explicit_metadata_selection(
         del config
         return FakeClient()
 
-    monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
-    monkeypatch.setattr("founder.workflows.EodhdClient", fake_client_factory)
+    monkeypatch.setattr("camovar.workflows.load_eodhd_config", lambda: object())
+    monkeypatch.setattr("camovar.workflows.EodhdClient", fake_client_factory)
 
     summary = run_fetch_all_quotes_workflow(
         root=root,

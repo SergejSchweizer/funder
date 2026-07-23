@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from founder.costs.contracts import ComponentCostEstimate, CostBreakdown, ExecutionContext
+from camovar.costs.contracts import ComponentCostEstimate, CostBreakdown, ExecutionContext
 
 
 def _context(**overrides: object) -> ExecutionContext:

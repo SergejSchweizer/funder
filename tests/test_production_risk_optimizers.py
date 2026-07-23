@@ -1,18 +1,18 @@
 """Tests for PR60's solver-backed production Minimum Variance / Equal Risk
-Contribution wiring in founder.portfolio (optimize_portfolio / build_optimizer_diagnostics).
+Contribution wiring in camovar.portfolio (optimize_portfolio / build_optimizer_diagnostics).
 """
 
 from math import comb
 
 import pytest
 
-from founder.portfolio import (
+from camovar.portfolio import (
     PRODUCTION_SOLVER_MODE,
     PortfolioConstraints,
     build_optimizer_diagnostics,
     optimize_portfolio,
 )
-from founder.portfolio_parts.solvers import SOLVER_NAME, SolverOutcome
+from camovar.portfolio_parts.solvers import SOLVER_NAME, SolverOutcome
 
 # 9 listings at grid_step=0.1: comb(9+10-1, 10) = 43758 > MAX_EXACT_WEIGHT_CANDIDATES.
 # Minimum Variance / Equal Risk Contribution must no longer be limited by this
@@ -140,7 +140,7 @@ def test_production_diagnostics_report_solver_not_converged(
             weights=stub_weights, converged=False, iteration_count=1, objective_value=1.0
         )
 
-    monkeypatch.setattr("founder.portfolio.solve_minimum_variance", _fake_solver)
+    monkeypatch.setattr("camovar.portfolio.solve_minimum_variance", _fake_solver)
 
     weights = {"IE1": 0.5, "IE2": 0.5}
     diagnostics = build_optimizer_diagnostics(
@@ -171,7 +171,7 @@ def test_optimize_portfolio_raises_when_production_solver_does_not_converge(
             weights=(0.5, 0.5), converged=False, iteration_count=1, objective_value=1.0
         )
 
-    monkeypatch.setattr("founder.portfolio.solve_minimum_variance", _fake_solver)
+    monkeypatch.setattr("camovar.portfolio.solve_minimum_variance", _fake_solver)
 
     with pytest.raises(ValueError, match="solver_not_converged"):
         optimize_portfolio(

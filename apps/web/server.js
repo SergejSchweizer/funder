@@ -8,27 +8,27 @@ if (process.argv.includes("--health")) {
 }
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
-const apiBaseUrl = process.env.FOUNDER_API_BASE_URL || "http://api:8000";
-const authMode = process.env.FOUNDER_AUTH_MODE || "google";
-const googleClientId = process.env.FOUNDER_GOOGLE_CLIENT_ID || "";
+const apiBaseUrl = process.env.CAMOVAR_API_BASE_URL || "http://api:8000";
+const authMode = process.env.CAMOVAR_AUTH_MODE || "google";
+const googleClientId = process.env.CAMOVAR_GOOGLE_CLIENT_ID || "";
 const googleRedirectUri =
-  process.env.FOUNDER_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
-const googleAllowedDomain = process.env.FOUNDER_GOOGLE_ALLOWED_DOMAIN || "";
+  process.env.CAMOVAR_GOOGLE_REDIRECT_URI || `http://localhost:${port}/auth/google/callback`;
+const googleAllowedDomain = process.env.CAMOVAR_GOOGLE_ALLOWED_DOMAIN || "";
 const googleAuthEndpoint =
-  process.env.FOUNDER_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
+  process.env.CAMOVAR_GOOGLE_AUTH_ENDPOINT || "https://accounts.google.com/o/oauth2/v2/auth";
 const googleTokenEndpoint =
-  process.env.FOUNDER_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
-const googleJwksUri = process.env.FOUNDER_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
-const googleStateTtlMs = Number.parseInt(process.env.FOUNDER_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
+  process.env.CAMOVAR_GOOGLE_TOKEN_ENDPOINT || "https://oauth2.googleapis.com/token";
+const googleJwksUri = process.env.CAMOVAR_GOOGLE_JWKS_URI || "https://www.googleapis.com/oauth2/v3/certs";
+const googleStateTtlMs = Number.parseInt(process.env.CAMOVAR_GOOGLE_STATE_TTL_SECONDS || "600", 10) * 1000;
 const localDevUserId = "local-google-dev-user";
 const localDevCsrfToken = "valid-csrf";
 const localDevGoogleEmail = (
-  process.env.FOUNDER_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
+  process.env.CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL || "local-google-dev-user@example.test"
 ).toLowerCase();
-const sessionCookieName = "founder_session_user";
-const csrfCookieName = "founder_csrf";
-const emailCookieName = "founder_auth_email";
-const providerCookieName = "founder_auth_provider";
+const sessionCookieName = "camovar_session_user";
+const csrfCookieName = "camovar_csrf";
+const emailCookieName = "camovar_auth_email";
+const providerCookieName = "camovar_auth_provider";
 const pendingGoogleStates = new Map();
 let googleJwksCache = { expiresAt: 0, keys: [] };
 
@@ -138,13 +138,13 @@ function googleRedirectUsesPrivateIp() {
 
 function applyGooglePrivateIpDeviceParams(url) {
   if (!googleRedirectUsesPrivateIp()) return;
-  url.searchParams.set("device_id", "founder-" + sha256Hex(googleRedirectUri).slice(0, 32));
-  url.searchParams.set("device_name", "Founder Research Local");
+  url.searchParams.set("device_id", "camovar-" + sha256Hex(googleRedirectUri).slice(0, 32));
+  url.searchParams.set("device_name", "Camovar Research Local");
 }
 
 function readGoogleClientSecret() {
-  if (process.env.FOUNDER_GOOGLE_CLIENT_SECRET) return process.env.FOUNDER_GOOGLE_CLIENT_SECRET;
-  const secretPath = process.env.FOUNDER_GOOGLE_CLIENT_SECRET_FILE;
+  if (process.env.CAMOVAR_GOOGLE_CLIENT_SECRET) return process.env.CAMOVAR_GOOGLE_CLIENT_SECRET;
+  const secretPath = process.env.CAMOVAR_GOOGLE_CLIENT_SECRET_FILE;
   if (!secretPath) return "";
   return fs.readFileSync(secretPath, "utf8").trim();
 }
@@ -265,7 +265,7 @@ function brandMarkup(session = null) {
   const userLine = label
     ? `<span class="brand-user" data-auth-user>${escapeHtml(label)}${provider ? ` · ${escapeHtml(provider)}` : ""}</span>`
     : "";
-  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Founder Research</span>${userLine}</span></div>`;
+  return `<div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span class="brand-copy"><span>Camovar Research</span>${userLine}</span></div>`;
 }
 
 function statisticsStepButton(step, index) {
@@ -742,8 +742,8 @@ input, select {
 }
 
 function renderAuthenticatedShell(escapedApiUrl, session = null) {
-  return `<div class="app-shell" data-design-system-version="founder-web-shell-v1">
-  <aside class="sidebar" aria-label="Founder navigation">
+  return `<div class="app-shell" data-design-system-version="camovar-web-shell-v1">
+  <aside class="sidebar" aria-label="Camovar navigation">
     ${brandMarkup(session)}
     <div class="snapshot-indicator" data-snapshot-indicator aria-disabled="true">
       <label>
@@ -819,13 +819,13 @@ function renderAppShell(apiUrl, initialSession = null) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="founder-csrf-token" content="${escapedCsrfToken}">
-<title>Founder Research</title>
+<meta name="camovar-csrf-token" content="${escapedCsrfToken}">
+<title>Camovar Research</title>
 ${renderStyles()}
 </head>
 <body>
 <div class="login-gate" data-auth-gate${gateHidden}>
-  <section class="login-panel" aria-label="Founder login">
+  <section class="login-panel" aria-label="Camovar login">
     ${brandMarkup()}
     <h1>Sign in to continue</h1>
     <p class="login-panel__copy">The research dashboard is only available after Google authentication.</p>
@@ -856,7 +856,7 @@ const apiRoutes = {
   statisticsCompute: (kind) => "/statistics/" + encodeURIComponent(kind) + "/compute"
 };
 function csrfToken() {
-  return document.querySelector('meta[name="founder-csrf-token"]').content;
+  return document.querySelector('meta[name="camovar-csrf-token"]').content;
 }
 function idempotencyKey(prefix) {
   if (globalThis.crypto && globalThis.crypto.randomUUID) {
@@ -867,7 +867,7 @@ function idempotencyKey(prefix) {
 async function apiRequest(path, options = {}) {
   const headers = Object.assign({ "accept": "application/json" }, options.headers || {});
   if (options.body) headers["content-type"] = "application/json";
-  if (options.method && options.method !== "GET") headers["X-Founder-CSRF"] = csrfToken();
+  if (options.method && options.method !== "GET") headers["X-Camovar-CSRF"] = csrfToken();
   const response = await fetch(apiBaseUrl + path, {
     method: options.method || "GET",
     credentials: "include",
@@ -1258,7 +1258,7 @@ function mountAuthenticatedShell(session) {
   const template = document.querySelector("[data-authenticated-template]");
   if (!root || !template) return;
   if (root.childElementCount === 0) root.appendChild(template.content.cloneNode(true));
-  const csrfMeta = document.querySelector('meta[name="founder-csrf-token"]');
+  const csrfMeta = document.querySelector('meta[name="camovar-csrf-token"]');
   if (csrfMeta && session && session.csrf_token) csrfMeta.content = session.csrf_token;
   const authUser = document.querySelector("[data-auth-user]");
   if (authUser && session) {
@@ -1394,7 +1394,7 @@ document.querySelector('[data-form="project-definition"]').addEventListener("sub
   }
 });
 }
-window.founderApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
+window.camovarApi = { apiRequest, apiRoutes, idempotencyKey, refreshSession };
 initializeAuthGate();
 </script>
 </body>

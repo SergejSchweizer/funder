@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from founder.paths import LakePaths
-from founder.table_io import read_rows
-from founder.univariate_statistics import (
+from camovar.paths import LakePaths
+from camovar.table_io import read_rows
+from camovar.univariate_statistics import (
     build_quote_returns,
     build_univariate_statistics,
     write_univariate_statistics,

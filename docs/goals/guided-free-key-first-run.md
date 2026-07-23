@@ -4,9 +4,9 @@ Last reviewed: 2026-07-17
 
 ## Purpose
 
-The first Founder experience should demonstrate the complete research workflow with a user's own EODHD free key while staying within the provider's limited daily data allowance.
+The first Camovar experience should demonstrate the complete research workflow with a user's own EODHD free key while staying within the provider's limited daily data allowance.
 
-The product should not open with a generic dashboard or a preselected model portfolio. It should guide a new user through the same transparent research sequence used by the Founder engine:
+The product should not open with a generic dashboard or a preselected model portfolio. It should guide a new user through the same transparent research sequence used by the Camovar engine:
 
 ```text
 fetch all available ISIN and listing metadata
@@ -20,7 +20,7 @@ fetch all available ISIN and listing metadata
   -> construct and compare portfolio candidates
 ```
 
-The experience should prove that Founder can reduce a broad investment universe to a small, explainable set of portfolio candidates without presenting a black-box recommendation.
+The experience should prove that Camovar can reduce a broad investment universe to a small, explainable set of portfolio candidates without presenting a black-box recommendation.
 
 ## Product Promise
 
@@ -28,7 +28,7 @@ The opening promise should be simple:
 
 > Turn a broad fund universe into a portfolio you understand.
 
-Founder should communicate three principles immediately:
+Camovar should communicate three principles immediately:
 
 - the user supplies their own market-data key;
 - every exclusion and selection is reproducible;
@@ -50,7 +50,7 @@ At the end of the first guided run, the user should understand:
 A representative final statement is:
 
 ```text
-Founder started with the available investment universe,
+Camovar started with the available investment universe,
 reduced it through explicit eligibility and statistical checks,
 identified the remaining independent risk groups,
 and built several portfolio candidates from that evidence.
@@ -94,13 +94,13 @@ Connect your market data
 
 [ EODHD API key ]
 
-Founder shows estimated API usage before each data-fetch step.
+Camovar shows estimated API usage before each data-fetch step.
 The key is not logged and should initially remain session-scoped.
 
 [ Connect ]
 ```
 
-After validation, Founder should display the detected access level and the resulting operating mode without overpromising exact capacity.
+After validation, Camovar should display the detected access level and the resulting operating mode without overpromising exact capacity.
 
 ```text
 Connected
@@ -121,11 +121,11 @@ Growth
 
 A second compact control may capture the intended portfolio size or risk preference.
 
-Founder should translate these answers into explicit metadata rules, univariate thresholds, multivariate constraints, and portfolio-comparison priorities.
+Camovar should translate these answers into explicit metadata rules, univariate thresholds, multivariate constraints, and portfolio-comparison priorities.
 
 ## 3. Discover The Investment Universe
 
-Founder fetches and persists the available ISIN and listing metadata.
+Camovar fetches and persists the available ISIN and listing metadata.
 
 The UI should summarize the result rather than immediately displaying a large table:
 
@@ -181,7 +181,7 @@ Every excluded instrument should retain a structured exclusion reason.
 
 The metadata-filtered universe may still be too large for the free key because univariate analysis requires historical quotes for each instrument.
 
-Founder therefore needs an explicit free-key research-set step.
+Camovar therefore needs an explicit free-key research-set step.
 
 The system should estimate the data cost before fetching quotes and produce a small, representative candidate set that fits within the currently available provider allowance.
 
@@ -194,13 +194,13 @@ A guided set should preserve diversity rather than simply select the first recor
 - alternative diversifiers;
 - one benchmark.
 
-The user should be able to accept the Founder set or manually replace instruments before quote retrieval.
+The user should be able to accept the Camovar set or manually replace instruments before quote retrieval.
 
 ```text
 Metadata-eligible instruments: 96
 Research capacity for this run: 15
 
-[ Use Founder selection ]
+[ Use Camovar selection ]
 [ Review and customize ]
 ```
 
@@ -219,7 +219,7 @@ Validating dates and prices
 Persisting the market-data snapshot
 ```
 
-Founder should fetch data only for the selected research set, persist it locally, and reuse it in all later statistical stages without additional provider calls.
+Camovar should fetch data only for the selected research set, persist it locally, and reuse it in all later statistical stages without additional provider calls.
 
 The UI must show:
 
@@ -233,7 +233,7 @@ The UI must show:
 
 ## 7. Univariate Statistics
 
-Founder evaluates each instrument independently.
+Camovar evaluates each instrument independently.
 
 The initial free-key-compatible univariate layer should prioritize:
 
@@ -269,7 +269,7 @@ The summary should lead with outcomes:
 
 The univariate filter removes instruments that are individually unsuitable before pairwise computation begins.
 
-Founder should provide an objective-specific recommended preset with an advanced customization option.
+Camovar should provide an objective-specific recommended preset with an advanced customization option.
 
 Possible rules include:
 
@@ -292,7 +292,7 @@ Each exclusion must retain:
 
 ## 9. Bivariate Statistics
 
-Founder next evaluates the relationships between surviving instruments.
+Camovar next evaluates the relationships between surviving instruments.
 
 The user-facing purpose is:
 
@@ -311,7 +311,7 @@ Required initial measures include:
 - optional stress-period correlation;
 - correlation-based distance for clustering.
 
-The principal insight should not be a large unexplained matrix. Founder should summarize redundancy and groups:
+The principal insight should not be a large unexplained matrix. Camovar should summarize redundancy and groups:
 
 ```text
 9 individually acceptable instruments
@@ -330,7 +330,7 @@ Pairwise computation must operate only on the filtered research set and must not
 
 ## 10. Multivariate Statistics
 
-Founder then evaluates the candidate set as a joint system.
+Camovar then evaluates the candidate set as a joint system.
 
 The user-facing purpose is:
 
@@ -393,7 +393,7 @@ The first result screen should not begin with a dense dashboard.
 It should begin with one plain-language conclusion derived from the stored statistics, for example:
 
 ```text
-Founder found that the surviving funds represent
+Camovar found that the surviving funds represent
 fewer independent risk sources than their number suggests.
 ```
 
@@ -412,7 +412,7 @@ The next screen should explain the strongest redundancy, the dominant portfolio 
 
 ## AI Role
 
-AI should be introduced only after Founder has persisted deterministic analysis results.
+AI should be introduced only after Camovar has persisted deterministic analysis results.
 
 Its responsibilities are:
 
@@ -470,7 +470,7 @@ Portfolio candidates  pending
 
 ## Call-Budget Rules
 
-Founder must treat provider capacity as an explicit resource.
+Camovar must treat provider capacity as an explicit resource.
 
 Before every external data-fetch operation it should show:
 
@@ -488,7 +488,7 @@ Statistical recomputation from persisted data should be clearly marked as requir
 
 The free-key experience must explicitly distinguish what can and cannot be inferred from the available history.
 
-Founder may provide useful recent evidence about:
+Camovar may provide useful recent evidence about:
 
 - data quality;
 - recent volatility;
@@ -497,7 +497,7 @@ Founder may provide useful recent evidence about:
 - current concentration;
 - recent portfolio risk contributions.
 
-Founder must warn that limited history does not robustly establish:
+Camovar must warn that limited history does not robustly establish:
 
 - long-term crisis behavior;
 - stability across multiple market regimes;

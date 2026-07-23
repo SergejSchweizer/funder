@@ -39,7 +39,7 @@ C01 and C02 are logically independent and may be implemented in parallel on sepa
 
 Branch: `fix/cli-entrypoint-consistency`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/91.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/91.
 
 Priority: P0 package correctness.
 
@@ -47,7 +47,7 @@ Depends on: merged PR57.
 
 ### Problem
 
-`pyproject.toml` declares installed console scripts for `founder-selection` and `founder-update`, while the corresponding `founder.selection` and `founder.update` packages were intentionally removed during the later CLI simplification. The package can therefore advertise commands that cannot import their declared targets.
+`pyproject.toml` declares installed console scripts for `camovar-selection` and `camovar-update`, while the corresponding `camovar.selection` and `camovar.update` packages were intentionally removed during the later CLI simplification. The package can therefore advertise commands that cannot import their declared targets.
 
 The current quality gate runs linting, formatting, strict type checking, tests, coverage, and architecture checks, but it does not prove that every `[project.scripts]` target imports or that each installed command can display help.
 
@@ -59,7 +59,7 @@ The current quality gate runs linting, formatting, strict type checking, tests, 
 - Add installed-package smoke tests for `--help` on every supported console script.
 - Add umbrella CLI smoke tests for every current subcommand.
 - Mark superseded Refresh/Selection/Update CLI documentation and backlog claims clearly as historical or superseded where they conflict with the current five-stage statistics funnel.
-- Add the entry-point smoke test to `founder-quality pr` and `merge-gate` through the normal pytest suite.
+- Add the entry-point smoke test to `camovar-quality pr` and `merge-gate` through the normal pytest suite.
 
 ### Acceptance
 
@@ -81,7 +81,7 @@ Repeated help and import checks do not create or mutate lake, log, configuration
 
 Branch: `fix/walk-forward-return-semantics`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/93.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/93.
 
 Priority: P0 quantitative correctness.
 
@@ -129,7 +129,7 @@ Unchanged split requests resolve to the same metrics and weights; interrupted ru
 
 Branch: `perf/pairwise-bucketed-scale-guard`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/95.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/95.
 
 Priority: P0/P1 operational safety.
 
@@ -173,7 +173,7 @@ An unchanged run reuses complete buckets and writes no duplicate pair rows. Resu
 
 Branch: `fix/risk-model-covariance-completeness`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/97.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/97.
 
 PR58 remains the first risk-model PR after the immediate hotfixes. Its existing scope must be strengthened with these non-negotiable requirements.
 
@@ -209,7 +209,7 @@ availability_reasons
 
 ### Architecture Ownership
 
-- New risk-model mathematics belongs in `founder.risk_model`, not in `founder.portfolio` or orchestration code.
+- New risk-model mathematics belongs in `camovar.risk_model`, not in `camovar.portfolio` or orchestration code.
 - Top-level Evaluation and Portfolio modules remain public compatibility facades.
 - `evaluation_parts`, `portfolio_parts`, and the new `risk_model` package must contain the actual implementation rather than dynamically importing monolith functions back from the facade.
 
@@ -224,7 +224,7 @@ availability_reasons
 
 Branch: `fix/solver-boundary-no-silent-equal-weight-fallback`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/99.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/99.
 
 PR59 remains the production solver boundary. Its existing scope must explicitly prevent method substitution and misleading labels.
 
@@ -265,7 +265,7 @@ production_eligible
 
 Branch: `feat/hrp-cvar-production-optimizers`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/104 (True HRP) and https://github.com/SergejSchweizer/founder/pull/109 (Minimum CVaR).
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/104 (True HRP) and https://github.com/SergejSchweizer/camovar/pull/109 (Minimum CVaR).
 
 The current recursive midpoint split is not true Hierarchical Risk Parity.
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from founder.entitlements import (
+from camovar.entitlements import (
     EntitlementError,
     InMemoryEntitlementStore,
     ProviderDownloadRun,

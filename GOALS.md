@@ -1,10 +1,10 @@
-# Founder Goals
+# Camovar Goals
 
 Last reviewed: 2026-07-19
 
 ## Purpose
 
-Founder is intended to become a practical portfolio construction and investment analysis tool for private investors, with a later path to public access.
+Camovar is intended to become a practical portfolio construction and investment analysis tool for private investors, with a later path to public access.
 
 The project should help a user move from a broad ETF and fund universe to a transparent, risk-aware, investable portfolio. It should not merely calculate an efficient frontier or rank funds by historical return. It should combine data quality checks, fund analysis, portfolio construction, out-of-sample validation, rebalancing, costs, and human-readable explanations.
 
@@ -17,7 +17,7 @@ broaden another user's visible data.
 
 ## Product Vision
 
-Founder should answer five questions:
+Camovar should answer five questions:
 
 1. Which instruments are suitable for the user's objective?
 2. Which instruments add genuinely different risk exposure?
@@ -25,7 +25,7 @@ Founder should answer five questions:
 4. How robust would the portfolio have been outside the estimation period and after costs?
 5. What trades and future monitoring actions are required?
 
-The user should receive more than one mathematically optimal result. Founder should compare several robust portfolio methods under the same assumptions and expose the trade-offs.
+The user should receive more than one mathematically optimal result. Camovar should compare several robust portfolio methods under the same assumptions and expose the trade-offs.
 
 The final output should include:
 
@@ -47,7 +47,7 @@ Expected returns are difficult to estimate and highly unstable. The first truste
 
 ### No single optimizer is universally best
 
-Founder should implement a model comparison framework rather than declare one method universally optimal. Equal Weight and Inverse Volatility should remain permanent baselines.
+Camovar should implement a model comparison framework rather than declare one method universally optimal. Equal Weight and Inverse Volatility should remain permanent baselines.
 
 ### Out-of-sample evidence over in-sample fit
 
@@ -63,7 +63,7 @@ Every analysis must use persisted selections, versioned dataset contracts, deter
 
 ### Decision support, not guaranteed performance
 
-Founder should not imply certainty, guaranteed income, or guaranteed returns. It should present estimated outcomes, uncertainty, risks, and data limitations.
+Camovar should not imply certainty, guaranteed income, or guaranteed returns. It should present estimated outcomes, uncertainty, risks, and data limitations.
 
 ## Target User Workflows
 
@@ -107,7 +107,7 @@ Updated prices and distributions
 
 ### Current core data
 
-Founder can already use the following information for a strong first version:
+Camovar can already use the following information for a strong first version:
 
 - instrument metadata and ISINs;
 - canonical exchange listings;
@@ -144,7 +144,7 @@ A public hosted version must confirm market-data display, derived-data, and redi
 
 ## 1. Universe And Eligibility Analysis
 
-Founder should reduce the broad instrument universe before portfolio optimization.
+Camovar should reduce the broad instrument universe before portfolio optimization.
 
 Required checks include:
 
@@ -199,9 +199,9 @@ Metrics must include observation counts, date ranges, availability reasons, and 
 
 ## 3. Income And Distribution Analysis
 
-Income analysis is a core differentiator for Founder.
+Income analysis is a core differentiator for Camovar.
 
-Founder should distinguish distribution frequency from distribution quality. Counting distribution events alone is insufficient.
+Camovar should distinguish distribution frequency from distribution quality. Counting distribution events alone is insufficient.
 
 Required metrics include:
 
@@ -221,7 +221,7 @@ Required metrics include:
 - income per unit of Expected Shortfall;
 - estimated gross and net income after configurable taxes and fees.
 
-A high distribution rate must not be treated as a high expected return. Founder should explicitly warn when distributions appear unsupported by total return or are accompanied by persistent NAV erosion.
+A high distribution rate must not be treated as a high expected return. Camovar should explicitly warn when distributions appear unsupported by total return or are accompanied by persistent NAV erosion.
 
 A useful income-efficiency metric is:
 
@@ -233,7 +233,7 @@ The sustainable income estimate should be conservative and should not rely only 
 
 ## 4. Pairwise And Diversification Analysis
 
-Founder should measure whether instruments add genuine diversification.
+Camovar should measure whether instruments add genuine diversification.
 
 Required pairwise measures include:
 
@@ -255,7 +255,7 @@ Dense covariance matrices should be built only for the final candidate set used 
 
 ## Risk Models
 
-Founder should support multiple covariance and risk estimators.
+Camovar should support multiple covariance and risk estimators.
 
 ### Required production estimators
 
@@ -281,7 +281,7 @@ Raw sample covariance should not be the only production risk model because highl
 
 ## Portfolio Construction Methods
 
-Founder should implement and compare the following methods.
+Camovar should implement and compare the following methods.
 
 ### 1. Equal Weight
 
@@ -319,11 +319,11 @@ Each asset should contribute approximately the same fraction of portfolio risk:
 RC_i = w_i * (Sigma w)_i
 ```
 
-Founder should use a numerical solver, record convergence diagnostics, and expose marginal, absolute, and percentage risk contributions.
+Camovar should use a numerical solver, record convergence diagnostics, and expose marginal, absolute, and percentage risk contributions.
 
 ### 5. True Hierarchical Risk Parity
 
-Founder should implement actual Hierarchical Risk Parity using:
+Camovar should implement actual Hierarchical Risk Parity using:
 
 1. a covariance and correlation matrix;
 2. a correlation-based distance matrix;
@@ -335,11 +335,11 @@ A simple alphabetical split or midpoint recursion is not sufficient and must rem
 
 ### 6. Maximum Diversification
 
-Founder should maximize the diversification ratio under the same production constraints and compare it with Minimum Variance and Equal Risk Contribution.
+Camovar should maximize the diversification ratio under the same production constraints and compare it with Minimum Variance and Equal Risk Contribution.
 
 ### 7. Minimum CVaR
 
-Founder should minimize historical or scenario-based CVaR under long-only and concentration constraints.
+Camovar should minimize historical or scenario-based CVaR under long-only and concentration constraints.
 
 This is particularly important for defensive and income-oriented portfolios because variance penalizes positive and negative deviations equally, while CVaR focuses on severe losses.
 
@@ -359,7 +359,7 @@ A future production expected-return layer may include:
 
 Constraints are part of the investment model and must be explicit, stored, and reported.
 
-Founder should support:
+Camovar should support:
 
 - weights summing to one;
 - long-only portfolios by default;
@@ -470,11 +470,11 @@ Required out-of-sample metrics include:
 - income and distribution stability;
 - worst month and worst quarter.
 
-A method should not be selected because it has the highest in-sample return. Founder should prefer robust median performance, controlled adverse outcomes, stable weights, and low unnecessary turnover.
+A method should not be selected because it has the highest in-sample return. Camovar should prefer robust median performance, controlled adverse outcomes, stable weights, and low unnecessary turnover.
 
 ## Rebalancing Simulation
 
-Founder should simulate:
+Camovar should simulate:
 
 - monthly rebalancing;
 - quarterly rebalancing;
@@ -527,7 +527,7 @@ The trade-preparation layer should consume approved portfolio weights. It must n
 
 ## Stress And Robustness Analysis
 
-Founder should evaluate portfolios under:
+Camovar should evaluate portfolios under:
 
 - historical crisis periods;
 - equity sell-offs;
@@ -544,7 +544,7 @@ The report should show how conclusions change when assumptions change.
 
 ## Model Comparison And Recommendation
 
-Founder should compare all eligible portfolio candidates using a common scorecard.
+Camovar should compare all eligible portfolio candidates using a common scorecard.
 
 The scorecard should include:
 
@@ -559,7 +559,7 @@ The scorecard should include:
 - income quality where relevant;
 - robustness across estimation windows and stress scenarios.
 
-Founder should then produce:
+Camovar should then produce:
 
 - best defensive candidate;
 - best diversified candidate;
@@ -573,7 +573,7 @@ The recommendation must include the reason for selection and the material disadv
 
 ## Current Technical Prerequisites
 
-Before the optimizer results can be treated as production investment outputs, Founder must address the following points:
+Before the optimizer results can be treated as production investment outputs, Camovar must address the following points:
 
 1. Correct the log-return and simple-return wealth inconsistency.
 2. Correct rebalancing drift to use instrument-level returns.
@@ -618,7 +618,7 @@ A suitable progression is:
 - alerts for drift, distribution cuts, drawdowns, and data quality;
 - paid or donation-supported plans.
 
-Founder should initially remain a decision-support and trade-preparation tool. Direct broker order execution should be considered only after the analytical product, audit trail, security model, and regulatory implications are mature.
+Camovar should initially remain a decision-support and trade-preparation tool. Direct broker order execution should be considered only after the analytical product, audit trail, security model, and regulatory implications are mature.
 
 ## Initial Hosted Architecture
 
@@ -644,7 +644,7 @@ Browser / Mobile Browser
 +-----------------------------+
 | API container               |
 | FastAPI                     |
-| Founder Python Core         |
+| Camovar Python Core         |
 | SQLite + Parquet access     |
 | Port 8000                   |
 +-------------+---------------+
@@ -656,7 +656,7 @@ Browser / Mobile Browser
 The initial deployment consists of only:
 
 1. one `web` container;
-2. one `api` container containing FastAPI and the Founder analytical package;
+2. one `api` container containing FastAPI and the Camovar analytical package;
 3. one persistent data directory or Docker volume.
 
 The first version should not require PostgreSQL, Redis, a separate worker, a message queue, Kubernetes, object storage, or a dedicated authentication service.
@@ -676,22 +676,22 @@ The API is responsible for:
 
 - validating requests;
 - communicating with EODHD using the user's key;
-- invoking Founder workflows and analytical functions;
+- invoking Camovar workflows and analytical functions;
 - storing portfolio metadata and analysis-run state;
 - writing immutable Parquet result artifacts and JSON manifests;
 - returning compact JSON responses to the Web UI.
 
-The Founder Core remains responsible for all financial calculations. Portfolio logic must not be duplicated in the React application.
+The Camovar Core remains responsible for all financial calculations. Portfolio logic must not be duplicated in the React application.
 
 ### Initial data flow
 
 ```text
-1. User opens Founder.
+1. User opens Camovar.
 2. User enters an EODHD key for the current session.
 3. User defines a small portfolio, initially approximately 3 to 10 funds.
 4. Next.js sends the portfolio and analysis request to FastAPI.
 5. FastAPI loads and caches the permitted EODHD data.
-6. Founder validates the data and calculates the analysis.
+6. Camovar validates the data and calculates the analysis.
 7. The run is stored as Parquet artifacts plus a JSON manifest.
 8. SQLite stores the portfolio, positions, run status, and artifact path.
 9. FastAPI returns metrics and chart-ready JSON.
@@ -715,7 +715,7 @@ Analytical outputs remain in Parquet:
 
 ```text
 data/
-  founder.db
+  camovar.db
   uploads/
   market/
   analytics/
@@ -734,7 +734,7 @@ SQLite should act as the catalog. Parquet should contain the analytical results.
 ### Minimal repository direction
 
 ```text
-founder/
+camovar/
   apps/
     web/                    # Next.js application
       app/
@@ -742,14 +742,14 @@ founder/
       package.json
       Dockerfile
     api/                    # FastAPI application layer
-      founder_api/
+      camovar_api/
         main.py
         routes/
         services/
       pyproject.toml
       Dockerfile
   src/
-    founder/                # existing analytical core
+    camovar/                # existing analytical core
   data/                     # ignored runtime data
   docker-compose.yml
   pyproject.toml
@@ -814,8 +814,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: sqlite:////data/founder.db
-      FOUNDER_DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/camovar.db
+      CAMOVAR_DATA_DIR: /data
     volumes:
       - ./data:/data
 ```
@@ -856,13 +856,13 @@ Each transition should be independent. Parquet result artifacts and stable API c
 ## Proposed Module Direction
 
 ```text
-founder.risk_model
+camovar.risk_model
     sample_covariance
     ledoit_wolf_covariance
     ewma_covariance
     covariance_diagnostics
 
-founder.optimizers
+camovar.optimizers
     equal_weight
     inverse_volatility
     minimum_variance
@@ -871,27 +871,27 @@ founder.optimizers
     maximum_diversification
     minimum_cvar
 
-founder.income
+camovar.income
     distribution_history
     sustainable_income
     distribution_stability
     nav_erosion
     income_efficiency
 
-founder.backtest
+camovar.backtest
     walk_forward
     rebalance
     transaction_costs
     bootstrap
     stress_scenarios
 
-founder.recommendation
+camovar.recommendation
     compare_models
     ensemble_weights
     profile_selection
     explanation
 
-founder.trading
+camovar.trading
     current_positions
     transition_plan
     flatex_export
@@ -945,7 +945,7 @@ Existing stable public module surfaces may be preserved while internal package b
 
 ## Initial Production Definition Of Done
 
-Founder may describe a portfolio result as a production candidate only when:
+Camovar may describe a portfolio result as a production candidate only when:
 
 - all instruments pass data-quality and minimum-history checks;
 - the universe and every input dataset are versioned;
@@ -963,7 +963,7 @@ Founder may describe a portfolio result as a production candidate only when:
 
 ## Initial Recommended Default
 
-For the first broadly useful Balanced portfolio, Founder should use:
+For the first broadly useful Balanced portfolio, Camovar should use:
 
 ```text
 eligible and quality-controlled universe
@@ -979,4 +979,4 @@ eligible and quality-controlled universe
 
 For the Income profile, the same robust risk framework should be combined with sustainable distribution, NAV-erosion, CVaR, concentration, and turnover constraints.
 
-This combination is the intended strategic direction for Founder: a transparent, reproducible, risk-aware portfolio construction system rather than a single-formula optimizer.
+This combination is the intended strategic direction for Camovar: a transparent, reproducible, risk-aware portfolio construction system rather than a single-formula optimizer.

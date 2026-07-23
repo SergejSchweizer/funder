@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from founder.bivariate_statistics import write_bivariate_statistics
-from founder.paths import LakePaths
-from founder.statistics_views import (
+from camovar.bivariate_statistics import write_bivariate_statistics
+from camovar.paths import LakePaths
+from camovar.statistics_views import (
     build_selection_statistics_view,
     read_selection_statistics,
     write_selection_statistics_view,
 )
-from founder.table_io import read_json
-from founder.univariate_statistics import build_quote_returns, write_univariate_statistics
+from camovar.table_io import read_json
+from camovar.univariate_statistics import build_quote_returns, write_univariate_statistics
 
 
 def _quote(

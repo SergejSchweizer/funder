@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from founder.bronze import (
+from camovar.bronze import (
     build_bronze_plan,
     build_coverage,
     build_gap_bronze_plan,
@@ -15,25 +15,25 @@ from founder.bronze import (
     write_bronze_manifests,
     write_quotes_to_bronze,
 )
-from founder.gold import (
+from camovar.gold import (
     build_correlation_and_covariance,
     build_correlation_edges,
     build_returns,
     write_correlation_edges,
     write_gold_inputs,
 )
-from founder.paths import LakePaths
-from founder.pipeline import run_dry_run
-from founder.schemas import dataset_contract, required_fields, validate_fields, validate_rows
-from founder.search import (
+from camovar.paths import LakePaths
+from camovar.pipeline import run_dry_run
+from camovar.schemas import dataset_contract, required_fields, validate_fields, validate_rows
+from camovar.search import (
     approve_universe,
     resolve_current_universe,
     select_canonical,
     write_canonical_universe,
     write_search_run,
 )
-from founder.silver import write_silver_quotes
-from founder.table_io import read_json, read_rows, write_rows
+from camovar.silver import write_silver_quotes
+from camovar.table_io import read_json, read_rows, write_rows
 
 
 def test_lake_schemas_and_paths_cover_backlog_tables(tmp_path) -> None:  # type: ignore[no-untyped-def]

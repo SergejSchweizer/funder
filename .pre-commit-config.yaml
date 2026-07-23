@@ -1,14 +1,14 @@
 repos:
   - repo: local
     hooks:
-      - id: founder-quality-pr
-        name: founder quality pr
-        entry: uv run founder-quality pr
+      - id: camovar-quality-pr
+        name: camovar quality pr
+        entry: uv run camovar-quality pr
         language: system
         pass_filenames: false
         stages: [pre-commit]
-      - id: founder-conventional-commit
-        name: founder conventional commit
-        entry: uv run founder-quality --commit-msg-file
+      - id: camovar-conventional-commit
+        name: camovar conventional commit
+        entry: uv run camovar-quality --commit-msg-file
         language: system
         stages: [commit-msg]

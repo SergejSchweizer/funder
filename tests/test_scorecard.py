@@ -4,9 +4,9 @@ import random
 
 import pytest
 
-from founder.calculation_status import UNAVAILABLE
-from founder.portfolio import PortfolioConstraints
-from founder.scorecard import (
+from camovar.calculation_status import UNAVAILABLE
+from camovar.portfolio import PortfolioConstraints
+from camovar.scorecard import (
     RANKING_METRIC,
     ScorecardCandidate,
     _rank_candidates,

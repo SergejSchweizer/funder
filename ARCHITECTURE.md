@@ -5,7 +5,7 @@ Last reviewed: 2026-07-19
 ## Table Of Contents
 
 - [Purpose](#purpose)
-- [Read This First: What Founder Is Today](#read-this-first-what-founder-is-today)
+- [Read This First: What Camovar Is Today](#read-this-first-what-camovar-is-today)
 - [System At A Glance](#system-at-a-glance)
 - [Repository Map](#repository-map)
 - [Execution Mode 1: Local CLI And Data Lake](#execution-mode-1-local-cli-and-data-lake)
@@ -29,7 +29,7 @@ Last reviewed: 2026-07-19
 
 ## Purpose
 
-Founder is a risk-aware ETF and fund research system built around EODHD end-of-day market data. It discovers and filters instruments, ingests and validates market history, computes reusable statistics, compares portfolio construction methods, produces explainable recommendations, and prepares Flatex-oriented trade rows without executing broker orders.
+Camovar is a risk-aware ETF and fund research system built around EODHD end-of-day market data. It discovers and filters instruments, ingests and validates market history, computes reusable statistics, compares portfolio construction methods, produces explainable recommendations, and prepares Flatex-oriented trade rows without executing broker orders.
 
 This document describes the architecture that exists on `main` now. It deliberately separates:
 
@@ -37,15 +37,15 @@ This document describes the architecture that exists on `main` now. It deliberat
 - code that is an implemented and tested contract or adapter boundary;
 - code that is not yet connected to the active runtime.
 
-That distinction is essential because Founder currently contains both a mature local analytical pipeline and a hosted multi-tenant architecture whose security contracts are further developed than its production runtime wiring.
+That distinction is essential because Camovar currently contains both a mature local analytical pipeline and a hosted multi-tenant architecture whose security contracts are further developed than its production runtime wiring.
 
-## Read This First: What Founder Is Today
+## Read This First: What Camovar Is Today
 
-Founder has two related execution modes.
+Camovar has two related execution modes.
 
 ```text
 +-----------------------------------------------------------------------+
-|                         Founder repository                            |
+|                         Camovar repository                            |
 +-----------------------------------------------------------------------+
 |                                                                       |
 |  1. LOCAL ANALYTICAL MODE              2. HOSTED DEVELOPMENT MODE     |
@@ -76,8 +76,8 @@ Founder has two related execution modes.
 | Docker Compose topology | Active development runtime | PostgreSQL, API, and Web containers start with health checks and hardened mounts. |
 | Hosted FastAPI route surface | Active local-development API | It currently uses deterministic in-memory repositories and development request headers. |
 | Hosted browser workspace | Active local-development UI | It is served by `apps/web/server.js` as a versioned production shell baseline with design tokens, responsive navigation, and persisted funnel route skeletons. |
-| PostgreSQL schema, roles, migrations, and RLS | Implemented contract | `founder.hosted_catalog` defines and tests them, but the active FastAPI state is not yet backed by PostgreSQL. |
-| Google OIDC and server-side sessions | Implemented contract | `founder.hosted_auth` is tested, but it is not yet connected to the active Web/API request flow. |
+| PostgreSQL schema, roles, migrations, and RLS | Implemented contract | `camovar.hosted_catalog` defines and tests them, but the active FastAPI state is not yet backed by PostgreSQL. |
+| Google OIDC and server-side sessions | Implemented contract | `camovar.hosted_auth` is tested, but it is not yet connected to the active Web/API request flow. |
 | Encrypted EODHD credential vault | Implemented contract and local adapter | The API uses a deterministic in-memory development vault, not a production secret-manager-backed repository. |
 | Shared observations, entitlements, scoped inputs, and artifact cache | Implemented contracts and proofs | They are tested independently and by the hosted cutover proof, but are not fully connected to the active API runtime. |
 | Public production service | Not equivalent to current Compose runtime | Security/readiness gates and a deterministic cutover proof exist; live production adapters still require integration. |
@@ -138,7 +138,7 @@ The mathematical core is shared conceptually by both modes. The local mode suppl
 ## Repository Map
 
 ```text
-founder/
+camovar/
 |
 |-- apps/
 |   |-- api/
@@ -148,7 +148,7 @@ founder/
 |       |-- package.json            Minimal Node package
 |       `-- server.js               Current browser workspace and client code
 |
-|-- src/founder/
+|-- src/camovar/
 |   |-- local pipeline modules      discovery, lake, statistics, portfolio
 |   |-- hosted_* modules            hosted contracts, API, readiness, cutover
 |   |-- portfolio_parts/            internal optimizer implementations
@@ -180,19 +180,19 @@ The local pipeline is the most complete execution path. It uses explicit command
 
 ### CLI boundary
 
-`founder.cli` parses commands and delegates to `founder.workflows`. Business logic should not be added directly to argument parsing.
+`camovar.cli` parses commands and delegates to `camovar.workflows`. Business logic should not be added directly to argument parsing.
 
 Current primary commands are:
 
 ```text
-founder search
-founder fetch-all-isins
-founder metadata-filter
-founder fetch-all-quotes
-founder univariate-statistics
-founder univariate-filter
-founder bivariate-statistics
-founder multivariate-statistics
+camovar search
+camovar fetch-all-isins
+camovar metadata-filter
+camovar fetch-all-quotes
+camovar univariate-statistics
+camovar univariate-filter
+camovar bivariate-statistics
+camovar multivariate-statistics
 ```
 
 The intended research sequence is:
@@ -227,12 +227,12 @@ portfolio comparison -> recommendation -> optional Flatex export
 
 ### Two discovery paths
 
-Founder currently contains two discovery mechanisms:
+Camovar currently contains two discovery mechanisms:
 
 ```text
 Legacy/local fixture path                 Current live metadata path
 -------------------------                 --------------------------
-founder search                            founder fetch-all-isins
+camovar search                            camovar fetch-all-isins
 checked-in CSV/JSON input                 EODHD exchange symbol lists
         |                                         |
         v                                         v
@@ -242,17 +242,17 @@ canonical universe                                 |
                                            metadata-filter
 ```
 
-`founder.search` remains useful for deterministic samples and compatibility. `founder.fetch_all_isins` is the live EODHD metadata reference path used by the newer five-stage ISIN workflow.
+`camovar.search` remains useful for deterministic samples and compatibility. `camovar.fetch_all_isins` is the live EODHD metadata reference path used by the newer five-stage ISIN workflow.
 
 ## Local Research Funnel
 
 ### 1. Instrument reference
 
-`founder.fetch_all_isins` enumerates EODHD exchange symbol lists and stores ISIN-bearing listing metadata once under the reference area. This stage does not download full quote history and does not compute financial statistics.
+`camovar.fetch_all_isins` enumerates EODHD exchange symbol lists and stores ISIN-bearing listing metadata once under the reference area. This stage does not download full quote history and does not compute financial statistics.
 
 ### 2. Metadata selection
 
-`founder.metadata_filter` reads the all-ISIN reference and applies conjunctive predicates. It writes an immutable selection directory containing:
+`camovar.metadata_filter` reads the all-ISIN reference and applies conjunctive predicates. It writes an immutable selection directory containing:
 
 ```text
 isins.parquet
@@ -263,7 +263,7 @@ A local convenience pointer identifies the latest selection. That pointer is acc
 
 ### 3. Quote ingestion
 
-`founder.fetch_all_quotes` and `founder.workflows.run_fetch_all_quotes_workflow` read an explicit or latest metadata selection, create a Bronze plan, call EODHD through the shared HTTP client, write quotes and companion raw dividends/splits, rebuild Silver quotes, and update coverage manifests.
+`camovar.fetch_all_quotes` and `camovar.workflows.run_fetch_all_quotes_workflow` read an explicit or latest metadata selection, create a Bronze plan, call EODHD through the shared HTTP client, write quotes and companion raw dividends/splits, rebuild Silver quotes, and update coverage manifests.
 
 The path is deliberately split:
 
@@ -289,15 +289,15 @@ coverage + gap information
 
 ### 4. Univariate statistics
 
-`founder.univariate_statistics` calculates reusable metrics for each selected listing from validated Silver history. `founder.return_quality` is shared with Gold generation and prevents invalid prices from becoming fabricated zero returns.
+`camovar.univariate_statistics` calculates reusable metrics for each selected listing from validated Silver history. `camovar.return_quality` is shared with Gold generation and prevents invalid prices from becoming fabricated zero returns.
 
 ### 5. Univariate filtering
 
-`founder.univariate_filter` applies metric predicates to already-computed statistics. It does not recalculate statistics. The output is another persisted selection with stable membership and provenance.
+`camovar.univariate_filter` applies metric predicates to already-computed statistics. It does not recalculate statistics. The output is another persisted selection with stable membership and provenance.
 
 ### 6. Bivariate statistics
 
-`founder.bivariate_statistics` computes one record per unordered listing pair. It:
+`camovar.bivariate_statistics` computes one record per unordered listing pair. It:
 
 - aligns both series on the exact common return dates;
 - avoids duplicate symmetric work;
@@ -307,11 +307,11 @@ coverage + gap information
 
 ### 7. Selection statistics views
 
-`founder.statistics_views` maps an existing metadata or univariate selection to the generic cached univariate and bivariate rows that belong to it. It never silently computes missing rows or returns an incomplete result as complete.
+`camovar.statistics_views` maps an existing metadata or univariate selection to the generic cached univariate and bivariate rows that belong to it. It never silently computes missing rows or returns an incomplete result as complete.
 
 ### 8. Multivariate and portfolio analysis
 
-`founder.multivariate_statistics` has several entry points:
+`camovar.multivariate_statistics` has several entry points:
 
 ```text
 write_multivariate_statistics
@@ -331,7 +331,7 @@ The browser and hosted API must eventually call these same core boundaries throu
 
 ## Local Lake Layout
 
-`founder.paths.LakePaths` is the single path-construction authority. Modules must not embed alternative lake layouts.
+`camovar.paths.LakePaths` is the single path-construction authority. Modules must not embed alternative lake layouts.
 
 ```text
 lake/
@@ -397,7 +397,7 @@ lake/
 - **Gold** is reusable statistics, evaluation inputs, optimizer outputs, and portfolio diagnostics.
 - **Trading** contains explicit preparation exports, never broker execution state.
 
-`founder.table_io` isolates JSON, Parquet, and review-CSV serialization. `founder.schemas` and [CONTRACTS.md](CONTRACTS.md) define the logical row contracts.
+`camovar.table_io` isolates JSON, Parquet, and review-CSV serialization. `camovar.schemas` and [CONTRACTS.md](CONTRACTS.md) define the logical row contracts.
 
 ## Analytical And Portfolio Stack
 
@@ -452,7 +452,7 @@ risk_model           evaluation          portfolio solvers
 
 ### Risk models
 
-`founder.risk_model` owns covariance estimation and diagnostics. Production-oriented paths can use shrinkage covariance and must report stability/eligibility diagnostics rather than silently accepting any matrix.
+`camovar.risk_model` owns covariance estimation and diagnostics. Production-oriented paths can use shrinkage covariance and must report stability/eligibility diagnostics rather than silently accepting any matrix.
 
 ### Portfolio methods currently represented
 
@@ -469,31 +469,31 @@ The package includes or composes:
 - historical Minimum CVaR;
 - profile-specific and ensemble candidates.
 
-`founder.portfolio` is the public optimization surface. `founder.portfolio_parts` contains internal solver-focused modules. Solver diagnostics and constraint validation are part of the result contract.
+`camovar.portfolio` is the public optimization surface. `camovar.portfolio_parts` contains internal solver-focused modules. Solver diagnostics and constraint validation are part of the result contract.
 
 ### Profiles
 
-`founder.profiles` defines versioned Defensive, Balanced, Income, and Growth contracts. The Balanced candidate combines True HRP, Equal Risk Contribution, and shrinkage Minimum Variance and then projects the aggregate weights back onto the permitted simplex.
+`camovar.profiles` defines versioned Defensive, Balanced, Income, and Growth contracts. The Balanced candidate combines True HRP, Equal Risk Contribution, and shrinkage Minimum Variance and then projects the aggregate weights back onto the permitted simplex.
 
 Expected fail-closed conditions are represented as `infeasible` candidates with reasons, not unexplained crashes or silently relaxed constraints.
 
 ### Validation and recommendation
 
-- `founder.scorecard` compares candidates on identical walk-forward windows and costs.
+- `camovar.scorecard` compares candidates on identical walk-forward windows and costs.
 - Ranking uses out-of-sample evidence, not highest in-sample return.
-- `founder.stress` provides deterministic historical, bootstrap, distribution-cut, correlation, and covariance scenarios.
-- `founder.recommendation` explains inclusion, exclusion, constraints, disadvantages, and uncertainty.
+- `camovar.stress` provides deterministic historical, bootstrap, distribution-cut, correlation, and covariance scenarios.
+- `camovar.recommendation` explains inclusion, exclusion, constraints, disadvantages, and uncertainty.
 - Every recommendation requires user approval and includes a no-guaranteed-return disclaimer.
 
 ### Tax, costs, and cash flow
 
-`founder.tax`, `founder.costs`, `founder.cashflow`, and `founder.calculation_status` currently provide jurisdiction-neutral contracts and registries.
+`camovar.tax`, `camovar.costs`, `camovar.cashflow`, and `camovar.calculation_status` currently provide jurisdiction-neutral contracts and registries.
 
 They do **not** yet provide verified production tax rates or real broker fee schedules. EU countries are known registry entries but remain explicitly unsupported until sourced and reviewed adapters are added. Missing values must remain `unavailable` or `unsupported`; they must never silently become zero.
 
 ### Trading boundary
 
-`founder.trading` converts approved target weights and current prices into deterministic Flatex-oriented rows. It does not:
+`camovar.trading` converts approved target weights and current prices into deterministic Flatex-oriented rows. It does not:
 
 - choose the portfolio objective;
 - approve a recommendation;
@@ -596,7 +596,7 @@ A new user begins with no grants. An object already present in shared storage do
 
 ### Scoped analytical inputs
 
-`founder.scoped_inputs` defines:
+`camovar.scoped_inputs` defines:
 
 - `UserDataSnapshotRef`;
 - `SelectionInputRef`;
@@ -611,7 +611,7 @@ The mathematical core receives rows and deterministic hashes. It does not receiv
 
 ### Shared market observations
 
-`founder.shared_observations` normalizes provider rows and derives stable content identities. Identical normalized observations can be stored once. Corrections create new revisions rather than overwriting the historical identity.
+`camovar.shared_observations` normalizes provider rows and derives stable content identities. Identical normalized observations can be stored once. Corrections create new revisions rather than overwriting the historical identity.
 
 Shared payloads must not contain:
 
@@ -623,7 +623,7 @@ Shared payloads must not contain:
 
 ### Shared analytical artifacts
 
-`founder.artifact_cache` separates physical reuse from user visibility.
+`camovar.artifact_cache` separates physical reuse from user visibility.
 
 ```text
 Exact inputs + parameters + algorithm versions
@@ -656,7 +656,7 @@ A direct artifact id or filesystem path is never sufficient authorization.
 `compose.yaml` starts three services and two named volumes.
 
 ```text
-                    founder-public network
+                    camovar-public network
 
 Browser
    |
@@ -669,7 +669,7 @@ Browser
 | no data volume   |                     | shared-data vol  |
 +------------------+                     +---------+--------+
                                                   |
-                                                  | founder-internal
+                                                  | camovar-internal
                                                   v
                                         +---------+--------+
                                         | postgres         |
@@ -679,8 +679,8 @@ Browser
                                         +------------------+
 
 Named volumes:
-  founder-postgres-data
-  founder-shared-data
+  camovar-postgres-data
+  camovar-shared-data
 ```
 
 ### Container hardening already present
@@ -730,9 +730,9 @@ It is **not** currently a Next.js or React application.
 
 ### API container: active local-development boundary
 
-`founder.hosted_runtime` starts Uvicorn with `founder.hosted_api:app`.
+`camovar.hosted_runtime` starts Uvicorn with `camovar.hosted_api:app`.
 
-`founder.hosted_api` exposes route groups for:
+`camovar.hosted_api` exposes route groups for:
 
 - health and session status;
 - EODHD credential status/set/delete;
@@ -748,7 +748,7 @@ Mutating routes require CSRF. Retry-sensitive routes accept idempotency keys. Us
 
 However, the active API state is `HostedApiState`, an in-memory repository set intended for deterministic tests and local development. It currently uses:
 
-- request headers such as `X-Founder-User` for development identity;
+- request headers such as `X-Camovar-User` for development identity;
 - a fixed development CSRF contract;
 - an in-memory credential store and deterministic development KEK;
 - in-memory projects, selections, downloads, analyses, audit events, and idempotency references;
@@ -758,7 +758,7 @@ API state is therefore lost when the API process restarts, even though the Postg
 
 ### PostgreSQL: running infrastructure plus implemented schema contract
 
-The PostgreSQL container is active in Compose. `founder.hosted_catalog` defines:
+The PostgreSQL container is active in Compose. `camovar.hosted_catalog` defines:
 
 - deterministic migrations and checksums;
 - owner, migrator, application, and read-only roles;
@@ -770,7 +770,7 @@ The current FastAPI runtime does **not** yet use PostgreSQL repositories for `Ho
 
 ### Google OIDC: implemented contract, not active request wiring
 
-`founder.hosted_auth` implements and tests:
+`camovar.hosted_auth` implements and tests:
 
 - authorization-code flow contracts;
 - PKCE;
@@ -784,21 +784,21 @@ The current Web/API development path does not yet execute the real Google callba
 
 ### Hosted EODHD ingestion: implemented contract, not active API provider call
 
-`founder.user_ingestion` implements capability-aware plans, credential unwrapping boundaries, provider error redaction, usage accounting, shared observation publication, and snapshot publication rules.
+`camovar.user_ingestion` implements capability-aware plans, credential unwrapping boundaries, provider error redaction, usage accounting, shared observation publication, and snapshot publication rules.
 
-The current API download route uses deterministic local observation identities for development. It is not yet connected to a live EODHD call through `founder.user_ingestion`.
+The current API download route uses deterministic local observation identities for development. It is not yet connected to a live EODHD call through `camovar.user_ingestion`.
 
 ### Entitlements, scoped inputs, and artifacts: implemented and proven, not fully API-wired
 
-`founder.entitlements`, `founder.scoped_inputs`, and `founder.artifact_cache` are exercised by focused tests and by `founder.hosted_cutover`. The cutover proof creates multiple users, overlapping observations, snapshots, scoped inputs, and artifacts; verifies cross-user denial and idempotent reuse; deletes one user's entitlements; and checks browser-storage and local-CLI invariants.
+`camovar.entitlements`, `camovar.scoped_inputs`, and `camovar.artifact_cache` are exercised by focused tests and by `camovar.hosted_cutover`. The cutover proof creates multiple users, overlapping observations, snapshots, scoped inputs, and artifacts; verifies cross-user denial and idempotent reuse; deletes one user's entitlements; and checks browser-storage and local-CLI invariants.
 
 This is a deterministic local proof. It does not call Google, EODHD, a broker, a cloud service, or production secret storage.
 
 ### Readiness and security gates: active validation
 
-`founder.security_gates` validates repository and CI hardening from committed policy.
+`camovar.security_gates` validates repository and CI hardening from committed policy.
 
-`founder.hosted_readiness` validates versioned licensing, privacy, retention, backup, restore, key rotation, role, incident-response, and broker-execution decisions.
+`camovar.hosted_readiness` validates versioned licensing, privacy, retention, backup, restore, key rotation, role, incident-response, and broker-execution decisions.
 
 These gates validate evidence and policy. They do not replace missing runtime adapters.
 
@@ -826,7 +826,7 @@ PostgreSQL-compatible encrypted record
 External KEK is not stored in Git, PostgreSQL, images, logs, or CI.
 ```
 
-`founder.hosted_credentials` binds ciphertext to credential id, user id, provider, and schema version through authenticated associated data. Stored status responses are masked.
+`camovar.hosted_credentials` binds ciphertext to credential id, user id, provider, and schema version through authenticated associated data. Stored status responses are masked.
 
 ### Database boundary
 
@@ -860,88 +860,88 @@ The catalogue below groups modules by responsibility. Public modules should depe
 
 | Module | Responsibility |
 | --- | --- |
-| `founder.__init__` | Import-safe package/version surface. |
-| `founder.config` | Local EODHD configuration, timeouts, retries, spacing, and backoff. |
-| `founder.http` | Tokenized EODHD requests, pacing, retry, `Retry-After`, and redaction. |
-| `founder.logging` | Uniform logs and retention. |
-| `founder.paths` | Deterministic local lake and export paths. |
-| `founder.schemas` | Dataset registry, versions, fields, owners, and sort keys. |
-| `founder.contracts` | Typed cross-module local contracts. |
-| `founder.table_io` | JSON, Parquet, and CSV serialization boundary. |
-| `founder.run_state` | Deterministic job manifests and resume metadata. |
-| `founder.run_locks` | Per-root/per-layer operating-system locks. |
-| `founder.selection_filters` | Shared predicate parsing and comparison semantics. |
+| `camovar.__init__` | Import-safe package/version surface. |
+| `camovar.config` | Local EODHD configuration, timeouts, retries, spacing, and backoff. |
+| `camovar.http` | Tokenized EODHD requests, pacing, retry, `Retry-After`, and redaction. |
+| `camovar.logging` | Uniform logs and retention. |
+| `camovar.paths` | Deterministic local lake and export paths. |
+| `camovar.schemas` | Dataset registry, versions, fields, owners, and sort keys. |
+| `camovar.contracts` | Typed cross-module local contracts. |
+| `camovar.table_io` | JSON, Parquet, and CSV serialization boundary. |
+| `camovar.run_state` | Deterministic job manifests and resume metadata. |
+| `camovar.run_locks` | Per-root/per-layer operating-system locks. |
+| `camovar.selection_filters` | Shared predicate parsing and comparison semantics. |
 
 ### Discovery, selection, and ingestion
 
 | Module | Responsibility |
 | --- | --- |
-| `founder.search` | Deterministic discovery over supplied candidate files and canonical-universe compatibility flow. |
-| `founder.fetch_all_isins` | Live full EODHD metadata reference refresh. |
-| `founder.metadata_filter` | Metadata-only persisted selections. |
-| `founder.bronze` | Provider plans, raw quote/dividend/split writes, resumability, and coverage inputs. |
-| `founder.silver` | Bronze-to-Silver normalized quote files. |
-| `founder.fetch_all_quotes` | Standalone quote-refresh entry point. |
-| `founder.universe_review` | Missing ISIN, currency, duplicate, and survivorship review. |
-| `founder.workflows` | Operational composition behind the CLI. |
+| `camovar.search` | Deterministic discovery over supplied candidate files and canonical-universe compatibility flow. |
+| `camovar.fetch_all_isins` | Live full EODHD metadata reference refresh. |
+| `camovar.metadata_filter` | Metadata-only persisted selections. |
+| `camovar.bronze` | Provider plans, raw quote/dividend/split writes, resumability, and coverage inputs. |
+| `camovar.silver` | Bronze-to-Silver normalized quote files. |
+| `camovar.fetch_all_quotes` | Standalone quote-refresh entry point. |
+| `camovar.universe_review` | Missing ISIN, currency, duplicate, and survivorship review. |
+| `camovar.workflows` | Operational composition behind the CLI. |
 
 ### Statistics and data quality
 
 | Module | Responsibility |
 | --- | --- |
-| `founder.return_quality` | Shared price/return validation and production-history labels. |
-| `founder.gold` | Generic returns, covariance, correlation, edges, and feature inputs. |
-| `founder.univariate_statistics` | Per-listing statistics. |
-| `founder.univariate_filter` | Metric-based persisted selections. |
-| `founder.bivariate_statistics` | Exact common-date pair statistics and bucketed cache. |
-| `founder.statistics_views` | Selection views over reusable statistic caches. |
-| `founder.multivariate_statistics` | Selected portfolio-level orchestration, production adapter, recommendation, and handoff. |
+| `camovar.return_quality` | Shared price/return validation and production-history labels. |
+| `camovar.gold` | Generic returns, covariance, correlation, edges, and feature inputs. |
+| `camovar.univariate_statistics` | Per-listing statistics. |
+| `camovar.univariate_filter` | Metric-based persisted selections. |
+| `camovar.bivariate_statistics` | Exact common-date pair statistics and bucketed cache. |
+| `camovar.statistics_views` | Selection views over reusable statistic caches. |
+| `camovar.multivariate_statistics` | Selected portfolio-level orchestration, production adapter, recommendation, and handoff. |
 
 ### Evaluation, optimization, and decisions
 
 | Module | Responsibility |
 | --- | --- |
-| `founder.evaluation` / `evaluation_parts` | Return matrices, asset/portfolio metrics, drawdowns, frontier, walk-forward, rebalancing, and tail-risk evaluation. |
-| `founder.risk_model` | Covariance estimators and diagnostics. |
-| `founder.portfolio` / `portfolio_parts` | Constraints, solver-backed objectives, weights, risk contributions, HRP, diversification, and CVaR. |
-| `founder.profiles` | Defensive, Balanced, Income, and Growth candidate contracts. |
-| `founder.scorecard` | Common out-of-sample model comparison. |
-| `founder.stress` | Historical, bootstrap, and covariance sensitivity scenarios. |
-| `founder.recommendation` | Explainable candidate comparison and deterministic report rendering. |
-| `founder.trading` | Flatex-oriented preparation rows and CSV output. |
-| `founder.tax` | Jurisdiction-neutral tax contracts and country registry. |
-| `founder.costs` | Broker/venue/execution/FX/recurring-cost contracts and registry. |
-| `founder.cashflow` | Neutral after-tax/after-cost cash-flow result contract. |
-| `founder.calculation_status` | Exact/estimate/unavailable/unsupported status vocabulary. |
+| `camovar.evaluation` / `evaluation_parts` | Return matrices, asset/portfolio metrics, drawdowns, frontier, walk-forward, rebalancing, and tail-risk evaluation. |
+| `camovar.risk_model` | Covariance estimators and diagnostics. |
+| `camovar.portfolio` / `portfolio_parts` | Constraints, solver-backed objectives, weights, risk contributions, HRP, diversification, and CVaR. |
+| `camovar.profiles` | Defensive, Balanced, Income, and Growth candidate contracts. |
+| `camovar.scorecard` | Common out-of-sample model comparison. |
+| `camovar.stress` | Historical, bootstrap, and covariance sensitivity scenarios. |
+| `camovar.recommendation` | Explainable candidate comparison and deterministic report rendering. |
+| `camovar.trading` | Flatex-oriented preparation rows and CSV output. |
+| `camovar.tax` | Jurisdiction-neutral tax contracts and country registry. |
+| `camovar.costs` | Broker/venue/execution/FX/recurring-cost contracts and registry. |
+| `camovar.cashflow` | Neutral after-tax/after-cost cash-flow result contract. |
+| `camovar.calculation_status` | Exact/estimate/unavailable/unsupported status vocabulary. |
 
 ### Hosted boundaries
 
 | Module | Responsibility | Current active wiring |
 | --- | --- | --- |
-| `founder.hosted_catalog` | PostgreSQL schema, roles, RLS, migrations. | Contract implemented; not backing active API state. |
-| `founder.hosted_auth` | Google OIDC and server-side session contracts. | Contract implemented; not wired to active requests. |
-| `founder.hosted_credentials` | Envelope-encrypted EODHD credential lifecycle. | In-memory development adapter used by API. |
-| `founder.shared_observations` | Content-addressed immutable market objects. | Implemented/tested; not active API store. |
-| `founder.entitlements` | Provider-run provenance, grants, and snapshots. | In-memory development implementation used by API/proofs. |
-| `founder.user_ingestion` | User-key-backed provider orchestration. | Implemented/tested; not called by current API download route. |
-| `founder.scoped_inputs` | Hosted/local snapshot readers and authorized inputs. | Implemented/tested; used by proof, not full API analysis path. |
-| `founder.artifact_cache` | Exact reusable derived artifacts plus user references. | In-memory proof implementation; not full API persistence. |
-| `founder.hosted_api` | FastAPI route and local-dev repository boundary. | Active. |
-| `founder.hosted_runtime` | Container health and Uvicorn startup. | Active. |
-| `founder.security_gates` | Repository/CI security-policy validator. | Active in quality gates. |
-| `founder.hosted_readiness` | Hosted release evidence validator. | Active validation. |
-| `founder.hosted_cutover` | Deterministic multi-user integration proof. | Active proof command/tests. |
+| `camovar.hosted_catalog` | PostgreSQL schema, roles, RLS, migrations. | Contract implemented; not backing active API state. |
+| `camovar.hosted_auth` | Google OIDC and server-side session contracts. | Contract implemented; not wired to active requests. |
+| `camovar.hosted_credentials` | Envelope-encrypted EODHD credential lifecycle. | In-memory development adapter used by API. |
+| `camovar.shared_observations` | Content-addressed immutable market objects. | Implemented/tested; not active API store. |
+| `camovar.entitlements` | Provider-run provenance, grants, and snapshots. | In-memory development implementation used by API/proofs. |
+| `camovar.user_ingestion` | User-key-backed provider orchestration. | Implemented/tested; not called by current API download route. |
+| `camovar.scoped_inputs` | Hosted/local snapshot readers and authorized inputs. | Implemented/tested; used by proof, not full API analysis path. |
+| `camovar.artifact_cache` | Exact reusable derived artifacts plus user references. | In-memory proof implementation; not full API persistence. |
+| `camovar.hosted_api` | FastAPI route and local-dev repository boundary. | Active. |
+| `camovar.hosted_runtime` | Container health and Uvicorn startup. | Active. |
+| `camovar.security_gates` | Repository/CI security-policy validator. | Active in quality gates. |
+| `camovar.hosted_readiness` | Hosted release evidence validator. | Active validation. |
+| `camovar.hosted_cutover` | Deterministic multi-user integration proof. | Active proof command/tests. |
 
 ### Delivery and governance
 
 | Module | Responsibility |
 | --- | --- |
-| `founder.cli` | Local command parsing only. |
-| `founder.pipeline` | Deterministic fixture/dry-run composition used by local verification. |
-| `founder.quality` | Local equivalents of PR and main quality gates. |
-| `founder.architecture_checks` | Import and architecture-boundary validation. |
-| `founder.schema_validation` | Dataset registry consistency validation. |
-| `founder.docs_refresh` | Documentation review-date report generation. |
+| `camovar.cli` | Local command parsing only. |
+| `camovar.pipeline` | Deterministic fixture/dry-run composition used by local verification. |
+| `camovar.quality` | Local equivalents of PR and main quality gates. |
+| `camovar.architecture_checks` | Import and architecture-boundary validation. |
+| `camovar.schema_validation` | Dataset registry consistency validation. |
+| `camovar.docs_refresh` | Documentation review-date report generation. |
 
 ## Dependency Direction
 
@@ -977,7 +977,7 @@ Import Linter currently enforces that evaluation does not depend on ingestion mo
 
 ### Determinism
 
-Founder uses stable ids and canonical ordering so that unchanged inputs produce unchanged logical outputs. Relevant identities include:
+Camovar uses stable ids and canonical ordering so that unchanged inputs produce unchanged logical outputs. Relevant identities include:
 
 - selection ids from definitions and membership;
 - job/run ids;
@@ -1055,11 +1055,11 @@ feature branch or PR
 Useful local commands include:
 
 ```bash
-uv run founder-quality pr
-uv run founder-quality merge
-uv run python -m founder.security_gates
-uv run python -m founder.hosted_readiness
-uv run python -m founder.hosted_cutover
+uv run camovar-quality pr
+uv run camovar-quality merge
+uv run python -m camovar.security_gates
+uv run python -m camovar.hosted_readiness
+uv run python -m camovar.hosted_cutover
 ```
 
 Tests should prove behavior at the module that owns the contract. Broad integration tests should compose public boundaries rather than bypassing them.
@@ -1092,16 +1092,16 @@ Tests should prove behavior at the module that owns the contract. Broad integrat
 These are architectural facts, not hidden implementation details:
 
 1. The active hosted API is in-memory and loses state on API restart.
-2. The active hosted API does not yet use the PostgreSQL schema or RLS policies defined in `founder.hosted_catalog`.
+2. The active hosted API does not yet use the PostgreSQL schema or RLS policies defined in `camovar.hosted_catalog`.
 3. The active hosted request path uses development identity headers rather than the implemented Google OIDC/session contracts.
 4. The current Google Login link is not a complete live OAuth callback flow.
-5. The hosted API download route does not yet call EODHD through `founder.user_ingestion`.
+5. The hosted API download route does not yet call EODHD through `camovar.user_ingestion`.
 6. The hosted API does not yet persist shared observations, user snapshots, or analytical artifacts to the Compose volumes and PostgreSQL catalogue.
 7. The hosted analysis route surface is a deterministic development boundary and is not yet the complete local analytical engine behind scoped inputs.
 8. The Web application is a Node-rendered workspace, not Next.js/React.
 9. Concrete country tax adapters, verified tax rates, and real Flatex fee profiles are not implemented in the neutral contract layer.
 10. Income-quality, sustainable-income, distribution-cut, and NAV-erosion outputs remain unavailable where their required verified data stack is absent.
-11. Founder prepares trades but does not execute broker orders.
+11. Camovar prepares trades but does not execute broker orders.
 12. The hosted cutover proof validates contracts with local deterministic adapters; it is not a live external-service deployment test.
 
 Do not remove these distinctions from the documentation until the corresponding active runtime wiring and persistence tests exist.

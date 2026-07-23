@@ -25,7 +25,7 @@ This file is the workflow reference for coding agents and maintainers. It should
 - Do not merge any branch or pull request into `main` unless the maintainer explicitly requests that `main` merge in the current task.
 - When continuing backlog or UI work without an explicit `main` merge request, create, push, and publish stacked PR branches, then leave them open for later landing.
 - UI work must stay on the active UI branch stack until the maintainer asks to land it. Base each follow-up UI branch on the previous UI branch, and run `docker compose --env-file .env.local up --build --watch web` from the active branch so local Docker shows the current UI stack state.
-- If Compose watch is unavailable during UI stack work, run `uv run founder-compose-web-watch` from the active branch as the local Docker rebuild fallback.
+- If Compose watch is unavailable during UI stack work, run `uv run camovar-compose-web-watch` from the active branch as the local Docker rebuild fallback.
 - Use `Branch: <type>/<scope>-<short-description>` until a planned branch is created, then keep the exact published branch path in the backlog entry.
 - Use `Git status: not started` and `PR: TBD` until work begins.
 - Replace `PR: TBD` with the pull request URL once the PR exists.

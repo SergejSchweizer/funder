@@ -1,26 +1,26 @@
-name: founder
+name: camovar
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: founder
-      POSTGRES_USER: founder_app
+      POSTGRES_DB: camovar
+      POSTGRES_USER: camovar_app
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       PGDATA: /var/lib/postgresql/data/pgdata
     secrets:
       - postgres_password
     volumes:
-      - founder-postgres-data:/var/lib/postgresql/data
+      - camovar-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U founder_app -d founder"]
+      test: ["CMD-SHELL", "pg_isready -U camovar_app -d camovar"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
     networks:
-      - founder-internal
+      - camovar-internal
     expose:
       - "5432"
     read_only: true
@@ -42,36 +42,36 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     environment:
-      FOUNDER_ENV: development
-      FOUNDER_DATABASE_URL: postgresql://founder_app@postgres:5432/founder
-      FOUNDER_SHARED_DATA_ROOT: /srv/founder/shared-data
-      FOUNDER_LAKE_ROOT: /srv/founder/lake
-      FOUNDER_SESSION_SECRET_FILE: /run/secrets/session_secret
-      FOUNDER_EODHD_KEK_FILE: /run/secrets/eodhd_kek
-      FOUNDER_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+      CAMOVAR_ENV: development
+      CAMOVAR_DATABASE_URL: postgresql://camovar_app@postgres:5432/camovar
+      CAMOVAR_SHARED_DATA_ROOT: /srv/camovar/shared-data
+      CAMOVAR_LAKE_ROOT: /srv/camovar/lake
+      CAMOVAR_SESSION_SECRET_FILE: /run/secrets/session_secret
+      CAMOVAR_EODHD_KEK_FILE: /run/secrets/eodhd_kek
+      CAMOVAR_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
     secrets:
       - session_secret
       - eodhd_kek
       - google_client_secret
     volumes:
-      - founder-shared-data:/srv/founder/shared-data
-      - ./lake:/srv/founder/lake
+      - camovar-shared-data:/srv/camovar/shared-data
+      - ./lake:/srv/camovar/lake
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "0.0.0.0:${FOUNDER_API_PORT:-8000}:8000"
+      - "0.0.0.0:${CAMOVAR_API_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "python", "-m", "founder.hosted_runtime", "health"]
+      test: ["CMD", "python", "-m", "camovar.hosted_runtime", "health"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
     networks:
-      - founder-internal
-      - founder-public
+      - camovar-internal
+      - camovar-public
     group_add:
-      - "${FOUNDER_LAKE_GROUP_ID:-10}"
+      - "${CAMOVAR_LAKE_GROUP_ID:-10}"
     read_only: true
     tmpfs:
       - /tmp
@@ -100,20 +100,20 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      FOUNDER_API_BASE_URL: http://api:8000
-      FOUNDER_AUTH_MODE: ${FOUNDER_AUTH_MODE:-google}
-      FOUNDER_GOOGLE_CLIENT_ID: ${FOUNDER_GOOGLE_CLIENT_ID:-}
-      FOUNDER_GOOGLE_REDIRECT_URI: ${FOUNDER_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/google/callback}
-      FOUNDER_GOOGLE_ALLOWED_DOMAIN: ${FOUNDER_GOOGLE_ALLOWED_DOMAIN:-}
-      FOUNDER_LOCAL_DEV_GOOGLE_EMAIL: ${FOUNDER_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}
-      FOUNDER_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+      CAMOVAR_API_BASE_URL: http://api:8000
+      CAMOVAR_AUTH_MODE: ${CAMOVAR_AUTH_MODE:-google}
+      CAMOVAR_GOOGLE_CLIENT_ID: ${CAMOVAR_GOOGLE_CLIENT_ID:-}
+      CAMOVAR_GOOGLE_REDIRECT_URI: ${CAMOVAR_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/google/callback}
+      CAMOVAR_GOOGLE_ALLOWED_DOMAIN: ${CAMOVAR_GOOGLE_ALLOWED_DOMAIN:-}
+      CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL: ${CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}
+      CAMOVAR_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
     secrets:
       - google_client_secret
     depends_on:
       api:
         condition: service_healthy
     ports:
-      - "0.0.0.0:${FOUNDER_WEB_PORT:-3000}:3000"
+      - "0.0.0.0:${CAMOVAR_WEB_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD", "node", "server.js", "--health"]
       interval: 10s
@@ -121,7 +121,7 @@ services:
       retries: 10
       start_period: 20s
     networks:
-      - founder-public
+      - camovar-public
     read_only: true
     tmpfs:
       - /tmp
@@ -136,20 +136,20 @@ services:
           memory: 512M
 
 networks:
-  founder-internal:
+  camovar-internal:
     internal: true
-  founder-public:
+  camovar-public:
 
 volumes:
-  founder-postgres-data:
-  founder-shared-data:
+  camovar-postgres-data:
+  camovar-shared-data:
 
 secrets:
   postgres_password:
-    file: ${FOUNDER_POSTGRES_PASSWORD_FILE:?set an absolute external secret path}
+    file: ${CAMOVAR_POSTGRES_PASSWORD_FILE:?set an absolute external secret path}
   session_secret:
-    file: ${FOUNDER_SESSION_SECRET_FILE:?set an absolute external secret path}
+    file: ${CAMOVAR_SESSION_SECRET_FILE:?set an absolute external secret path}
   eodhd_kek:
-    file: ${FOUNDER_EODHD_KEK_FILE:?set an absolute external secret path}
+    file: ${CAMOVAR_EODHD_KEK_FILE:?set an absolute external secret path}
   google_client_secret:
-    file: ${FOUNDER_GOOGLE_CLIENT_SECRET_FILE:?set an absolute external secret path}
+    file: ${CAMOVAR_GOOGLE_CLIENT_SECRET_FILE:?set an absolute external secret path}

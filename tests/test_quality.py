@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from founder.quality import (
+from camovar.quality import (
     build_parser,
     commands_for_layer,
     is_conventional_commit_subject,
@@ -23,7 +23,7 @@ def test_pr_gate_has_simple_checks() -> None:
     assert commands_for_layer("pr") == (
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
-        ("python", "-m", "founder.security_gates"),
+        ("python", "-m", "camovar.security_gates"),
         ("pyright",),
         ("pytest", "-q", "-n", "auto"),
     )
@@ -35,16 +35,16 @@ def test_merge_gate_extends_pr_gate_with_protected_checks() -> None:
     assert commands[:4] == (
         ("ruff", "check", "."),
         ("ruff", "format", "--check", "."),
-        ("python", "-m", "founder.architecture_checks"),
-        ("python", "-m", "founder.schema_validation"),
+        ("python", "-m", "camovar.architecture_checks"),
+        ("python", "-m", "camovar.schema_validation"),
     )
-    assert commands[4] == ("python", "-m", "founder.security_gates")
+    assert commands[4] == ("python", "-m", "camovar.security_gates")
     assert commands[5] == ("pyright",)
     assert commands[6] == (
         "pytest",
         "-n",
         "auto",
-        "--cov=founder",
+        "--cov=camovar",
         "--cov-report=term-missing",
         "--cov-fail-under=95",
     )
@@ -134,11 +134,11 @@ def test_validate_squash_subject() -> None:
     assert validate_squash_subject("Add command") == 1
 
 
-def test_build_parser_describes_founder_quality_gates() -> None:
+def test_build_parser_describes_camovar_quality_gates() -> None:
     parser = build_parser()
 
     assert parser.description is not None
-    assert "Founder quality gates" in parser.description
+    assert "Camovar quality gates" in parser.description
 
 
 def test_main_validates_commit_message_file(tmp_path: Path) -> None:
@@ -153,7 +153,7 @@ def test_main_validates_squash_subject() -> None:
 
 
 def test_main_validates_only_branch_commits(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("founder.quality.validate_conventional_commits", lambda: 0)
+    monkeypatch.setattr("camovar.quality.validate_conventional_commits", lambda: 0)
 
     assert main(["--commits-only"]) == 0
 

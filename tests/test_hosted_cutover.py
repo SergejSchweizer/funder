@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from founder.hosted_cutover import main, run_hosted_cutover_proof
+from camovar.hosted_cutover import main, run_hosted_cutover_proof
 
 
 def test_hosted_cutover_proof_passes_all_required_invariants() -> None:

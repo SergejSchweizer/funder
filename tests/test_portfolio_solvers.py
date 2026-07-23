@@ -1,8 +1,8 @@
-"""Tests for founder.portfolio_parts.solvers: pure-Python PGD solvers for PR60."""
+"""Tests for camovar.portfolio_parts.solvers: pure-Python PGD solvers for PR60."""
 
 import pytest
 
-from founder.portfolio_parts.solvers import (
+from camovar.portfolio_parts.solvers import (
     dense_covariance_matrix,
     equal_risk_contribution_gradient,
     equal_risk_contribution_objective,

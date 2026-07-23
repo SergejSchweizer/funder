@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import cast
 
-from founder.security_gates import (
+from camovar.security_gates import (
     SECURITY_POLICY_PATH,
     failed_results,
     load_security_policy,

@@ -4,11 +4,11 @@ Last reviewed: 2026-07-19
 
 ## Purpose
 
-`GATES.md` is the canonical documentation for Founder quality gates, GitHub branch protection, auto-merge, and local validation commands. Other repository documents should link here instead of repeating the full gate contract.
+`GATES.md` is the canonical documentation for Camovar quality gates, GitHub branch protection, auto-merge, and local validation commands. Other repository documents should link here instead of repeating the full gate contract.
 
 ## Current Shape
 
-Founder uses two CI layers:
+Camovar uses two CI layers:
 
 - `pr-quality`: fast pre-merge feedback and the required protected-branch check.
 - `merge-gate`: full post-merge validation for the exact commit that lands on `main`.
@@ -88,9 +88,9 @@ pr-quality
     +-- pr-lint-quality
     |       ruff check .
     |       ruff format --check .
-    |       python -m founder.security_gates
-    |       founder-quality --commits-only
-    |       founder-quality --squash-subject "$SQUASH_SUBJECT"
+    |       python -m camovar.security_gates
+    |       camovar-quality --commits-only
+    |       camovar-quality --squash-subject "$SQUASH_SUBJECT"
     |
     +-- pr-type-quality
     |       pyright
@@ -108,20 +108,20 @@ pr-quality
 Local equivalent:
 
 ```bash
-uv run founder-quality pr
+uv run camovar-quality pr
 ```
 
 Release cutover can require the stricter public-hosted readiness mode:
 
 ```bash
-uv run python -m founder.hosted_readiness --require-public-hosted
+uv run python -m camovar.hosted_readiness --require-public-hosted
 ```
 
 The deterministic hosted cutover proof composes multi-user auth, credentials, entitlements, scoped analytics, artifact
 reuse, Web storage safety, local CLI compatibility, and readiness checks:
 
 ```bash
-uv run python -m founder.hosted_cutover
+uv run python -m camovar.hosted_cutover
 ```
 
 The local pre-commit hook runs this same PR gate before accepting commits.
@@ -149,10 +149,10 @@ merge-gate
     +-- merge-lint-quality
     |       ruff check .
     |       ruff format --check .
-    |       python -m founder.architecture_checks
-    |       python -m founder.schema_validation
-    |       python -m founder.security_gates
-    |       founder-quality --commits-only
+    |       python -m camovar.architecture_checks
+    |       python -m camovar.schema_validation
+    |       python -m camovar.security_gates
+    |       camovar-quality --commits-only
     |       git diff --quiet
     |       git diff --cached --quiet
     |
@@ -176,19 +176,19 @@ merge-gate
 Local equivalent:
 
 ```bash
-uv run founder-quality merge
+uv run camovar-quality merge
 ```
 
 Compatibility alias:
 
 ```bash
-uv run founder-quality main
+uv run camovar-quality main
 ```
 
 Coverage equivalent:
 
 ```text
-pytest -n auto --cov=founder --cov-report=term-missing --cov-fail-under=95
+pytest -n auto --cov=camovar --cov-report=term-missing --cov-fail-under=95
 ```
 
 ## Auto-Merge
@@ -266,7 +266,7 @@ Update `GATES.md` whenever any of these change:
 - `.github/workflows/pr-quality.yml`
 - `.github/workflows/merge-gate.yml`
 - `.github/workflows/auto-merge.yml`
-- `src/founder/quality.py`
+- `src/camovar/quality.py`
 - branch protection required check names
 - local pre-commit gate behavior
 - shard count, coverage threshold, or required quality tools

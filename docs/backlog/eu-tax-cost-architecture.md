@@ -4,7 +4,7 @@ Last reviewed: 2026-07-17
 
 ## Purpose
 
-Founder is intended to support private investors across the European Union. Austrian tax and Flatex Austria behavior may be the first implemented jurisdiction and broker profile, but neither may become a hard-coded assumption in portfolio mathematics, income analysis, backtesting, or recommendation logic.
+Camovar is intended to support private investors across the European Union. Austrian tax and Flatex Austria behavior may be the first implemented jurisdiction and broker profile, but neither may become a hard-coded assumption in portfolio mathematics, income analysis, backtesting, or recommendation logic.
 
 This document extends the Production Portfolio Product PR Stack and the production implementation map with jurisdiction-neutral contracts, versioned country adapters, broker and venue cost profiles, and after-tax cash-flow requirements.
 
@@ -12,7 +12,7 @@ The canonical backlog remains `BACKLOG.md`. This document records the implementa
 
 ## Product Objective
 
-Founder must optimize and compare portfolios using the investor's actual economic result:
+Camovar must optimize and compare portfolios using the investor's actual economic result:
 
 ```text
 market return
@@ -40,7 +40,7 @@ For income-oriented users, the primary output is not gross distribution yield. I
 5. Tax rates, allowances, thresholds, and effective dates must not be hard-coded in portfolio objectives.
 6. Every rule set is immutable, versioned, source-attributed, and bounded by `valid_from` and optional `valid_to` dates.
 7. Unsupported or insufficiently verified rules produce `unavailable`, never a plausible zero tax or zero cost.
-8. Founder is a calculation and decision-support system, not a tax-filing or legal-advice system.
+8. Camovar is a calculation and decision-support system, not a tax-filing or legal-advice system.
 9. Gross, after-tax, and after-tax-after-cost results must always remain separately visible.
 10. Historical backtests must apply rules valid at the simulated event date, not only today's rule set.
 
@@ -78,7 +78,7 @@ These cases must resolve to different tax and cost plans where the relevant rule
 ## Target Package Structure
 
 ```text
-src/founder/tax/
+src/camovar/tax/
     __init__.py
     contracts.py
     events.py
@@ -106,7 +106,7 @@ src/founder/tax/
         be/
         ...
 
-src/founder/costs/
+src/camovar/costs/
     __init__.py
     contracts.py
     engine.py
@@ -132,7 +132,7 @@ Country adapters may begin as one package per implemented jurisdiction. The regi
 
 ## Jurisdiction-Neutral Tax Contracts
 
-`src/founder/tax/contracts.py` should define immutable contracts such as:
+`src/camovar/tax/contracts.py` should define immutable contracts such as:
 
 ```python
 @dataclass(frozen=True)
@@ -205,7 +205,7 @@ fee_tax_adjustment
 
 ## Country Adapter Protocol
 
-`src/founder/tax/registry.py` should resolve a country adapter implementing a stable protocol:
+`src/camovar/tax/registry.py` should resolve a country adapter implementing a stable protocol:
 
 ```python
 class CountryTaxAdapter(Protocol):
@@ -217,7 +217,7 @@ class CountryTaxAdapter(Protocol):
     def close_tax_year(self, request: TaxYearCloseRequest) -> TaxYearResult: ...
 ```
 
-The portfolio and income modules may depend on this protocol and the neutral result contracts, but never on `founder.tax.countries.at` or another concrete adapter.
+The portfolio and income modules may depend on this protocol and the neutral result contracts, but never on `camovar.tax.countries.at` or another concrete adapter.
 
 ## Rule Data Versus Calculation Code
 
@@ -260,7 +260,7 @@ A change in tax law produces a new immutable version. Existing analyses retain r
 
 Tax treatment must not be inferred solely from `UCITS`, domicile, or distribution policy.
 
-Founder should support country-specific fund-tax data providers through ports:
+Camovar should support country-specific fund-tax data providers through ports:
 
 ```python
 class FundTaxDataPort(Protocol):
@@ -293,9 +293,9 @@ A country adapter decides how those facts affect the investor. The fund-data ada
 
 ## Cost-Basis Methods
 
-Different jurisdictions may use different disposal and acquisition-cost rules. Founder must not globally assume moving average, FIFO, LIFO, or specific-lot identification.
+Different jurisdictions may use different disposal and acquisition-cost rules. Camovar must not globally assume moving average, FIFO, LIFO, or specific-lot identification.
 
-`src/founder/tax/cost_basis.py` should define a strategy protocol:
+`src/camovar/tax/cost_basis.py` should define a strategy protocol:
 
 ```python
 class CostBasisStrategy(Protocol):
@@ -419,7 +419,7 @@ These are not ordinary broker fees and should be modeled by jurisdiction-specifi
 
 ## Cost Contracts
 
-`src/founder/costs/contracts.py` should define:
+`src/camovar/costs/contracts.py` should define:
 
 ```python
 @dataclass(frozen=True)
@@ -475,14 +475,14 @@ minimum_tax_status = verified_estimate
 minimum_cost_status = verified_estimate
 ```
 
-Founder must propagate unavailable or unsupported states into portfolio and recommendation outputs. Missing rules may not be replaced by zero.
+Camovar must propagate unavailable or unsupported states into portfolio and recommendation outputs. Missing rules may not be replaced by zero.
 
 ## After-Tax Cash-Flow Engine
 
 Create a neutral orchestration layer:
 
 ```text
-src/founder/cashflow/
+src/camovar/cashflow/
     contracts.py
     engine.py
     monthly.py
@@ -544,7 +544,7 @@ minimum net annual income
 minimum income stability
 ```
 
-Founder must compare at least:
+Camovar must compare at least:
 
 ```text
 natural distribution income
@@ -649,7 +649,7 @@ PR62 should be expanded or followed by a strict sub-stack:
 
 ### PR62A. Jurisdiction-Neutral Tax And Cost Contracts
 
-Create `founder.tax`, `founder.costs`, and `founder.cashflow` public contracts, registries, status model, immutable rule references, cost-basis protocol, and artifact schemas. Add all EU country codes to the registry with unsupported placeholders. No concrete tax rate is hard-coded in core modules.
+Create `camovar.tax`, `camovar.costs`, and `camovar.cashflow` public contracts, registries, status model, immutable rule references, cost-basis protocol, and artifact schemas. Add all EU country codes to the registry with unsupported placeholders. No concrete tax rate is hard-coded in core modules.
 
 ### PR62B. Austria Tax And Broker Reference Adapter
 
@@ -675,7 +675,7 @@ PR63 and later production portfolio work must depend on PR62E. EU-wide deploymen
 
 ## Acceptance Gate For EU-Wide Claims
 
-Founder may describe itself as architecturally EU-ready when:
+Camovar may describe itself as architecturally EU-ready when:
 
 - the core has no direct Austria-specific imports;
 - all country selection occurs through registries and neutral protocols;
@@ -686,4 +686,4 @@ Founder may describe itself as architecturally EU-ready when:
 - country conformance tests pass;
 - the UI clearly labels jurisdiction coverage.
 
-Founder may describe a specific country as supported only when that country's adapter, fund-tax inputs, cost-basis method, loss-offset behavior, broker assumptions, source references, and known limitations are documented and tested.
+Camovar may describe a specific country as supported only when that country's adapter, fund-tax inputs, cost-basis method, loss-offset behavior, broker assumptions, source references, and known limitations are documented and tested.

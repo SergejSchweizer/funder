@@ -1,19 +1,19 @@
-"""Tests for the PR61 Minimum CVaR wiring in founder.portfolio."""
+"""Tests for the PR61 Minimum CVaR wiring in camovar.portfolio."""
 
 import random
 from pathlib import Path
 
 import pytest
 
-from founder.paths import LakePaths
-from founder.portfolio import (
+from camovar.paths import LakePaths
+from camovar.portfolio import (
     MINIMUM_CVAR_OBJECTIVE,
     PortfolioConstraints,
     build_minimum_cvar_diagnostics,
     minimum_cvar_weights,
     write_minimum_cvar_portfolio,
 )
-from founder.table_io import read_rows, write_rows
+from camovar.table_io import read_rows, write_rows
 
 _LISTINGS = [
     {"isin": "IE1", "exchange": "XETRA", "code": "AAA"},  # fat-tailed

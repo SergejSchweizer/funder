@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from founder.hosted_auth import (
+from camovar.hosted_auth import (
     GoogleIdTokenClaims,
     GoogleOidcAuthService,
     HostedAuthError,
@@ -69,7 +69,7 @@ class FakeVerifier:
 def _claims(**overrides: object) -> GoogleIdTokenClaims:
     values: dict[str, object] = {
         "issuer": "https://accounts.google.com",
-        "audience": "founder-client",
+        "audience": "camovar-client",
         "subject": "google-subject-1",
         "email": "first@example.com",
         "email_verified": True,
@@ -105,9 +105,9 @@ def _service(
     verifier = FakeVerifier(_claims() if claims is None else claims)
     service = GoogleOidcAuthService(
         config=OidcClientConfig(
-            client_id="founder-client",
+            client_id="camovar-client",
             client_secret_ref="/run/secrets/google-client-secret",
-            redirect_uri="https://founder.example.test/auth/google/callback",
+            redirect_uri="https://camovar.example.test/auth/google/callback",
             allowed_domains=allowed_domains,
             state_ttl_seconds=60,
             session_ttl_seconds=120,
@@ -129,12 +129,12 @@ def test_google_oidc_first_login_creates_empty_user_session() -> None:
     session = service.complete_callback(code="auth-code", state=request.state)
 
     assert "code_challenge_method=S256" in request.authorization_url
-    assert "client_id=founder-client" in request.authorization_url
+    assert "client_id=camovar-client" in request.authorization_url
     assert exchanger.calls == [
         (
             "auth-code",
             request.code_verifier,
-            "https://founder.example.test/auth/google/callback",
+            "https://camovar.example.test/auth/google/callback",
         )
     ]
     assert identity_store.user_count() == 1

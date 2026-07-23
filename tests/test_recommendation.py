@@ -2,7 +2,7 @@
 
 import pytest
 
-from founder.recommendation import (
+from camovar.recommendation import (
     BEST_DEFENSIVE,
     BEST_DIVERSIFIED,
     BEST_ENSEMBLE,

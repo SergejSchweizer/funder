@@ -2,17 +2,17 @@
   "schema_version": 1,
   "mode": "public-repository-hardening",
   "required_scanners": [
-    "founder.security_gates.secret_patterns",
+    "camovar.security_gates.secret_patterns",
     "github-push-protection",
     "dependency-scanning",
     "container-scanning",
     "sbom-generation"
   ],
   "protected_secret_names": [
-    "FOUNDER_EODHD_KEK_FILE",
-    "FOUNDER_GOOGLE_CLIENT_SECRET_FILE",
-    "FOUNDER_POSTGRES_PASSWORD_FILE",
-    "FOUNDER_SESSION_SECRET_FILE"
+    "CAMOVAR_EODHD_KEK_FILE",
+    "CAMOVAR_GOOGLE_CLIENT_SECRET_FILE",
+    "CAMOVAR_POSTGRES_PASSWORD_FILE",
+    "CAMOVAR_SESSION_SECRET_FILE"
   ],
   "required_workflow_permissions": [
     "contents: read",
@@ -38,7 +38,7 @@
       "pattern": "(?i)(eodhd|api[_-]?token|api[_-]?key)[^\\n]{0,40}[:=][^\\n]{0,8}[A-Za-z0-9_-]{20,}"
     },
     {
-      "name": "founder_kek_material",
+      "name": "camovar_kek_material",
       "pattern": "(?i)(kek|key[_-]?encryption[_-]?key|session[_-]?secret)[^\\n]{0,40}[:=][^\\n]{0,8}[A-Za-z0-9+/=_-]{24,}"
     },
     {
@@ -48,7 +48,7 @@
   ],
   "synthetic_secret_fixtures": {
     "eodhd": "EODHD_API_TOKEN=syntheticTokenValue1234567890",
-    "kek": "FOUNDER_EODHD_KEK=syntheticKeyEncryptionMaterial123456",
+    "kek": "CAMOVAR_EODHD_KEK=syntheticKeyEncryptionMaterial123456",
     "private_key": "-----BEGIN PRIVATE KEY-----"
   },
   "fork_safety": {

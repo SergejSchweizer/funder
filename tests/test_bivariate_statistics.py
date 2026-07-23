@@ -2,15 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from founder.bivariate_statistics import (
+from camovar.bivariate_statistics import (
     build_bivariate_statistics,
     read_legacy_bivariate_pair,
     resolve_worker_count,
     write_bivariate_statistics,
 )
-from founder.paths import LakePaths
-from founder.run_state import read_job_manifest
-from founder.table_io import read_rows, write_rows
+from camovar.paths import LakePaths
+from camovar.run_state import read_job_manifest
+from camovar.table_io import read_rows, write_rows
 
 
 def _return(isin: str, exchange: str, code: str, date: str, value: float) -> dict[str, object]:

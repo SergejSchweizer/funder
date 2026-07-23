@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from founder.paths import LakePaths
-from founder.run_locks import layer_lock_path, module_lock_path
+from camovar.paths import LakePaths
+from camovar.run_locks import layer_lock_path, module_lock_path
 
 
 def test_lake_paths_are_deterministic() -> None:

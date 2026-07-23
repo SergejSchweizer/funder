@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from founder.fetch_all_isins import fetch_all_isins, write_all_isins
-from founder.http import EodhdHttpError
-from founder.paths import LakePaths
-from founder.table_io import read_json, read_rows
-from founder.workflows import run_fetch_all_isins_workflow
+from camovar.fetch_all_isins import fetch_all_isins, write_all_isins
+from camovar.http import EodhdHttpError
+from camovar.paths import LakePaths
+from camovar.table_io import read_json, read_rows
+from camovar.workflows import run_fetch_all_isins_workflow
 
 
 class FakeClient:
@@ -112,8 +112,8 @@ def test_run_fetch_all_isins_workflow_persists_reference_dataset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paths = LakePaths(root=tmp_path / "lake")
-    monkeypatch.setattr("founder.workflows.load_eodhd_config", lambda: object())
-    monkeypatch.setattr("founder.workflows.EodhdClient", lambda _config: FakeClient())
+    monkeypatch.setattr("camovar.workflows.load_eodhd_config", lambda: object())
+    monkeypatch.setattr("camovar.workflows.EodhdClient", lambda _config: FakeClient())
 
     summary = run_fetch_all_isins_workflow(root=paths.root)
 

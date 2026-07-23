@@ -4,7 +4,7 @@ Last reviewed: 2026-07-19
 
 ## Purpose
 
-This document is the PR84 baseline for the hosted multi-tenant Founder architecture. It is authoritative for the
+This document is the PR84 baseline for the hosted multi-tenant Camovar architecture. It is authoritative for the
 hosted threat model until later PRs replace individual sections with implemented contracts, migrations, API routes,
 or deployment evidence.
 
@@ -68,14 +68,14 @@ Boundary ownership:
 
 ## PostgreSQL Catalog Baseline
 
-PR85 introduces the catalog baseline in `founder.hosted_catalog`.
+PR85 introduces the catalog baseline in `camovar.hosted_catalog`.
 
 Required role boundaries:
 
-- `founder_owner` owns database objects but is not the application runtime.
-- `founder_migrator` applies migrations without `BYPASSRLS`.
-- `founder_app` is the runtime role, owns no tables, and cannot bypass Row-Level Security.
-- `founder_readonly` can inspect catalog tables without mutation rights.
+- `camovar_owner` owns database objects but is not the application runtime.
+- `camovar_migrator` applies migrations without `BYPASSRLS`.
+- `camovar_app` is the runtime role, owns no tables, and cannot bypass Row-Level Security.
+- `camovar_readonly` can inspect catalog tables without mutation rights.
 
 Required catalog objects:
 
@@ -88,13 +88,13 @@ Required catalog objects:
 - user-scoped audit events.
 
 Every user-owned table must enable and force Row-Level Security. Hosted request handlers must bind the authenticated
-internal user id through the transaction-local `founder.current_user_id` setting before repository access. The catalog
+internal user id through the transaction-local `camovar.current_user_id` setting before repository access. The catalog
 stores credential ciphertext, nonce, wrapped data key, key version, associated data, HMAC fingerprint, and masked label;
 it must not contain plaintext EODHD keys or large analytical tables.
 
 ## Google Authentication Baseline
 
-PR86 introduces the Google-only OIDC and session baseline in `founder.hosted_auth`.
+PR86 introduces the Google-only OIDC and session baseline in `camovar.hosted_auth`.
 
 Required OIDC behavior:
 
@@ -115,7 +115,7 @@ Required session behavior:
 
 ## Encrypted EODHD Credential Vault Baseline
 
-PR87 introduces the credential vault baseline in `founder.hosted_credentials`.
+PR87 introduces the credential vault baseline in `camovar.hosted_credentials`.
 
 Required credential behavior:
 
@@ -136,7 +136,7 @@ access.
 
 ## Shared Market Observation Store Baseline
 
-PR88 introduces the shared immutable observation store in `founder.shared_observations`.
+PR88 introduces the shared immutable observation store in `camovar.shared_observations`.
 
 Required shared-store behavior:
 
@@ -154,7 +154,7 @@ authorization credentials and must not be returned from unauthenticated endpoint
 
 ## User Entitlement And Snapshot Baseline
 
-PR89 introduces entitlement and immutable snapshot contracts in `founder.entitlements`.
+PR89 introduces entitlement and immutable snapshot contracts in `camovar.entitlements`.
 
 Required entitlement behavior:
 
@@ -170,7 +170,7 @@ Required entitlement behavior:
 
 ## User-Key-Backed Ingestion Baseline
 
-PR90 introduces user-scoped provider planning in `founder.user_ingestion`.
+PR90 introduces user-scoped provider planning in `camovar.user_ingestion`.
 
 Required ingestion behavior:
 
@@ -186,7 +186,7 @@ Required ingestion behavior:
 
 ## Scoped Analytical Input Baseline
 
-PR91 introduces scoped analytical input contracts in `founder.scoped_inputs`.
+PR91 introduces scoped analytical input contracts in `camovar.scoped_inputs`.
 
 Required scoped-input behavior:
 
@@ -199,7 +199,7 @@ Required scoped-input behavior:
 
 ## Return And Univariate Artifact Cache Baseline
 
-PR92 introduces the first shared analytical cache in `founder.artifact_cache`; PR93 extends the same authorization
+PR92 introduces the first shared analytical cache in `camovar.artifact_cache`; PR93 extends the same authorization
 boundary to bivariate pair artifacts; PR94 extends it to portfolio-level downstream artifacts and user-owned analysis
 runs.
 

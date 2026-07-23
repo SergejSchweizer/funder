@@ -1,4 +1,4 @@
-# Founder
+# Camovar
 
 Last reviewed: 2026-07-13
 
@@ -12,14 +12,14 @@ Last reviewed: 2026-07-13
 - [Portfolio Analysis And Evaluation Plan](#portfolio-analysis-and-evaluation-plan)
 - [Documentation Map](#documentation-map)
 - [Five ISIN Module Architecture](#five-isin-module-architecture)
-- [Scheduled Founder Cron](#scheduled-founder-cron)
+- [Scheduled Camovar Cron](#scheduled-camovar-cron)
 - [EODHD Request Safety](#eodhd-request-safety)
 - [Logging And Debugging](#logging-and-debugging)
 - [Quality Gates](#quality-gates)
 - [Documentation Refresh](#documentation-refresh)
 - [Keep This README Up To Date](#keep-this-readme-up-to-date)
 
-Founder is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build risk-aware fund portfolio weights.
+Camovar is a fund portfolio builder for exchange-traded funds. The project goal is to analyze EODHD end-of-day quotes for multiple thousands of ETFs and build risk-aware fund portfolio weights. The name comes from the CVaR risk metric for portfolio optimization and nods to the similarly sounding samovar.
 
 The primary data source is the EODHD subscription for EOD Historical Data. Flatex will be used as the trading exchange/broker venue for turning portfolio weights into executable ETF trades. Local API credentials must stay in ignored secret files such as `.secrets/eodhd.yaml` or `.env.local`; never commit real tokens.
 
@@ -35,7 +35,7 @@ New contributors should read the documentation in this order:
 
 ## Current Facts
 
-- The local Python environment uses Python 3.14.5 in `.venv/`.
+- The local Python environment uses Python 3.14.6 in `.venv/`.
 - The main market data source is the EODHD subscription for EOD Historical Data.
 - The intended trading venue/broker is Flatex.
 - `fetch_all_isins` enumerates EODHD exchange symbol lists and stores the complete ISIN-bearing metadata universe once under `lake/reference/all_isins/`.
@@ -139,7 +139,7 @@ This objective is intentionally risk-first because ETF expected-return estimates
 
 ## Portfolio Analysis And Evaluation Plan
 
-Founder aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer consumes Gold daily adjusted-close log returns, `ln(P_t / P_{t-1})`, and should not call EODHD or mutate Bronze and Silver market data.
+Camovar aims to compare optimization techniques with reproducible Gold datasets before any target weights are used for trading. The evaluation layer consumes Gold daily adjusted-close log returns, `ln(P_t / P_{t-1})`, and should not call EODHD or mutate Bronze and Silver market data.
 
 Portfolio analysis and evaluation computations include:
 
@@ -171,7 +171,7 @@ The current refactor target keeps portfolio optimization downstream from the ISI
 
 ## Five ISIN Module Architecture
 
-Founder's ISIN architecture target is organized around five deterministic modules:
+Camovar's ISIN architecture target is organized around five deterministic modules:
 
 ```text
 fetch_all_isins
@@ -184,13 +184,13 @@ fetch_all_isins
 `fetch_all_isins` is the only source of the full EODHD ISIN universe. It refreshes an irregularly updated all-ISIN dataset and writes it once for every later module:
 
 ```bash
-uv run founder fetch-all-isins
+uv run camovar fetch-all-isins
 ```
 
 `fetch-all-quotes` is the quote refresh module. It reads the latest persisted `metadata_filter` selection, fetches EODHD quotes plus companion dividends and splits by default, writes Bronze inputs, rebuilds Silver quotes, and updates coverage manifests:
 
 ```bash
-uv run founder fetch-all-quotes
+uv run camovar fetch-all-quotes
 ```
 
 Available `fetch-all-quotes` options:
@@ -230,8 +230,8 @@ Available `fetch-all-quotes` options:
 `metadata_filter` reads only the all-ISIN source, applies conjunctive metadata predicates, and writes a hash-addressable selection with `isins.parquet` and `manifest.json`:
 
 ```bash
-uv run founder metadata-filter --where instrument_type=ETF --where currency=EUR --where exchange=XETRA
-uv run founder metadata-filter --name-contains "UCITS ETF"
+uv run camovar metadata-filter --where instrument_type=ETF --where currency=EUR --where exchange=XETRA
+uv run camovar metadata-filter --name-contains "UCITS ETF"
 ```
 
 Available `metadata-filter` options:
@@ -294,7 +294,7 @@ Filterable metadata fields are the `all_isins` columns:
 `univariate_statistics` builds reusable per-ISIN statistics from validated Silver quote files. Returns are daily log returns, `ln(P_t / P_{t-1})`, based on adjusted close:
 
 ```bash
-uv run founder univariate-statistics
+uv run camovar univariate-statistics
 ```
 
 `univariate_statistics` only runs for the latest persisted `metadata_filter` selection. It does not scan every Silver quote file by default. Use `--selection-id <metadata_filter_selection_id>` only when intentionally rebuilding an older metadata selection.
@@ -304,7 +304,7 @@ Univariate Statistics parallelizes per-listing work across all CPU cores visible
 `univariate_filter` reads the univariate statistics table, applies conjunctive metric predicates, and writes the same referencable selection shape as `metadata_filter`:
 
 ```bash
-uv run founder univariate-filter --where sharpe_ratio>0 --where sortino_ratio>0 --where max_drawdown>-0.3
+uv run camovar univariate-filter --where sharpe_ratio>0 --where sortino_ratio>0 --where max_drawdown>-0.3
 ```
 
 Available `univariate-filter` options:
@@ -415,7 +415,7 @@ Univariate feature semantics, ranges, and units. The empirical column is compute
 `bivariate_statistics` computes reusable pairwise statistics for the latest persisted `univariate_filter` selection by default. Pair metrics are computed once per unordered ISIN pair and only on the intersection of shared return dates:
 
 ```bash
-uv run founder bivariate-statistics
+uv run camovar bivariate-statistics
 ```
 
 Use `--selection-id <selection_id>` only when intentionally rebuilding a specific `univariate_filter` or `metadata_filter` selection.
@@ -425,7 +425,7 @@ Bivariate Statistics parallelizes pair work across all CPU cores visible to the 
 `multivariate_statistics` computes portfolio-level analytics for the latest persisted `univariate_filter` selection by default. It filters Silver quotes to the selected listings, builds selected Gold risk inputs, writes an aligned return matrix and asset metrics, and runs Equal Weight, Minimum Variance, Maximum Sharpe, Risk Parity, HRP, Maximum Diversification, efficient-frontier, walk-forward, rebalance, and tail-risk outputs:
 
 ```bash
-uv run founder multivariate-statistics
+uv run camovar multivariate-statistics
 ```
 
 Multivariate Statistics parallelizes the selected Gold input build across all CPU cores visible to the system by default, and cache mode also passes the same worker count to univariate and bivariate cache refreshes. Use `--concurrency <workers>` to cap worker processes, for example `--concurrency 1` for deterministic single-process debugging. Use `--use-selection-statistics-cache` to consume reusable selection statistics views and reuse unchanged portfolio runs.
@@ -442,19 +442,19 @@ lake/gold/bivariate_statistics/{left_exchange}/{left_ISIN}/{left_code}/{right_ex
 
 Statistic paths deliberately do not include a selection id. Later metadata or univariate selections can therefore reuse already computed per-ISIN and pair statistics for unchanged listings and unchanged pairs instead of recomputing them.
 
-## Scheduled Founder Cron
+## Scheduled Camovar Cron
 
-Founder cron should call the `fetch-all-quotes` module for quote updates, not individual ad hoc Bronze/Silver snippets. Keep the cron job readable by defining absolute paths once:
+Camovar cron should call the `fetch-all-quotes` module for quote updates, not individual ad hoc Bronze/Silver snippets. Keep the cron job readable by defining absolute paths once:
 
 ```cron
 SHELL=/bin/bash
-FOUNDER_PROJECT=/home/vcs/git/founder
-FOUNDER_UV=/home/vcs/.local/bin/uv
-FOUNDER_LOCK=/home/vcs/git/founder/lake/silver/runs/founder-fetch-all-quotes.lock
-FOUNDER_LOG=/home/vcs/git/founder/.logs/cron-fetch-all-quotes.log
+CAMOVAR_PROJECT=/home/dev_camovar/camovar
+CAMOVAR_UV=/home/dev_camovar/.local/bin/uv
+CAMOVAR_LOCK=/home/dev_camovar/camovar/lake/silver/runs/camovar-fetch-all-quotes.lock
+CAMOVAR_LOG=/home/dev_camovar/camovar/.logs/cron-fetch-all-quotes.log
 
 # Daily quote fetch at 18:00 local server time.
-0 18 * * * cd "$FOUNDER_PROJECT" && /usr/bin/flock -n "$FOUNDER_LOCK" "$FOUNDER_UV" run founder fetch-all-quotes --root "$FOUNDER_PROJECT/lake" --concurrency 2 --debug >> "$FOUNDER_LOG" 2>&1
+0 18 * * * cd "$CAMOVAR_PROJECT" && /usr/bin/flock -n "$CAMOVAR_LOCK" "$CAMOVAR_UV" run camovar fetch-all-quotes --root "$CAMOVAR_PROJECT/lake" --concurrency 2 --debug >> "$CAMOVAR_LOG" 2>&1
 ```
 
 Inspect it with `crontab -l`. Cron output is appended to `.logs/cron-fetch-all-quotes.log`.
@@ -463,7 +463,7 @@ The dry run writes discovery candidates, a canonical universe, bronze plan, quot
 
 ## EODHD Request Safety
 
-Founder spaces EODHD requests by default and retries transient failures so large loads do not hammer the API. Bronze is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
+Camovar spaces EODHD requests by default and retries transient failures so large loads do not hammer the API. Bronze is safe for unattended cron execution with bounded EODHD parallelism capped at a default concurrency of `2`. Cron runs preserve request pacing, respect `Retry-After`, use stable run ids, resume safely after partial failures, and avoid overlapping writes for the same lake root.
 
 Prefer `.secrets/eodhd.yaml` for the API token:
 
@@ -481,23 +481,23 @@ EODHD_MIN_REQUEST_INTERVAL_SECONDS=0.25
 EODHD_RETRY_BACKOFF_SECONDS=0.5
 ```
 
-HTTP `429` responses are retried when retries remain. If EODHD sends `Retry-After`, Founder waits for that duration before retrying; otherwise it uses incremental backoff.
+HTTP `429` responses are retried when retries remain. If EODHD sends `Retry-After`, Camovar waits for that duration before retrying; otherwise it uses incremental backoff.
 
 ## Logging And Debugging
 
-Founder writes uniformly formatted logs under `.logs/`. Plain log files are kept for seven days, then zipped; zipped logs older than one month are deleted. `.logs/` is ignored by Git.
+Camovar writes uniformly formatted logs under `.logs/`. Plain log files are kept for seven days, then zipped; zipped logs older than one month are deleted. `.logs/` is ignored by Git.
 
 Target module commands should support `--debug` for more detailed module logs:
 
 ```bash
-uv run founder fetch-all-isins --debug
-uv run founder metadata-filter --debug
-uv run founder univariate-statistics --debug
-uv run founder univariate-filter --debug
-uv run founder bivariate-statistics --debug
+uv run camovar fetch-all-isins --debug
+uv run camovar metadata-filter --debug
+uv run camovar univariate-statistics --debug
+uv run camovar univariate-filter --debug
+uv run camovar bivariate-statistics --debug
 ```
 
-The log format is consistent across Founder modules:
+The log format is consistent across Camovar modules:
 
 ```text
 YYYY-MM-DDTHH:MM:SSZ LEVEL logger.name message
@@ -526,7 +526,7 @@ For stacked UI PR development, check out the active UI branch before starting Co
 The Compose watch contract rebuilds and reinstalls the local Web container when `apps/web`, `apps/web/Dockerfile`, or `compose.yaml` changes. If Compose watch is not available, keep a second terminal running:
 
 ```bash
-uv run founder-compose-web-watch
+uv run camovar-compose-web-watch
 ```
 
 The fallback watcher tracks `apps/web`, `apps/api`, `src`, `compose.yaml`, `.dockerignore`, `pyproject.toml`, and `uv.lock`.
@@ -536,20 +536,20 @@ Whenever one of those inputs changes, it runs:
 docker compose --env-file .env.local up --build -d web
 ```
 
-The hosted API is exposed by `founder.hosted_api` and mounted in the API container. It provides user-scoped session, credential, download, dataset, project, metadata-filter project creation, selection, analysis, metrics, returns, weights, report, and account-deletion routes for the Web UI. The API container mounts `./lake` at `/srv/founder/lake` so `GET /metadata-filter/options` can populate project-definition dropdowns from `lake/reference/all_isins/all_isins.parquet`, metadata-filter projects can persist their selected ISIN list, and `Load selected ISINs` can run `fetch-all-quotes` to write Bronze and Silver quote data. If the host lake is group-restricted, set `FOUNDER_LAKE_GROUP_ID` in `.env.local` to the host group id that can read and write the lake; the default is `10`.
+The hosted API is exposed by `camovar.hosted_api` and mounted in the API container. It provides user-scoped session, credential, download, dataset, project, metadata-filter project creation, selection, analysis, metrics, returns, weights, report, and account-deletion routes for the Web UI. The API container mounts `./lake` at `/srv/camovar/lake` so `GET /metadata-filter/options` can populate project-definition dropdowns from `lake/reference/all_isins/all_isins.parquet`, metadata-filter projects can persist their selected ISIN list, and `Load selected ISINs` can run `fetch-all-quotes` to write Bronze and Silver quote data. If the host lake is group-restricted, set `CAMOVAR_LAKE_GROUP_ID` in `.env.local` to the host group id that can read and write the lake; the default is `10`.
 
-The hosted Web container serves the local research workspace from `apps/web/server.js`. It provides the production shell baseline with Google-style Material color tokens, restrained elevation, a project-scoped sidebar, and a Projects selector. The topbar contains the write-only EODHD key input and `Fetch all ISINs` action. Projects and Project Definition stay disabled while the EODHD key field is empty or until `Fetch all ISINs` succeeds. The sidebar starts with only `Projects`; project names appear hierarchically below it after metadata-filter projects exist. With no selected project, the workspace shows the Project Definition form for ISIN search filters: exchange, name substring, instrument type, country, and currency. The `Create New Project` button calls the metadata-filter project endpoint, creates a project named from selected filter values including the free-text name value without a `name_` prefix, creates the resulting selection, refreshes the project list, and selects the new project. The header shows the current selected ISIN count instead of the internal API URL; the count updates when statistics filters reduce the active selection. The process path starts with `Load Data`; `Load selected ISINs` runs the selected-project data-load endpoint for the current metadata selection, and Univariate Statistics remains locked until that load succeeds. The dashboard shell is shown only after the Web surface has an authenticated session. `FOUNDER_AUTH_MODE=google` is the default and requires real Google OIDC; login fails closed when Google OAuth config is incomplete. Set `FOUNDER_AUTH_MODE=local-dev` only for offline Docker development, where `/auth/google/start` creates a visibly labelled `local-dev-google` session instead of contacting Google.
+The hosted Web container serves the local research workspace from `apps/web/server.js`. It provides the production shell baseline with Google-style Material color tokens, restrained elevation, a project-scoped sidebar, and a Projects selector. The topbar contains the write-only EODHD key input and `Fetch all ISINs` action. Projects and Project Definition stay disabled while the EODHD key field is empty or until `Fetch all ISINs` succeeds. The sidebar starts with only `Projects`; project names appear hierarchically below it after metadata-filter projects exist. With no selected project, the workspace shows the Project Definition form for ISIN search filters: exchange, name substring, instrument type, country, and currency. The `Create New Project` button calls the metadata-filter project endpoint, creates a project named from selected filter values including the free-text name value without a `name_` prefix, creates the resulting selection, refreshes the project list, and selects the new project. The header shows the current selected ISIN count instead of the internal API URL; the count updates when statistics filters reduce the active selection. The process path starts with `Load Data`; `Load selected ISINs` runs the selected-project data-load endpoint for the current metadata selection, and Univariate Statistics remains locked until that load succeeds. The dashboard shell is shown only after the Web surface has an authenticated session. `CAMOVAR_AUTH_MODE=google` is the default and requires real Google OIDC; login fails closed when Google OAuth config is incomplete. Set `CAMOVAR_AUTH_MODE=local-dev` only for offline Docker development, where `/auth/google/start` creates a visibly labelled `local-dev-google` session instead of contacting Google.
 
-Real Google OIDC requires a Google OAuth client configured with the exact redirect URI in `FOUNDER_GOOGLE_REDIRECT_URI`, normally `http://localhost:3000/auth/google/callback` for local development or the HTTPS hosted callback in deployment. Set `FOUNDER_GOOGLE_CLIENT_ID` in `.env.local`; the client secret must live in the external file referenced by `FOUNDER_GOOGLE_CLIENT_SECRET_FILE`; it is mounted into the Web container as a Docker secret and must never be committed. The Web runtime creates PKCE, state, and nonce values, redirects to Google's account chooser, exchanges the callback code server-side, verifies the Google ID token using JWKS, and renders the lowercase Google email or display name under `Founder Research`.
+Real Google OIDC requires a Google OAuth client configured with the exact redirect URI in `CAMOVAR_GOOGLE_REDIRECT_URI`, normally `http://localhost:3000/auth/google/callback` for local development or the HTTPS hosted callback in deployment. Set `CAMOVAR_GOOGLE_CLIENT_ID` in `.env.local`; the client secret must live in the external file referenced by `CAMOVAR_GOOGLE_CLIENT_SECRET_FILE`; it is mounted into the Web container as a Docker secret and must never be committed. The Web runtime creates PKCE, state, and nonce values, redirects to Google's account chooser, exchanges the callback code server-side, verifies the Google ID token using JWKS, and renders the lowercase Google email or display name under `Camovar Research`.
 
 Browser state is derived from API responses or server-rendered session cookies, and the Web surface must not store EODHD keys, Google tokens, session tokens, ciphertext, fingerprints, or sensitive API responses in `localStorage`, `sessionStorage`, URLs, analytics, logs, or rendered error output.
 
-Hosted public deployment readiness is described by `docs/security/hosted_readiness.json` and `docs/security/hosted_readiness.md`. Normal quality gates require complete readiness records while local-only mode remains available. Public-hosted release cutover must additionally pass `uv run python -m founder.hosted_readiness --require-public-hosted`.
+Hosted public deployment readiness is described by `docs/security/hosted_readiness.json` and `docs/security/hosted_readiness.md`. Normal quality gates require complete readiness records while local-only mode remains available. Public-hosted release cutover must additionally pass `uv run python -m camovar.hosted_readiness --require-public-hosted`.
 
 Run the deterministic hosted cutover proof with:
 
 ```bash
-uv run python -m founder.hosted_cutover
+uv run python -m camovar.hosted_cutover
 ```
 
 Install dependencies with:
@@ -575,7 +575,7 @@ uv run pre-commit run --all-files
 Generate the tracked documentation review report with:
 
 ```bash
-uv run founder-docs-refresh
+uv run camovar-docs-refresh
 ```
 
 The command writes `docs/docs_refresh_report.json` and reports which top-level project docs are present and whether their `Last reviewed:` marker is current enough to inspect manually.

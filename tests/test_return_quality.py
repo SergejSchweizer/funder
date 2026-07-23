@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from founder.return_quality import (
+from camovar.return_quality import (
     MIN_HISTORY_LONG,
     MIN_HISTORY_MEDIUM,
     MIN_HISTORY_SHORT,

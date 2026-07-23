@@ -1,4 +1,4 @@
-"""Tests for founder.portfolio_parts.clustering: pure-Python single-linkage
+"""Tests for camovar.portfolio_parts.clustering: pure-Python single-linkage
 hierarchical clustering and recursive bisection for True HRP (PR61).
 """
 
@@ -6,7 +6,7 @@ from math import sqrt
 
 import pytest
 
-from founder.portfolio_parts.clustering import (
+from camovar.portfolio_parts.clustering import (
     LinkageStep,
     cluster_variance,
     correlation_distance_matrix,

@@ -15,27 +15,27 @@ from importlib import metadata
 
 import pytest
 
-FOUNDER_ENTRY_POINTS: tuple[tuple[str, str], ...] = tuple(
+CAMOVAR_ENTRY_POINTS: tuple[tuple[str, str], ...] = tuple(
     sorted(
         (entry_point.name, entry_point.value)
         for entry_point in metadata.entry_points(group="console_scripts")
-        if entry_point.name == "founder" or entry_point.name.startswith("founder-")
+        if entry_point.name == "camovar" or entry_point.name.startswith("camovar-")
     )
 )
 
 
-def test_founder_console_scripts_are_registered() -> None:
-    names = {name for name, _value in FOUNDER_ENTRY_POINTS}
+def test_camovar_console_scripts_are_registered() -> None:
+    names = {name for name, _value in CAMOVAR_ENTRY_POINTS}
     assert names == {
-        "founder",
-        "founder-compose-web-watch",
-        "founder-docs-refresh",
-        "founder-fetch-all-quotes",
-        "founder-quality",
+        "camovar",
+        "camovar-compose-web-watch",
+        "camovar-docs-refresh",
+        "camovar-fetch-all-quotes",
+        "camovar-quality",
     }
 
 
-@pytest.mark.parametrize("name,value", FOUNDER_ENTRY_POINTS)
+@pytest.mark.parametrize("name,value", CAMOVAR_ENTRY_POINTS)
 def test_console_script_target_imports_and_is_callable(name: str, value: str) -> None:
     module_path, _, attribute = value.partition(":")
     module = importlib.import_module(module_path)
@@ -43,7 +43,7 @@ def test_console_script_target_imports_and_is_callable(name: str, value: str) ->
     assert callable(target), f"{name} -> {value} is not callable"
 
 
-@pytest.mark.parametrize("name,value", FOUNDER_ENTRY_POINTS)
+@pytest.mark.parametrize("name,value", CAMOVAR_ENTRY_POINTS)
 def test_console_script_help_exits_cleanly_without_side_effects(
     name: str, value: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -62,7 +62,7 @@ def test_console_script_help_exits_cleanly_without_side_effects(
 
 
 def test_umbrella_cli_help_lists_every_subcommand() -> None:
-    from founder.cli import build_parser
+    from camovar.cli import build_parser
 
     parser = build_parser()
     subparsers_actions = [
@@ -98,7 +98,7 @@ def test_umbrella_cli_help_lists_every_subcommand() -> None:
     ],
 )
 def test_umbrella_cli_subcommand_help_exits_cleanly(subcommand: str) -> None:
-    from founder.cli import main
+    from camovar.cli import main
 
     with pytest.raises(SystemExit) as excinfo:
         main([subcommand, "--help"])

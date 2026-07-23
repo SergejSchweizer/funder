@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import yaml
 
-from founder.hosted_runtime import health
+from camovar.hosted_runtime import health
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,26 +27,26 @@ def test_compose_defines_persistent_internal_postgres_and_shared_data() -> None:
     postgres = cast(ComposeMapping, services["postgres"])
     api = cast(ComposeMapping, services["api"])
 
-    assert "founder-postgres-data" in volumes
-    assert "founder-shared-data" in volumes
-    assert postgres["networks"] == ["founder-internal"]
+    assert "camovar-postgres-data" in volumes
+    assert "camovar-shared-data" in volumes
+    assert postgres["networks"] == ["camovar-internal"]
     assert "ports" not in postgres
     assert "5432" in postgres["expose"]
-    assert "founder-postgres-data:/var/lib/postgresql/data" in postgres["volumes"]
-    assert "founder-shared-data:/srv/founder/shared-data" in api["volumes"]
-    assert "./lake:/srv/founder/lake" in api["volumes"]
-    assert api["environment"]["FOUNDER_LAKE_ROOT"] == "/srv/founder/lake"
-    assert api["group_add"] == ["${FOUNDER_LAKE_GROUP_ID:-10}"]
+    assert "camovar-postgres-data:/var/lib/postgresql/data" in postgres["volumes"]
+    assert "camovar-shared-data:/srv/camovar/shared-data" in api["volumes"]
+    assert "./lake:/srv/camovar/lake" in api["volumes"]
+    assert api["environment"]["CAMOVAR_LAKE_ROOT"] == "/srv/camovar/lake"
+    assert api["group_add"] == ["${CAMOVAR_LAKE_GROUP_ID:-10}"]
 
 
 def test_compose_exposes_only_api_and_web_development_ports() -> None:
     services = cast(ComposeMapping, _compose()["services"])
 
     assert cast(ComposeMapping, services["api"])["ports"] == [
-        "0.0.0.0:${FOUNDER_API_PORT:-8000}:8000"
+        "0.0.0.0:${CAMOVAR_API_PORT:-8000}:8000"
     ]
     assert cast(ComposeMapping, services["web"])["ports"] == [
-        "0.0.0.0:${FOUNDER_WEB_PORT:-3000}:3000"
+        "0.0.0.0:${CAMOVAR_WEB_PORT:-3000}:3000"
     ]
     assert "ports" not in cast(ComposeMapping, services["postgres"])
 
@@ -57,16 +57,16 @@ def test_web_has_no_shared_data_mount_and_only_google_auth_secret() -> None:
 
     assert "volumes" not in web
     assert web["secrets"] == ["google_client_secret"]
-    assert "FOUNDER_API_BASE_URL" in web["environment"]
-    assert web["environment"]["FOUNDER_AUTH_MODE"] == "${FOUNDER_AUTH_MODE:-google}"
+    assert "CAMOVAR_API_BASE_URL" in web["environment"]
+    assert web["environment"]["CAMOVAR_AUTH_MODE"] == "${CAMOVAR_AUTH_MODE:-google}"
     assert (
-        web["environment"]["FOUNDER_GOOGLE_ALLOWED_DOMAIN"] == "${FOUNDER_GOOGLE_ALLOWED_DOMAIN:-}"
+        web["environment"]["CAMOVAR_GOOGLE_ALLOWED_DOMAIN"] == "${CAMOVAR_GOOGLE_ALLOWED_DOMAIN:-}"
     )
     assert (
-        web["environment"]["FOUNDER_LOCAL_DEV_GOOGLE_EMAIL"]
-        == "${FOUNDER_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}"
+        web["environment"]["CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL"]
+        == "${CAMOVAR_LOCAL_DEV_GOOGLE_EMAIL:-local-google-dev-user@example.test}"
     )
-    assert "FOUNDER_GOOGLE_CLIENT_SECRET_FILE" in web["environment"]
+    assert "CAMOVAR_GOOGLE_CLIENT_SECRET_FILE" in web["environment"]
 
 
 def test_web_compose_develop_watch_rebuilds_local_ui_changes() -> None:
@@ -88,16 +88,16 @@ def test_runtime_secrets_are_external_paths_and_not_build_arguments() -> None:
     rendered = (REPOSITORY_ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     assert cast(ComposeMapping, secrets["postgres_password"])["file"].startswith(
-        "${FOUNDER_POSTGRES_PASSWORD_FILE:?"
+        "${CAMOVAR_POSTGRES_PASSWORD_FILE:?"
     )
     assert cast(ComposeMapping, secrets["session_secret"])["file"].startswith(
-        "${FOUNDER_SESSION_SECRET_FILE:?"
+        "${CAMOVAR_SESSION_SECRET_FILE:?"
     )
     assert cast(ComposeMapping, secrets["eodhd_kek"])["file"].startswith(
-        "${FOUNDER_EODHD_KEK_FILE:?"
+        "${CAMOVAR_EODHD_KEK_FILE:?"
     )
     assert cast(ComposeMapping, secrets["google_client_secret"])["file"].startswith(
-        "${FOUNDER_GOOGLE_CLIENT_SECRET_FILE:?"
+        "${CAMOVAR_GOOGLE_CLIENT_SECRET_FILE:?"
     )
     assert "api_token" not in rendered.lower()
     assert "build:" in rendered

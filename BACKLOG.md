@@ -7,8 +7,8 @@ Last reviewed: 2026-07-19
 - [Backlog Policy](#backlog-policy)
 - [Completed PR History](#completed-pr-history)
 - [Current Architectural Decision](#current-architectural-decision)
-- [Hosted Multi-Tenant Founder PR Stack](#hosted-multi-tenant-founder-pr-stack)
-- [Founder Research Funnel UI PR Stack](#founder-research-funnel-ui-pr-stack)
+- [Hosted Multi-Tenant Camovar PR Stack](#hosted-multi-tenant-camovar-pr-stack)
+- [Camovar Research Funnel UI PR Stack](#camovar-research-funnel-ui-pr-stack)
 - [Series Completion Gate](#series-completion-gate)
 - [Update Rules](#update-rules)
 
@@ -31,83 +31,83 @@ backlog identifiers.
 
 | ID | Title | Final status |
 | --- | --- | --- |
-| PR01 | Project Package And Quality Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/1 |
-| PR02 | Shared Configuration, HTTP, And Contract Primitives | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR03 | Simple Bronze/Silver/Gold Lake Layout Contract | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR04 | Search Module: EODHD Query And Raw Candidate Capture | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR05 | Search Module: Canonical ISIN Selection Contract | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR06 | Search Module: Review Artifacts And Active Universe Pointer | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR07 | Bronze Module: Input Contract Validation And Planning | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR08 | Bronze Module: EOD Quote Download To Bronze | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR09 | Silver Quote Build Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR10 | Bronze Module: Identifier Mapping Capture | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR11 | Bronze Module: Coverage, Errors, And Monthly Refresh Behavior | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR12 | Gold Inputs: Returns, Correlation, And Covariance Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR13 | Finalization: End-To-End Dry Run, Docs, And Release Checklist | merged. PR: https://github.com/SergejSchweizer/founder/pull/3 |
-| PR14 | Bronze Process: Cron-Safe Bronze Ingestion And Medallion Builds | merged. PR: https://github.com/SergejSchweizer/founder/pull/13 |
-| PR15 | Gold Evaluation Dataset Contracts And Paths | merged. PR: https://github.com/SergejSchweizer/founder/pull/20 |
-| PR16 | Evaluation Module: Return Matrix And Asset Metrics | merged. PR: https://github.com/SergejSchweizer/founder/pull/21 |
-| PR17 | Evaluation Module: Portfolio Returns And Drawdown Metrics | merged. PR: https://github.com/SergejSchweizer/founder/pull/24 |
-| PR18 | Portfolio Module: Core Optimization Objectives And Target Weights | merged. PR: https://github.com/SergejSchweizer/founder/pull/26 |
-| PR19 | Portfolio Module: Risk Parity And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/founder/pull/32 |
-| PR20 | Evaluation Module: Walk-Forward Backtesting | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR21 | Evaluation Module: Rebalancing Simulation | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR22 | Portfolio Module: Hierarchical Risk Parity | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR23 | Portfolio Module: Maximum Diversification Objective | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR24 | Evaluation Module: Efficient Frontier Generator | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR25 | Portfolio Module: CVaR And Tail-Risk Optimization | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR26 | Evaluation CLI And Dry-Run Integration | merged. PR: https://github.com/SergejSchweizer/founder/pull/34 |
-| PR27 | Gold Correlation Edge Dataset Baseline | merged. PR: https://github.com/SergejSchweizer/founder/pull/28 |
-| PR28 | Gold Spearman Correlation Edges | merged. PR: https://github.com/SergejSchweizer/founder/pull/30 |
-| PR29 | Gold Correlation Edges: Skip Same-ISIN Pairs | merged. PR: https://github.com/SergejSchweizer/founder/pull/40 |
-| PR30 | Gold Pair Statistics Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
-| PR31 | Dataset Contract Registry Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
-| PR32 | Evaluation And Portfolio Package Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
-| PR33 | Unified Run State And Job Manifest Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
-| PR34 | Production Optimizer Interface And Diagnostics Refactor | merged. PR: https://github.com/SergejSchweizer/founder/pull/44 |
-| PR35 | Enforce Real Evaluation And Portfolio Package Boundaries | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
-| PR36 | Extract Scalable Gold Pair Statistics Engine | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
-| PR37 | Type Critical Dataset Rows And Contract Validation | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
-| PR38 | Split CLI Parsing From Workflow Execution | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
-| PR39 | Add Import-Boundary And Scale-Guard Quality Gates | merged. PR: https://github.com/SergejSchweizer/founder/pull/46 |
-| PR40 | Three-Module Boundaries And Public Contract Skeleton | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
-| PR41 | Refresh Catalog Contracts And Stable Instrument Identities | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
-| PR42 | Selection Predicate And Metric-Requirement Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
-| PR43 | Selection Identity, Candidate And Final Membership Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
-| PR44 | Update Contracts, Pinned Inputs, And Shared Work Planner | merged. PR: https://github.com/SergejSchweizer/founder/pull/51 |
-| PR45 | Refresh Complete EODHD Catalog Synchronization | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR46 | Refresh All-ISIN Market Data And Versioned Inputs | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR47 | Refresh Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR48 | Selection Service, Current Pointer, And Standalone CLI | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR49 | Update Incremental Per-ISIN Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR50 | Update Screening Classifications And Selection Finalization | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR51 | Update Selection Calendar And Comparable Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR52 | Update Incremental Pair Metric Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR53 | Update Evaluation Profiles And Selection Analysis Manifests | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR54 | Update Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR55 | Three-Module Cutover, Legacy Migration, And Documentation | merged. PR: https://github.com/SergejSchweizer/founder/pull/53 |
-| PR56 | Return Semantics And Data-Quality Gate | merged. PR: https://github.com/SergejSchweizer/founder/pull/83 |
-| PR57 | Instrument-Level Rebalancing Drift And Cost Basis | merged. PR: https://github.com/SergejSchweizer/founder/pull/85 |
-| PR58 | Risk Model Package And Covariance Diagnostics | merged. PR: https://github.com/SergejSchweizer/founder/pull/89 |
+| PR01 | Project Package And Quality Baseline | merged. PR: https://github.com/SergejSchweizer/camovar/pull/1 |
+| PR02 | Shared Configuration, HTTP, And Contract Primitives | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR03 | Simple Bronze/Silver/Gold Lake Layout Contract | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR04 | Search Module: EODHD Query And Raw Candidate Capture | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR05 | Search Module: Canonical ISIN Selection Contract | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR06 | Search Module: Review Artifacts And Active Universe Pointer | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR07 | Bronze Module: Input Contract Validation And Planning | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR08 | Bronze Module: EOD Quote Download To Bronze | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR09 | Silver Quote Build Baseline | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR10 | Bronze Module: Identifier Mapping Capture | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR11 | Bronze Module: Coverage, Errors, And Monthly Refresh Behavior | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR12 | Gold Inputs: Returns, Correlation, And Covariance Baseline | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR13 | Finalization: End-To-End Dry Run, Docs, And Release Checklist | merged. PR: https://github.com/SergejSchweizer/camovar/pull/3 |
+| PR14 | Bronze Process: Cron-Safe Bronze Ingestion And Medallion Builds | merged. PR: https://github.com/SergejSchweizer/camovar/pull/13 |
+| PR15 | Gold Evaluation Dataset Contracts And Paths | merged. PR: https://github.com/SergejSchweizer/camovar/pull/20 |
+| PR16 | Evaluation Module: Return Matrix And Asset Metrics | merged. PR: https://github.com/SergejSchweizer/camovar/pull/21 |
+| PR17 | Evaluation Module: Portfolio Returns And Drawdown Metrics | merged. PR: https://github.com/SergejSchweizer/camovar/pull/24 |
+| PR18 | Portfolio Module: Core Optimization Objectives And Target Weights | merged. PR: https://github.com/SergejSchweizer/camovar/pull/26 |
+| PR19 | Portfolio Module: Risk Parity And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/camovar/pull/32 |
+| PR20 | Evaluation Module: Walk-Forward Backtesting | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR21 | Evaluation Module: Rebalancing Simulation | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR22 | Portfolio Module: Hierarchical Risk Parity | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR23 | Portfolio Module: Maximum Diversification Objective | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR24 | Evaluation Module: Efficient Frontier Generator | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR25 | Portfolio Module: CVaR And Tail-Risk Optimization | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR26 | Evaluation CLI And Dry-Run Integration | merged. PR: https://github.com/SergejSchweizer/camovar/pull/34 |
+| PR27 | Gold Correlation Edge Dataset Baseline | merged. PR: https://github.com/SergejSchweizer/camovar/pull/28 |
+| PR28 | Gold Spearman Correlation Edges | merged. PR: https://github.com/SergejSchweizer/camovar/pull/30 |
+| PR29 | Gold Correlation Edges: Skip Same-ISIN Pairs | merged. PR: https://github.com/SergejSchweizer/camovar/pull/40 |
+| PR30 | Gold Pair Statistics Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/camovar/pull/44 |
+| PR31 | Dataset Contract Registry Refactor | merged. PR: https://github.com/SergejSchweizer/camovar/pull/44 |
+| PR32 | Evaluation And Portfolio Package Boundary Refactor | merged. PR: https://github.com/SergejSchweizer/camovar/pull/44 |
+| PR33 | Unified Run State And Job Manifest Refactor | merged. PR: https://github.com/SergejSchweizer/camovar/pull/44 |
+| PR34 | Production Optimizer Interface And Diagnostics Refactor | merged. PR: https://github.com/SergejSchweizer/camovar/pull/44 |
+| PR35 | Enforce Real Evaluation And Portfolio Package Boundaries | merged. PR: https://github.com/SergejSchweizer/camovar/pull/46 |
+| PR36 | Extract Scalable Gold Pair Statistics Engine | merged. PR: https://github.com/SergejSchweizer/camovar/pull/46 |
+| PR37 | Type Critical Dataset Rows And Contract Validation | merged. PR: https://github.com/SergejSchweizer/camovar/pull/46 |
+| PR38 | Split CLI Parsing From Workflow Execution | merged. PR: https://github.com/SergejSchweizer/camovar/pull/46 |
+| PR39 | Add Import-Boundary And Scale-Guard Quality Gates | merged. PR: https://github.com/SergejSchweizer/camovar/pull/46 |
+| PR40 | Three-Module Boundaries And Public Contract Skeleton | merged. PR: https://github.com/SergejSchweizer/camovar/pull/51 |
+| PR41 | Refresh Catalog Contracts And Stable Instrument Identities | merged. PR: https://github.com/SergejSchweizer/camovar/pull/51 |
+| PR42 | Selection Predicate And Metric-Requirement Contracts | merged. PR: https://github.com/SergejSchweizer/camovar/pull/51 |
+| PR43 | Selection Identity, Candidate And Final Membership Contracts | merged. PR: https://github.com/SergejSchweizer/camovar/pull/51 |
+| PR44 | Update Contracts, Pinned Inputs, And Shared Work Planner | merged. PR: https://github.com/SergejSchweizer/camovar/pull/51 |
+| PR45 | Refresh Complete EODHD Catalog Synchronization | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR46 | Refresh All-ISIN Market Data And Versioned Inputs | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR47 | Refresh Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR48 | Selection Service, Current Pointer, And Standalone CLI | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR49 | Update Incremental Per-ISIN Metric Cache | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR50 | Update Screening Classifications And Selection Finalization | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR51 | Update Selection Calendar And Comparable Metric Cache | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR52 | Update Incremental Pair Metric Cache | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR53 | Update Evaluation Profiles And Selection Analysis Manifests | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR54 | Update Service, Standalone CLI, And Atomic Publication | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR55 | Three-Module Cutover, Legacy Migration, And Documentation | merged. PR: https://github.com/SergejSchweizer/camovar/pull/53 |
+| PR56 | Return Semantics And Data-Quality Gate | merged. PR: https://github.com/SergejSchweizer/camovar/pull/83 |
+| PR57 | Instrument-Level Rebalancing Drift And Cost Basis | merged. PR: https://github.com/SergejSchweizer/camovar/pull/85 |
+| PR58 | Risk Model Package And Covariance Diagnostics | merged. PR: https://github.com/SergejSchweizer/camovar/pull/89 |
 | PR59 | Production Numerical Solver Boundary | addressed; no dedicated PR under this branch name |
-| PR60 | Production Minimum Variance And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/founder/pull/101 |
-| PR61 | True HRP And Minimum CVaR Optimizers | merged. PR: https://github.com/SergejSchweizer/founder/pull/104 and https://github.com/SergejSchweizer/founder/pull/109 |
-| PR62A | Jurisdiction-Neutral Tax, Cost, And Cash-Flow Contracts | merged. PR: https://github.com/SergejSchweizer/founder/pull/112 |
-| PR63 | Portfolio Profile Contracts And Balanced Ensemble Candidate | merged. PR: https://github.com/SergejSchweizer/founder/pull/113 |
-| PR64 | Walk-Forward Model Comparison Scorecard | merged. PR: https://github.com/SergejSchweizer/founder/pull/114 |
-| PR65 | Stress, Bootstrap, And Sensitivity Analysis | merged. PR: https://github.com/SergejSchweizer/founder/pull/115 |
-| PR66 | Explainable Recommendation Report | merged. PR: https://github.com/SergejSchweizer/founder/pull/116 |
-| PR69 | Multivariate Statistics Baseline Module And CLI | merged. PR: https://github.com/SergejSchweizer/founder/pull/79 |
-| PR70 | Multivariate Production Portfolio Adapter | merged. PR: https://github.com/SergejSchweizer/founder/pull/117 |
-| PR71 | Multivariate Income And Recommendation Outputs | merged. PR: https://github.com/SergejSchweizer/founder/pull/118 |
-| PR72 | Multivariate Trading And Monitoring Handoff | merged. PR: https://github.com/SergejSchweizer/founder/pull/119 |
-| PR73 | Generic Listing And Pair Statistics Cache | merged. PR: https://github.com/SergejSchweizer/founder/pull/80 |
-| PR74 | Selection Statistics Views | merged. PR: https://github.com/SergejSchweizer/founder/pull/120 |
-| PR75 | Multivariate Selection Cache Consumption | merged. PR: https://github.com/SergejSchweizer/founder/pull/121 |
+| PR60 | Production Minimum Variance And Equal Risk Contribution | merged. PR: https://github.com/SergejSchweizer/camovar/pull/101 |
+| PR61 | True HRP And Minimum CVaR Optimizers | merged. PR: https://github.com/SergejSchweizer/camovar/pull/104 and https://github.com/SergejSchweizer/camovar/pull/109 |
+| PR62A | Jurisdiction-Neutral Tax, Cost, And Cash-Flow Contracts | merged. PR: https://github.com/SergejSchweizer/camovar/pull/112 |
+| PR63 | Portfolio Profile Contracts And Balanced Ensemble Candidate | merged. PR: https://github.com/SergejSchweizer/camovar/pull/113 |
+| PR64 | Walk-Forward Model Comparison Scorecard | merged. PR: https://github.com/SergejSchweizer/camovar/pull/114 |
+| PR65 | Stress, Bootstrap, And Sensitivity Analysis | merged. PR: https://github.com/SergejSchweizer/camovar/pull/115 |
+| PR66 | Explainable Recommendation Report | merged. PR: https://github.com/SergejSchweizer/camovar/pull/116 |
+| PR69 | Multivariate Statistics Baseline Module And CLI | merged. PR: https://github.com/SergejSchweizer/camovar/pull/79 |
+| PR70 | Multivariate Production Portfolio Adapter | merged. PR: https://github.com/SergejSchweizer/camovar/pull/117 |
+| PR71 | Multivariate Income And Recommendation Outputs | merged. PR: https://github.com/SergejSchweizer/camovar/pull/118 |
+| PR72 | Multivariate Trading And Monitoring Handoff | merged. PR: https://github.com/SergejSchweizer/camovar/pull/119 |
+| PR73 | Generic Listing And Pair Statistics Cache | merged. PR: https://github.com/SergejSchweizer/camovar/pull/80 |
+| PR74 | Selection Statistics Views | merged. PR: https://github.com/SergejSchweizer/camovar/pull/120 |
+| PR75 | Multivariate Selection Cache Consumption | merged. PR: https://github.com/SergejSchweizer/camovar/pull/121 |
 
 ## Current Architectural Decision
 
-Founder remains a public open-source repository, while the hosted deployment is a private runtime environment.
+Camovar remains a public open-source repository, while the hosted deployment is a private runtime environment.
 
 The target system has these non-negotiable properties:
 
@@ -125,7 +125,7 @@ The target system has these non-negotiable properties:
 - The local CLI and analytical core remain usable without Google authentication or PostgreSQL through explicit local adapters.
 - Public hosting remains blocked until provider licensing, privacy, backup, credential, and security readiness gates pass.
 
-## Hosted Multi-Tenant Founder PR Stack
+## Hosted Multi-Tenant Camovar PR Stack
 
 Priority policy: security and authorization boundaries precede UI work. No endpoint may expose market or derived data before identity, credential encryption, user entitlement snapshots, and scoped analytical input enforcement exist. Every PR must use synthetic credentials and mocked provider responses in tests.
 
@@ -133,7 +133,7 @@ Priority policy: security and authorization boundaries precede UI work. No endpo
 
 Branch: `docs/hosted-multitenant-security-architecture`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/127.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/127.
 
 Priority: P0 governance and security foundation.
 
@@ -153,7 +153,7 @@ Idempotency: Re-running documentation validation against unchanged records produ
 
 Branch: `feat/postgres-multitenant-catalog`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/128.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/128.
 
 Priority: P0 persistence and isolation foundation.
 
@@ -173,7 +173,7 @@ Idempotency: Re-applying migrations to the same schema is a no-op; retries do no
 
 Branch: `feat/google-oidc-authentication`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/129.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/129.
 
 Priority: P0 authenticated user boundary.
 
@@ -193,13 +193,13 @@ Idempotency: Repeated valid login for the same Google `sub` updates permitted pr
 
 Branch: `feat/encrypted-eodhd-credential-vault`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/130.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/130.
 
 Priority: P0 credential confidentiality.
 
 Depends on: PR86.
 
-Scope: Persist one EODHD credential per user using envelope encryption: a random per-credential data-encryption key encrypts the provider key with authenticated encryption; the data key is wrapped by a versioned Founder key-encryption key supplied from a file or secret manager outside Git and PostgreSQL. Bind ciphertext to credential id, user id, provider, and schema version as associated data. Add set, replace, validate, status, revoke, delete, unwrap, and key-rotation services. Return only masked status metadata to clients.
+Scope: Persist one EODHD credential per user using envelope encryption: a random per-credential data-encryption key encrypts the provider key with authenticated encryption; the data key is wrapped by a versioned Camovar key-encryption key supplied from a file or secret manager outside Git and PostgreSQL. Bind ciphertext to credential id, user id, provider, and schema version as associated data. Add set, replace, validate, status, revoke, delete, unwrap, and key-rotation services. Return only masked status metadata to clients.
 
 Acceptance: Tests cover encrypt/decrypt round trips, wrong user or associated-data rejection, tampering, wrong key version, replacement, revocation, deletion, KEK rotation without provider-key re-entry, unavailable KEK fail-closed behavior, and redaction in structured logs and exceptions. Database dumps and shared storage contain no plaintext or reversible material without the external KEK.
 
@@ -213,7 +213,7 @@ Idempotency: Re-submitting the same valid key updates permitted metadata or reus
 
 Branch: `feat/shared-market-observation-store`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/131.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/131.
 
 Priority: P0 shared physical data foundation.
 
@@ -233,7 +233,7 @@ Idempotency: Re-ingesting identical observations produces no duplicate physical 
 
 Branch: `feat/user-data-entitlement-snapshots`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/132.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/132.
 
 Priority: P0 authorization semantics.
 
@@ -253,7 +253,7 @@ Idempotency: Replaying the same successful response for the same user resolves t
 
 Branch: `feat/user-scoped-eodhd-ingestion`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/133.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/133.
 
 Priority: P0 usable BYOK download path.
 
@@ -273,7 +273,7 @@ Idempotency: Resuming a run requests only incomplete work, deduplicates shared o
 
 Branch: `refactor/scoped-analytical-inputs`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/134.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/134.
 
 Priority: P0 prevention of cross-user analytical leakage.
 
@@ -293,7 +293,7 @@ Idempotency: Re-resolving unchanged authorized inputs returns the same immutable
 
 Branch: `feat/content-addressed-univariate-cache`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/135.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/135.
 
 Priority: P1 reusable analytical cache.
 
@@ -313,7 +313,7 @@ Idempotency: Concurrent or repeated requests compute or publish one artifact and
 
 Branch: `feat/content-addressed-bivariate-cache`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/136.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/136.
 
 Priority: P1 pair-statistics reuse without leakage.
 
@@ -333,7 +333,7 @@ Idempotency: Repeated overlapping selections reuse existing pair artifacts and c
 
 Branch: `feat/content-addressed-portfolio-artifacts`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/137.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/137.
 
 Priority: P1 portfolio-level reuse.
 
@@ -353,7 +353,7 @@ Idempotency: Repeated identical analyses return the existing completed result or
 
 Branch: `chore/docker-compose-postgres-hosted-runtime`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/140.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/140.
 
 Priority: P1 reproducible hosted development environment.
 
@@ -373,7 +373,7 @@ Idempotency: Re-running Compose with unchanged source reuses persistent state an
 
 Branch: `feat/hosted-fastapi-service`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/142.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/142.
 
 Priority: P1 hosted application service.
 
@@ -393,7 +393,7 @@ Idempotency: Idempotency keys and logical request hashes prevent duplicate crede
 
 Branch: `feat/hosted-web-user-research-funnel`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/143.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/143.
 
 Priority: P2 end-user workflow.
 
@@ -413,7 +413,7 @@ Idempotency: Page refresh and navigation reload existing runs and snapshots with
 
 Branch: `chore/public-repo-security-hardening`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/145.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/145.
 
 Priority: P0 before public deployment.
 
@@ -433,7 +433,7 @@ Idempotency: Re-running scans against unchanged source produces the same policy 
 
 Branch: `docs/hosted-readiness-security-gate`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/146.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/146.
 
 Priority: P0 public-hosting release gate.
 
@@ -453,7 +453,7 @@ Idempotency: Re-running the gate does not mutate production data, rotate keys, o
 
 Branch: `feat/hosted-multitenant-cutover`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/147.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/147.
 
 Priority: P0 final integration and release proof.
 
@@ -469,17 +469,17 @@ Determinism: Replaying identical user snapshots, selections, settings, and algor
 
 Idempotency: Retrying the complete workflow creates no duplicate users, credentials, observations, grants, snapshots, calculations, analyses, or reports.
 
-## Founder Research Funnel UI PR Stack
+## Camovar Research Funnel UI PR Stack
 
-PR97 remains the minimum functional hosted Web UI required by PR100. The following post-cutover series turns that baseline into the approved Founder product interface: a simple Google- and Apple-inspired research workspace built around the persisted funnel `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. These PRs must not move financial calculations or authorization decisions into the browser, weaken the PR99 readiness gate, or replace immutable project, snapshot, selection, and run identities with client-only state.
+PR97 remains the minimum functional hosted Web UI required by PR100. The following post-cutover series turns that baseline into the approved Camovar product interface: a simple Google- and Apple-inspired research workspace built around the persisted funnel `Data -> Metadata -> Univariate -> Filter -> Diversification -> Portfolio -> Validation -> Report`. These PRs must not move financial calculations or authorization decisions into the browser, weaken the PR99 readiness gate, or replace immutable project, snapshot, selection, and run identities with client-only state.
 
-PR109, then PR102 through PR108 are a stacked UI branch tree. PR109 starts from the current local-login hardening branch, PR102 starts from PR109, and each following UI PR starts from the previous UI branch until the tree is explicitly landed. Do not merge any UI stack branch into `main` unless the maintainer explicitly requests that `main` merge. During UI stack development, run `docker compose --env-file .env.local up --build --watch web` from the active UI branch so every local UI change is visible in Docker; use `uv run founder-compose-web-watch` when Compose watch is unavailable.
+PR109, then PR102 through PR108 are a stacked UI branch tree. PR109 starts from the current local-login hardening branch, PR102 starts from PR109, and each following UI PR starts from the previous UI branch until the tree is explicitly landed. Do not merge any UI stack branch into `main` unless the maintainer explicitly requests that `main` merge. During UI stack development, run `docker compose --env-file .env.local up --build --watch web` from the active UI branch so every local UI change is visible in Docker; use `uv run camovar-compose-web-watch` when Compose watch is unavailable.
 
 ### PR101. Web Design System, Application Shell, And Visual Baseline
 
 Branch: `feat/web-design-system-app-shell`.
 
-Git status: merged. PR: https://github.com/SergejSchweizer/founder/pull/152.
+Git status: merged. PR: https://github.com/SergejSchweizer/camovar/pull/152.
 
 Priority: P1 UI foundation.
 
@@ -487,7 +487,7 @@ Depends on: PR100.
 
 Scope: Replace the hosted Web placeholder and ad hoc styles with the production local Web application shell and a small versioned design system. Define typography, spacing, color, border, elevation, focus, motion, density, chart, table, badge, warning, empty-state, and loading-state tokens. Add the responsive sidebar, top bar, project context, snapshot indicator, persistent eight-step funnel navigation, page frame, error boundary, and route skeletons for dashboard, projects, data, metadata, univariate, filter, diversification, portfolio, validation, report, and settings. Use a restrained light-first visual language matching the approved mockup; avoid decorative gradients, neon effects, financial ticker clutter, and business logic inside visual components.
 
-Acceptance: Component and source-contract tests cover desktop, tablet, and mobile shell contracts; funnel states for not-started, ready, running, complete, warning, failed, and stale; keyboard-visible focus; reduced-motion behavior; long project names; narrow viewports; loading and empty states; and consistent chart/table typography. Docker Compose serves the real Founder shell rather than the prior placeholder.
+Acceptance: Component and source-contract tests cover desktop, tablet, and mobile shell contracts; funnel states for not-started, ready, running, complete, warning, failed, and stale; keyboard-visible focus; reduced-motion behavior; long project names; narrow viewports; loading and empty states; and consistent chart/table typography. Docker Compose serves the real Camovar shell rather than the prior placeholder.
 
 Security: Fixtures contain only synthetic users, opaque ids, and synthetic financial values. Components never render secrets, internal paths, database ids, provider request details, or raw exception payloads. The Web container continues to mount no credential secret or shared-data volume.
 
@@ -499,13 +499,13 @@ Idempotency: Reloading or revisiting a route reconstructs the same shell from se
 
 Branch: `feat/web-google-oidc-runtime-login`.
 
-Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/162.
+Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/162.
 
 Priority: P0 authenticated user boundary for the local and hosted Web UI.
 
 Depends on: PR101 and PR #160 local login hardening.
 
-Scope: Replace the local `local-dev-google` session stub as the default Web login path with a real Google OpenID Connect authorization-code flow. Wire `/auth/google/start` to create a PKCE, state, and nonce login request; redirect the browser to Google's account chooser; add `/auth/google/callback` to exchange the authorization code with Google, verify the ID token issuer, audience, signature, expiry, nonce, email verification, and optional hosted-domain rule; resolve the stable Google `sub` into the Founder user identity; issue opaque HttpOnly session and CSRF cookies; and keep an explicit opt-in local-dev auth mode for offline Docker development. Surface the authenticated Google email or display name in lowercase under `Founder Research` in every authenticated shell and mark local-dev sessions as `local-dev-google`.
+Scope: Replace the local `local-dev-google` session stub as the default Web login path with a real Google OpenID Connect authorization-code flow. Wire `/auth/google/start` to create a PKCE, state, and nonce login request; redirect the browser to Google's account chooser; add `/auth/google/callback` to exchange the authorization code with Google, verify the ID token issuer, audience, signature, expiry, nonce, email verification, and optional hosted-domain rule; resolve the stable Google `sub` into the Camovar user identity; issue opaque HttpOnly session and CSRF cookies; and keep an explicit opt-in local-dev auth mode for offline Docker development. Surface the authenticated Google email or display name in lowercase under `Camovar Research` in every authenticated shell and mark local-dev sessions as `local-dev-google`.
 
 Acceptance: Tests cover Google account chooser redirect construction, callback success, first login, repeat login with changed email and unchanged `sub`, invalid state, replayed state, invalid nonce, invalid issuer, invalid audience, expired ID token, unverified email, optional hosted-domain rejection, token-exchange failure, logout, session status, local-dev fallback disabled by default outside development, and the visible lowercase identity line. Docker documentation shows the required Google OAuth client id, secret-file path, redirect URI, and local-dev override. Browser tests or HTTP-level tests prove the dashboard is not shown before real Google callback completion when local-dev mode is disabled.
 
@@ -625,7 +625,7 @@ Priority: P1 final decision and handoff workflow.
 
 Depends on: PR106.
 
-Scope: Implement the Validation and Report stages. Add historical and walk-forward tabs, stress and bootstrap summaries, sensitivity views, costs and turnover, current-versus-target comparison, drawdown and recovery charts, risk-limit checks, model scorecards, assumptions, limitations, and an explicit Founder assessment with passed checks and warnings. Render the explainable recommendation report and support authorized HTML/PDF download. Add Flatex-oriented trade preparation with current positions, target weights, estimated trades, whole-share rounding, minimum trade size, fees, taxes where configured, residual cash, and export; retain explicit user approval and no automatic broker execution.
+Scope: Implement the Validation and Report stages. Add historical and walk-forward tabs, stress and bootstrap summaries, sensitivity views, costs and turnover, current-versus-target comparison, drawdown and recovery charts, risk-limit checks, model scorecards, assumptions, limitations, and an explicit Camovar assessment with passed checks and warnings. Render the explainable recommendation report and support authorized HTML/PDF download. Add Flatex-oriented trade preparation with current positions, target weights, estimated trades, whole-share rounding, minimum trade size, fees, taxes where configured, residual cash, and export; retain explicit user approval and no automatic broker execution.
 
 Acceptance: Tests cover walk-forward availability, weak out-of-sample evidence, stress failures, cost-sensitive ranking changes, current-portfolio absence, whole-share rounding, insufficient cash, tax/cost adapter differences, report regeneration, authorized download, expired/stale run handling, export contents, and explicit no-order-execution language. Reports include selected and excluded instruments with reasons, target weights, risk contributions, income, drawdown, costs, stress results, assumptions, and warnings.
 
@@ -645,7 +645,7 @@ Priority: P0 final UI quality and deployment proof.
 
 Depends on: PR107.
 
-Scope: Complete the approved visual baseline across desktop, tablet, and mobile; add mobile-specific layouts rather than scaled desktop pages; finish keyboard navigation, semantic landmarks, accessible names, table and chart alternatives, contrast, focus management, reduced motion, and screen-reader announcements. Add visual-regression coverage, browser end-to-end tests for the full funnel, realistic large-table performance tests, API cancellation/retry behavior, route-level loading and error states, bundle and rendering budgets, supported-browser policy, and clean-host Docker Compose installation proof. Remove obsolete placeholder Web code and make the real Founder UI the canonical hosted route.
+Scope: Complete the approved visual baseline across desktop, tablet, and mobile; add mobile-specific layouts rather than scaled desktop pages; finish keyboard navigation, semantic landmarks, accessible names, table and chart alternatives, contrast, focus management, reduced motion, and screen-reader announcements. Add visual-regression coverage, browser end-to-end tests for the full funnel, realistic large-table performance tests, API cancellation/retry behavior, route-level loading and error states, bundle and rendering budgets, supported-browser policy, and clean-host Docker Compose installation proof. Remove obsolete placeholder Web code and make the real Camovar UI the canonical hosted route.
 
 Acceptance: A clean checkout with documented external synthetic secret files can run `docker compose up --build`, complete Google/EODHD-mocked end-to-end scenarios, and reach the responsive GUI. Tests cover new user, returning user, Free key, paid key, two isolated users, all funnel stages, upstream invalidation, cached reuse, restart persistence, mobile navigation, keyboard-only use, automated accessibility checks, visual baselines, large datasets, slow/failed API calls, report download, logout, and account deletion. Documented performance budgets pass on representative fixtures.
 
@@ -665,7 +665,7 @@ Squash rule: Every PR title and final squash commit subject must use `type(optio
 
 Main-merge rule: No branch or pull request is merged into `main` unless the maintainer explicitly requests that `main` merge in the current task. Backlog continuation and UI work produce stacked, pushed PR branches by default; they remain open until the maintainer asks to land a PR or the full stack.
 
-Local UI stack runtime: While editing any UI stack branch, run `docker compose --env-file .env.local up --build --watch web` from that active branch. This makes the local Docker Web container rebuild from the current branch state after UI source changes. If Compose watch is not available, run `uv run founder-compose-web-watch` from the active branch.
+Local UI stack runtime: While editing any UI stack branch, run `docker compose --env-file .env.local up --build --watch web` from that active branch. This makes the local Docker Web container rebuild from the current branch state after UI source changes. If Compose watch is not available, run `uv run camovar-compose-web-watch` from the active branch.
 
 Required gates: Use the current pre-merge, post-merge, auto-merge, branch-protection, shard, and coverage policy documented in [GATES.md](GATES.md).
 
@@ -682,7 +682,7 @@ The hosted-security series is incomplete while any of these conditions remains t
 
 The UI series is incomplete while any of these conditions remains true:
 
-- Docker Compose still serves a placeholder instead of the real Next.js Founder application;
+- Docker Compose still serves a placeholder instead of the real Next.js Camovar application;
 - the persisted funnel cannot be resumed from Data through Report with immutable project, snapshot, selection, and run identities;
 - changing an upstream snapshot or filter does not mark dependent downstream results stale;
 - the browser performs financial calculations or authorization decisions;

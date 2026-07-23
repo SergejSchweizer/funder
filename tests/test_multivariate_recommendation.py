@@ -5,15 +5,15 @@ from random import Random
 
 import pytest
 
-from founder.calculation_status import UNAVAILABLE
-from founder.multivariate_statistics import (
+from camovar.calculation_status import UNAVAILABLE
+from camovar.multivariate_statistics import (
     MultivariateRecommendationConfig,
     ProductionMultivariateConfig,
     write_multivariate_recommendation,
 )
-from founder.paths import LakePaths
-from founder.portfolio import PortfolioConstraints
-from founder.table_io import write_rows
+from camovar.paths import LakePaths
+from camovar.portfolio import PortfolioConstraints
+from camovar.table_io import write_rows
 
 _OBSERVATION_COUNT = 260
 

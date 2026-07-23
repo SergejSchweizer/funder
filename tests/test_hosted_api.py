@@ -5,9 +5,9 @@ from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
-from founder.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
-from founder.paths import LakePaths
-from founder.table_io import read_json, read_rows
+from camovar.hosted_api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, HostedApiState, create_app
+from camovar.paths import LakePaths
+from camovar.table_io import read_json, read_rows
 
 
 def _client(state: HostedApiState | None = None) -> TestClient:
@@ -17,9 +17,9 @@ def _client(state: HostedApiState | None = None) -> TestClient:
 def _headers(
     user_id: str = "user-a", *, csrf: bool = True, idempotency: str | None = None
 ) -> dict[str, str]:
-    headers: dict[str, str] = {"X-Founder-User": user_id}
+    headers: dict[str, str] = {"X-Camovar-User": user_id}
     if csrf:
-        headers["X-Founder-CSRF"] = "valid-csrf"
+        headers["X-Camovar-CSRF"] = "valid-csrf"
     if idempotency is not None:
         headers["Idempotency-Key"] = idempotency
     return headers
@@ -238,7 +238,7 @@ def test_load_selected_isins_runs_fetch_all_quotes_for_metadata_selection(
     monkeypatch: Any,
 ) -> None:
     lake_root = tmp_path / "lake"
-    monkeypatch.setenv("FOUNDER_LAKE_ROOT", str(lake_root))
+    monkeypatch.setenv("CAMOVAR_LAKE_ROOT", str(lake_root))
     calls: list[dict[str, Any]] = []
     state = HostedApiState(
         all_isins_rows=(
@@ -271,7 +271,7 @@ def test_load_selected_isins_runs_fetch_all_quotes_for_metadata_selection(
         }
 
     monkeypatch.setattr(
-        "founder.hosted_api.run_fetch_all_quotes_workflow",
+        "camovar.hosted_api.run_fetch_all_quotes_workflow",
         fake_fetch_all_quotes_workflow,
     )
     client = _client(state)

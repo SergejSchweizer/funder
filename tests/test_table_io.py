@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from founder.table_io import read_rows, write_rows
+from camovar.table_io import read_rows, write_rows
 
 
 def test_write_rows_writes_real_parquet(tmp_path: Path) -> None:

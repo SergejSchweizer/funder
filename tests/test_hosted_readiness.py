@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from founder.hosted_readiness import (
+from camovar.hosted_readiness import (
     MANDATORY_DECISIONS,
     failed_results,
     load_readiness,

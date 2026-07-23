@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from founder.schemas import required_fields
-from founder.univariate_categories import (
+from camovar.schemas import required_fields
+from camovar.univariate_categories import (
     UNIVARIATE_PORTFOLIO_CATEGORIES,
     categorized_univariate_fields,
     category_for_univariate_field,

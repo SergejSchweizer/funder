@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from founder.bivariate_statistics import build_bivariate_statistics, write_bivariate_statistics
-from founder.gold import build_correlation_and_covariance, build_correlation_edges
-from founder.gold_pair_stats import (
+from camovar.bivariate_statistics import build_bivariate_statistics, write_bivariate_statistics
+from camovar.gold import build_correlation_and_covariance, build_correlation_edges
+from camovar.gold_pair_stats import (
     DEFAULT_BYTES_PER_PAIR,
     DEFAULT_MAX_WORKERS,
     build_pair_plan,
@@ -15,7 +15,7 @@ from founder.gold_pair_stats import (
     iter_pair_observations,
     resolve_worker_count,
 )
-from founder.paths import LakePaths
+from camovar.paths import LakePaths
 
 
 def _return(isin: str, exchange: str, code: str, date: str, value: float) -> dict[str, object]:

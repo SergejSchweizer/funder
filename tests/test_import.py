@@ -1,4 +1,4 @@
-from founder import __version__
+from camovar import __version__
 
 
 def test_package_imports() -> None:

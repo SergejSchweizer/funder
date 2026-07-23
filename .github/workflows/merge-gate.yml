@@ -44,16 +44,16 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Architecture and import boundaries
-        run: uv run python -m founder.architecture_checks
+        run: uv run python -m camovar.architecture_checks
 
       - name: Dataset schema registry
-        run: uv run python -m founder.schema_validation
+        run: uv run python -m camovar.schema_validation
 
       - name: Hosted security gates
-        run: uv run python -m founder.security_gates
+        run: uv run python -m camovar.security_gates
 
       - name: Validate branch commit subjects
-        run: uv run founder-quality --commits-only
+        run: uv run camovar-quality --commits-only
 
       - name: Verify tracked working tree stays clean
         run: |
@@ -122,7 +122,7 @@ jobs:
           --
           -q
           -n auto
-          --cov=founder
+          --cov=camovar
           --cov-report=
           --cov-fail-under=0
 
@@ -170,7 +170,7 @@ jobs:
           --
           -q
           -n auto
-          --cov=founder
+          --cov=camovar
           --cov-report=
           --cov-fail-under=0
 

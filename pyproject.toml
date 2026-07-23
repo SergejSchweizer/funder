@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "founder"
+name = "camovar"
 version = "0.1.0"
 description = "Minimum-risk ETF portfolio tooling using EODHD EOD data."
 readme = "README.md"
@@ -17,11 +17,11 @@ dependencies = [
 ]
 
 [project.scripts]
-founder = "founder.cli:main"
-founder-docs-refresh = "founder.docs_refresh:main"
-founder-fetch-all-quotes = "founder.fetch_all_quotes:main"
-founder-quality = "founder.quality:main"
-founder-compose-web-watch = "founder.compose_web_watch:main"
+camovar = "camovar.cli:main"
+camovar-docs-refresh = "camovar.docs_refresh:main"
+camovar-fetch-all-quotes = "camovar.fetch_all_quotes:main"
+camovar-quality = "camovar.quality:main"
+camovar-compose-web-watch = "camovar.compose_web_watch:main"
 
 [dependency-groups]
 dev = [
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/founder"]
+packages = ["src/camovar"]
 
 [tool.ruff]
 line-length = 100
@@ -55,38 +55,38 @@ pythonVersion = "3.14"
 typeCheckingMode = "strict"
 
 [tool.importlinter]
-root_package = "founder"
+root_package = "camovar"
 
 [[tool.importlinter.contracts]]
 name = "Evaluation does not depend on ingestion"
 type = "forbidden"
-source_modules = ["founder.evaluation", "founder.evaluation_parts"]
+source_modules = ["camovar.evaluation", "camovar.evaluation_parts"]
 forbidden_modules = [
-    "founder.bronze",
-    "founder.cli",
-    "founder.config",
-    "founder.http",
-    "founder.search",
-    "founder.silver",
+    "camovar.bronze",
+    "camovar.cli",
+    "camovar.config",
+    "camovar.http",
+    "camovar.search",
+    "camovar.silver",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Shared infrastructure does not depend on workflow modules"
 type = "forbidden"
 source_modules = [
-    "founder.logging",
-    "founder.paths",
-    "founder.run_locks",
-    "founder.run_state",
-    "founder.schemas",
-    "founder.table_io",
+    "camovar.logging",
+    "camovar.paths",
+    "camovar.run_locks",
+    "camovar.run_state",
+    "camovar.schemas",
+    "camovar.table_io",
 ]
 forbidden_modules = [
-    "founder.bronze",
-    "founder.cli",
-    "founder.evaluation",
-    "founder.gold",
-    "founder.portfolio",
-    "founder.search",
-    "founder.silver",
+    "camovar.bronze",
+    "camovar.cli",
+    "camovar.evaluation",
+    "camovar.gold",
+    "camovar.portfolio",
+    "camovar.search",
+    "camovar.silver",
 ]

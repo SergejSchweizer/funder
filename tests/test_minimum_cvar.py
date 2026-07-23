@@ -1,4 +1,4 @@
-"""Tests for founder.portfolio_parts.cvar: pure-Python historical Minimum CVaR
+"""Tests for camovar.portfolio_parts.cvar: pure-Python historical Minimum CVaR
 solver (Rockafellar-Uryasev projected subgradient descent) for PR61.
 """
 
@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from founder.portfolio_parts.cvar import (
+from camovar.portfolio_parts.cvar import (
     cvar_objective,
     cvar_subgradient,
     historical_var_and_cvar,

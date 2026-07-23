@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from founder.contracts import BronzeError, BronzeRun, CanonicalUniverseRow, SearchCandidate
-from founder.schemas import required_fields, validate_fields
+from camovar.contracts import BronzeError, BronzeRun, CanonicalUniverseRow, SearchCandidate
+from camovar.schemas import required_fields, validate_fields
 
 
 def test_search_candidate_accepts_valid_timezone_aware_record() -> None:

@@ -1,4 +1,4 @@
-"""Run a deterministic shard of the Founder pytest suite."""
+"""Run a deterministic shard of the Camovar pytest suite."""
 
 from __future__ import annotations
 

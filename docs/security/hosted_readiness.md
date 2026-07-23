@@ -10,7 +10,7 @@ Public-hosted mode may store only data fetched through a user-provided EODHD cre
 
 ## Personal License Boundary
 
-Founder does not pool one maintainer-owned provider key for all users. Each hosted user supplies their own provider credential, and provider calls resolve the credential only at request time through the encrypted vault.
+Camovar does not pool one maintainer-owned provider key for all users. Each hosted user supplies their own provider credential, and provider calls resolve the credential only at request time through the encrypted vault.
 
 ## Shared Physical Deduplication
 
@@ -50,4 +50,4 @@ Hosted persistence uses least-privilege roles and row-level security for user-ow
 
 ## No Automatic Broker Execution
 
-Founder may produce broker-ready order files and recommendations, but hosted mode must not place broker orders automatically. Human approval remains outside the hosted API execution boundary.
+Camovar may produce broker-ready order files and recommendations, but hosted mode must not place broker orders automatically. Human approval remains outside the hosted API execution boundary.

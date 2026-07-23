@@ -124,8 +124,8 @@ def test_quality_gates_are_documented_centrally() -> None:
         "Ruff lint and format",
         "pyright",
         "coverage report --fail-under=95",
-        "python -m founder.schema_validation",
-        "python -m founder.architecture_checks",
+        "python -m camovar.schema_validation",
+        "python -m camovar.architecture_checks",
         "pytest-xdist: pytest -n auto",
     ):
         assert gates_text in gates
@@ -141,7 +141,7 @@ def test_stacked_ui_workflow_requires_explicit_main_merge_and_local_docker_watch
         assert "unless the maintainer explicitly requests that `main` merge" in text
         assert "stacked" in text
         assert expected_watch_command in text
-        assert "uv run founder-compose-web-watch" in text
+        assert "uv run camovar-compose-web-watch" in text
 
     assert "For stacked UI PR development" in readme
     assert expected_watch_command in readme
@@ -161,7 +161,7 @@ def test_backlog_tracks_real_google_oidc_runtime_pr_before_dashboard_work() -> N
     ]
 
     assert "Branch: `feat/web-google-oidc-runtime-login`." in pr109
-    assert "Git status: pushed. PR: https://github.com/SergejSchweizer/founder/pull/162." in pr109
+    assert "Git status: pushed. PR: https://github.com/SergejSchweizer/camovar/pull/162." in pr109
     assert "redirect the browser to Google's account chooser" in pr109
     assert "add `/auth/google/callback`" in pr109
     assert "visible lowercase identity line" in pr109
@@ -226,12 +226,12 @@ def test_github_quality_workflows_validate_and_use_squash_subject() -> None:
     assert "--suite integration" in pr_workflow
     assert "-n auto" in pr_workflow
     assert "-n auto" in merge_gate_workflow
-    assert "uv run founder-quality --commits-only" in pr_workflow
-    assert "uv run founder-quality --commits-only" in merge_gate_workflow
-    assert "uv run python -m founder.schema_validation" in merge_gate_workflow
+    assert "uv run camovar-quality --commits-only" in pr_workflow
+    assert "uv run camovar-quality --commits-only" in merge_gate_workflow
+    assert "uv run python -m camovar.schema_validation" in merge_gate_workflow
     assert "uv run coverage combine coverage-shards" in merge_gate_workflow
     assert "uv run coverage report --fail-under=95" in merge_gate_workflow
-    assert 'uv run founder-quality --squash-subject "$SQUASH_SUBJECT"' in pr_workflow
+    assert 'uv run camovar-quality --squash-subject "$SQUASH_SUBJECT"' in pr_workflow
     assert "pull_request:" not in merge_gate_workflow
     assert "workflows: [pr-quality]" in merge_workflow
     assert "is still a draft; skipping auto-merge" in merge_workflow

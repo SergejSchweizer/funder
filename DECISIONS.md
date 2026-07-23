@@ -93,7 +93,7 @@ Update trigger: Revisit if the preferred exchange changes, a primary-listing sig
 
 Date: 2026-07-12
 
-Context: Founder needs a clear separation between market data sourcing and trade execution assumptions.
+Context: Camovar needs a clear separation between market data sourcing and trade execution assumptions.
 
 Decision: Use the EODHD subscription as the main source for EOD Historical Data and Flatex as the intended trading exchange/broker venue for ETF trades.
 
@@ -147,7 +147,7 @@ Date: 2026-07-12
 
 Context: The project needs a simple quality policy that works locally and with GitHub branch protection while `.github/` remains untracked.
 
-Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run founder-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run founder-quality main`. GitHub mirrors these as `pr-quality` and `main-quality`. Branch protection requires the `main-quality` workflow status, conversation resolution, linear history, and disabled force pushes/deletions. Passing `main-quality` is the approval signal for same-repository PRs.
+Decision: Use exactly two quality gate layers. The PR gate runs Ruff, Ruff format check, Mypy, Pytest, and Conventional Commit validation locally through `uv run camovar-quality pr` and the pre-commit hook. The main gate runs Ruff, Ruff format check, Mypy, Pytest with at least 95% coverage, Conventional Commit validation, and clean tracked working-tree checks through `uv run camovar-quality main`. GitHub mirrors these as `pr-quality` and `main-quality`. Branch protection requires the `main-quality` workflow status, conversation resolution, linear history, and disabled force pushes/deletions. Passing `main-quality` is the approval signal for same-repository PRs.
 
 Consequences: PRs should run the local PR gate before push, branch commits must use Conventional Commit subjects, and merges should run the main gate before merging. Main merges fail when test coverage is below 95%. Same-repository PRs can be squash-merged automatically after the required `main-quality` workflow passes.
 
@@ -159,9 +159,9 @@ Date: 2026-07-12
 
 Context: The lake artifacts use `.parquet` table contracts and should open in standard Parquet readers.
 
-Decision: Implement deterministic local table helpers in `founder.table_io` and keep storage calls behind path and schema contracts. `.parquet` paths are written as physical Apache Parquet files through pyarrow; `.json` and review CSV artifacts keep their native formats.
+Decision: Implement deterministic local table helpers in `camovar.table_io` and keep storage calls behind path and schema contracts. `.parquet` paths are written as physical Apache Parquet files through pyarrow; `.json` and review CSV artifacts keep their native formats.
 
-Consequences: Search, Bronze, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `founder.table_io`.
+Consequences: Search, Bronze, coverage, Gold inputs, and dry runs produce lake tables that open in standard Parquet tooling while module code still depends only on `camovar.table_io`.
 
 Update trigger: Revisit if the project changes Parquet engine, compression, partitioning, or schema evolution policy.
 
@@ -171,7 +171,7 @@ Date: 2026-07-12
 
 Context: The project is moving from validated Gold risk inputs toward portfolio weights and broker-specific trade preparation.
 
-Decision: Keep portfolio constraint validation in `founder.portfolio`, universe review checks in `founder.universe_review`, and Flatex export shaping in `founder.trading`. Trade export helpers consume approved target weights, listing metadata, and prices; they do not compute the optimization objective or call broker APIs.
+Decision: Keep portfolio constraint validation in `camovar.portfolio`, universe review checks in `camovar.universe_review`, and Flatex export shaping in `camovar.trading`. Trade export helpers consume approved target weights, listing metadata, and prices; they do not compute the optimization objective or call broker APIs.
 
 Consequences: Optimization logic can evolve independently from Flatex formatting. Missing-ISIN, currency, and survivorship-bias review summaries stay visible before weights are trusted or exported.
 
@@ -193,13 +193,13 @@ Update trigger: Revisit if the project adopts a different primary matrix store, 
 
 Date: 2026-07-13
 
-Context: Bronze, Silver, and Gold can be run either as standalone CLI commands or through `founder fetch-all-quotes`. A global cron `flock` prevents one scheduled quote-fetch overlap, but it does not protect manual standalone layer commands from colliding with a quote fetch or with another same-layer command.
+Context: Bronze, Silver, and Gold can be run either as standalone CLI commands or through `camovar fetch-all-quotes`. A global cron `flock` prevents one scheduled quote-fetch overlap, but it does not protect manual standalone layer commands from colliding with a quote fetch or with another same-layer command.
 
 Decision: Use stable OS-backed locks per lake layer: `lake/bronze/runs/bronze.lock`, `lake/silver/runs/silver.lock`, and `lake/gold/runs/gold.lock`. Each layer command exits with a clear active-run error when the same layer is already running for the lake root.
 
 Consequences: Different layers may still run at the same time when explicitly started, but duplicate Bronze, duplicate Silver, and duplicate Gold writes are blocked. The lock files may remain as metadata after a process exits, but the OS lock is released when the process terminates, avoiding stale file-existence locks.
 
-Update trigger: Revisit if Founder moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole quote-fetch serialization instead of same-layer serialization.
+Update trigger: Revisit if Camovar moves to a distributed scheduler, multiple hosts write the same lake root, or the project needs whole quote-fetch serialization instead of same-layer serialization.
 
 ## D015. Use Dataset Contracts And Job Manifests For Refactor Boundaries
 
@@ -217,7 +217,7 @@ Update trigger: Revisit if dataset schema versions need migrations, job manifest
 
 Date: 2026-07-19
 
-Context: Founder is moving from local portfolio analysis toward a possible hosted product. Hosted mode must support
+Context: Camovar is moving from local portfolio analysis toward a possible hosted product. Hosted mode must support
 multiple users without leaking market data, provider credentials, selections, portfolio artifacts, or reports between
 accounts.
 

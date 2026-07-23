@@ -45,16 +45,16 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Hosted security gates
-        run: uv run python -m founder.security_gates
+        run: uv run python -m camovar.security_gates
 
       - name: Validate branch commit subjects
-        run: uv run founder-quality --commits-only
+        run: uv run camovar-quality --commits-only
 
       - name: Validate squash merge subject
         if: github.event_name == 'pull_request'
         env:
           SQUASH_SUBJECT: ${{ github.event.pull_request.title }}
-        run: uv run founder-quality --squash-subject "$SQUASH_SUBJECT"
+        run: uv run camovar-quality --squash-subject "$SQUASH_SUBJECT"
 
   pr-type-quality:
     name: pr-type-quality

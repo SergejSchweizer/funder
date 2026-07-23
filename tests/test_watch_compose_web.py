@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from founder.compose_web_watch import DEFAULT_COMMAND, snapshot_paths, watch_and_rebuild
+from camovar.compose_web_watch import DEFAULT_COMMAND, snapshot_paths, watch_and_rebuild
 
 
 def test_snapshot_paths_changes_when_watched_file_changes(tmp_path: Path) -> None:

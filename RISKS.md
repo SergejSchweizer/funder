@@ -61,7 +61,7 @@ Status: Active
 
 Signal: README coverage statistics and missing-day details have been refreshed several times.
 
-Mitigation: Regenerate or explicitly date coverage snapshots when lake content, dataset names, or coverage reporting changes. Use `uv run founder-docs-refresh` to write the tracked documentation review report before finalizing docs-heavy changes.
+Mitigation: Regenerate or explicitly date coverage snapshots when lake content, dataset names, or coverage reporting changes. Use `uv run camovar-docs-refresh` to write the tracked documentation review report before finalizing docs-heavy changes.
 
 ## R006. ETF Universe Discovery Can Be Incomplete or Duplicated
 

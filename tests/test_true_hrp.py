@@ -1,11 +1,11 @@
-"""Tests for the PR61 True HRP replacement in founder.portfolio."""
+"""Tests for the PR61 True HRP replacement in camovar.portfolio."""
 
 from pathlib import Path
 
 import pytest
 
-from founder.paths import LakePaths
-from founder.portfolio import (
+from camovar.paths import LakePaths
+from camovar.portfolio import (
     HIERARCHICAL_RISK_PARITY_BASELINE_OBJECTIVE,
     HIERARCHICAL_RISK_PARITY_OBJECTIVE,
     PortfolioConstraints,
@@ -16,7 +16,7 @@ from founder.portfolio import (
     write_hierarchical_risk_parity,
     write_hierarchical_risk_parity_baseline,
 )
-from founder.table_io import read_rows, write_rows
+from camovar.table_io import read_rows, write_rows
 
 # A/C are correlated (0.9); B/D are correlated (0.9); canonical ISIN order is
 # A,B,C,D, so the naive baseline never puts a correlated pair adjacent, but

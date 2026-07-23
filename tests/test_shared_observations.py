@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from founder.shared_observations import (
+from camovar.shared_observations import (
     MarketObservation,
     SharedMarketObservationStore,
     SharedObservationCatalog,

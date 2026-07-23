@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from founder.docs_refresh import (
+from camovar.docs_refresh import (
     build_docs_refresh_report,
     doc_review_line,
     main,
     write_docs_refresh_report,
 )
-from founder.paths import LakePaths
-from founder.portfolio import (
+from camovar.paths import LakePaths
+from camovar.portfolio import (
     PortfolioConstraints,
     build_risk_contribution_rows,
     build_target_weight_rows,
@@ -21,9 +21,9 @@ from founder.portfolio import (
     validate_weights,
     write_optimized_weights,
 )
-from founder.table_io import read_rows, write_rows
-from founder.trading import prepare_flatex_orders, write_flatex_orders
-from founder.universe_review import currency_exposure, missing_isin_rows, review_universe
+from camovar.table_io import read_rows, write_rows
+from camovar.trading import prepare_flatex_orders, write_flatex_orders
+from camovar.universe_review import currency_exposure, missing_isin_rows, review_universe
 
 
 def _dense_covariance_rows(
@@ -693,7 +693,7 @@ def test_docs_refresh_handles_missing_docs_and_cli(
     monkeypatch.setattr(
         "sys.argv",
         [
-            "founder-docs-refresh",
+            "camovar-docs-refresh",
             "--root",
             str(tmp_path),
             "--output",

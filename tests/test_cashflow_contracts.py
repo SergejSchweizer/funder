@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from founder.cashflow.contracts import CashFlowResult
+from camovar.cashflow.contracts import CashFlowResult
 
 
 def _result(**overrides: object) -> CashFlowResult:
